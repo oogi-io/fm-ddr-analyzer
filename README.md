@@ -160,6 +160,19 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   unresolved and ambiguous references, hotspots and biggest scripts — every
   list clickable, each downloadable as CSV, with the coverage caveats printed
   on the page. The call chain is downloadable as a standalone SVG.
+- [x] **Call chain, expanded.** Edge semantics (solid Perform / long-dash
+  PSoS / dotted trigger / dash-dot button, with tooltips), call-count weights
+  (×N), entry-point badges, hover-highlight of connected nodes, in-chain
+  search (matches surface out of "+N more"), click → steps preview below the
+  chain with Re-root / Open fully, drag-pan + wheel-zoom (double-click
+  resets), Copy as Mermaid, Download SVG, and a print stylesheet (Cmd+P →
+  clean PDF of chain, script text, or health report).
+- [ ] **Union impact graph.** Select several scripts and see one merged
+  call graph with shared dependencies emphasized — "the five scripts I'm
+  about to change, and everything they touch". Its own session.
+- [ ] **Annotations.** Mark entities (deprecated / refactor / reviewed) with
+  notes; persisted per solution, exportable, embedded in shared reports.
+  Viewer-wide, not chain-only; pairs with the health report.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
 - [ ] **Copy as FM snippet (fmxmlsnippet).** Copy a script (or selected
