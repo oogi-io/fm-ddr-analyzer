@@ -25,14 +25,21 @@ def _collect(db_path):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
 
+    files = [r["name"] for r in conn.execute("SELECT name FROM files ORDER BY file_id")]
+    file_idx = {r["file_id"]: i for i, r in enumerate(
+        conn.execute("SELECT file_id FROM files ORDER BY file_id"))}
+
     ents = []
     for r in conn.execute(
-        "SELECT entity_id,kind,name,base_table,grp,parent_entity_id,step_type,"
-        "substr(calc_text,1,4000) AS calc FROM entities"):
+        "SELECT entity_id,kind,name,base_table,grp,parent_entity_id,step_type,file_id,"
+        "substr(calc_text,1,4000) AS calc,"
+        "substr(json_extract(extra_json,'$.step_text'),1,2000) AS step_text"
+        " FROM entities"):
         ents.append({
             "id": r["entity_id"], "k": r["kind"], "n": r["name"],
             "bt": r["base_table"], "g": r["grp"], "p": r["parent_entity_id"],
-            "st": r["step_type"], "c": r["calc"],
+            "f": file_idx.get(r["file_id"], 0),
+            "st": r["step_type"], "c": r["calc"], "sx": r["step_text"],
         })
 
     edges = []
@@ -56,8 +63,8 @@ def _collect(db_path):
         "SELECT COUNT(*) FROM refs WHERE target_entity_id IS NOT NULL").fetchone()[0]
     conn.close()
     return {"meta": meta, "counts": counts, "refsTotal": total,
-            "refsResolved": resolved, "entities": ents, "edges": edges,
-            "browsable": BROWSABLE}
+            "refsResolved": resolved, "files": files,
+            "entities": ents, "edges": edges, "browsable": BROWSABLE}
 
 
 def _extract_viewer_assets():
