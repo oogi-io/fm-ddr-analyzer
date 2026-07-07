@@ -71,6 +71,23 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   overflow-x:auto;margin:10px 0}
 .scriptmeta{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 4px;font-size:12px;color:var(--muted)}
 .scriptmeta b{color:var(--text);font-weight:600}
+.viewtoggle{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:6px 0}
+.viewtoggle button{border:0;background:var(--bg);color:var(--muted);padding:4px 12px;font-size:12px;cursor:pointer}
+.viewtoggle button.on{background:var(--accent-bg);color:var(--accent)}
+.chain{background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  margin:10px 0;overflow:auto}
+.chain svg{display:block}
+.chain .cnode{cursor:pointer}
+.chain .cnode rect{fill:var(--bg);stroke:var(--border)}
+.chain .cnode:hover rect{stroke:var(--accent)}
+.chain .cnode text{fill:var(--text);font:11px "SF Mono",Menlo,monospace}
+.chain .sel rect{fill:var(--accent-bg);stroke:var(--accent)}
+.chain .caller rect{stroke:var(--in)}
+.chain .callee rect{stroke:var(--out)}
+.chain .extn rect{stroke-dasharray:4 3}
+.chain .extn text,.chain .more text{fill:var(--muted)}
+.chain .more{cursor:default}
+.chain path{fill:none;stroke:var(--border);stroke-width:1.2}
 .steps{background:var(--panel);border:1px solid var(--border);border-radius:8px;
   padding:10px 0;margin:10px 0;font:12px/1.7 "SF Mono",Menlo,monospace;overflow-x:auto;position:relative}
 .copybtn{position:absolute;top:8px;right:10px;border:1px solid var(--border);
@@ -664,7 +681,12 @@ function initViewer(DATA){
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
     let h='<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
       (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+'</div>';
-    if(e.k==='script') h+=renderScriptBody(e);
+    if(e.k==='script'){
+      h+='<div class="viewtoggle">'+
+         '<button id="vt-steps"'+(scriptView==='steps'?' class="on"':'')+'>Steps</button>'+
+         '<button id="vt-chain"'+(scriptView==='chain'?' class="on"':'')+'>Call chain</button></div>';
+      h+=scriptView==='steps'?renderScriptBody(e):renderCallChain(e);
+    }
     else if(e.c) h+='<div class="calc">'+esc(e.c)+'</div>';
     h+='<div class="cols">';
     h+='<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
@@ -677,11 +699,14 @@ function initViewer(DATA){
     const d=$('detail'); d.innerHTML=h;
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
     wireCopy();
+    const vs=document.getElementById('vt-steps'), vc=document.getElementById('vt-chain');
+    if(vs) vs.onclick=()=>{scriptView='steps';select(id);};
+    if(vc) vc.onclick=()=>{scriptView='chain';select(id);};
     d.scrollTop=0;
   }
   const INDENT_OPEN=/^(If|Loop|Else If|Else)$/, INDENT_CLOSE=/^(End If|End Loop|Else If|Else)$/;
   const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
-  let currentScriptText=''; let currentLineTexts=[];
+  let currentScriptText=''; let currentLineTexts=[]; let scriptView='steps';
   function renderScriptBody(e){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
@@ -713,6 +738,98 @@ function initViewer(DATA){
     h+='</div>';
     currentScriptText=(e.n||'')+'\n'+'='.repeat(Math.min((e.n||'').length,60))+'\n'+plain.join('\n')+'\n';
     return h;
+  }
+  // ---- call chain: layered tree, callers left / callees right, clickable ----
+  function scriptCallers(id){
+    const seen={}, out=[];
+    (inbound[id]||[]).forEach(x=>{
+      if(x.c!=='perform_script'&&x.c!=='trigger') return;
+      let s=byId[x.s]; if(!s) return;
+      if(s.k==='script_step'){ s=byId[s.p]; if(!s) return; }
+      const key=s.id; if(seen[key]) return; seen[key]=1;
+      out.push({id:s.id,label:s.n||'?',kind:s.k,trig:x.c==='trigger'});
+    });
+    return out;
+  }
+  function scriptCallees(id){
+    const seen={}, out=[];
+    outboundFor(id).forEach(x=>{
+      if(x.c!=='perform_script') return;
+      if(x.t!=null){ const t=byId[x.t]; const key=t.id; if(seen[key])return; seen[key]=1;
+        out.push({id:t.id,label:t.n||'?',kind:'script'}); }
+      else { const key='x:'+(x.tr||'?'); if(seen[key])return; seen[key]=1;
+        out.push({id:null,label:(x.tr||'?')+(x.tf?'  ('+x.tf+')':''),ext:true}); }
+    });
+    return out;
+  }
+  function renderCallChain(root){
+    const DEPTH=3, CAP=20;
+    const cols={0:[{id:root.id,label:root.n||'?',kind:'script',sel:true,key:'n'+root.id}]};
+    const edges=[]; const visited={}; visited[root.id]=1;
+    const expand=(dir)=>{
+      for(let d=0; d<DEPTH; d++){
+        const lvl=dir*d, next=dir*(d+1);
+        const src=cols[lvl]||[]; const out=[]; const seenLvl={};
+        src.forEach(n=>{
+          if(n.ext||n.more||n.id==null) return;
+          if(d>0&&n.kind!=='script') return;
+          const rel=dir<0?scriptCallers(n.id):scriptCallees(n.id);
+          let extra=0;
+          rel.forEach(r=>{
+            const key=r.id!=null?'n'+r.id:'x:'+r.label;
+            if(r.id!=null&&visited[r.id]){
+              const ex=(cols[next]||[]).concat(out).find(z=>z.key===key)||
+                       Object.values(cols).flat().find(z=>z.key===key);
+              if(ex) edges.push(dir<0?[key,n.key]:[n.key,key]);
+              return;
+            }
+            if(seenLvl[key]){ edges.push(dir<0?[key,n.key]:[n.key,key]); return; }
+            if(out.length>=CAP){ extra++; return; }
+            seenLvl[key]=1; if(r.id!=null) visited[r.id]=1;
+            const node={id:r.id,label:r.label,kind:r.kind,ext:r.ext,trig:r.trig,key:key};
+            out.push(node); edges.push(dir<0?[key,n.key]:[n.key,key]);
+          });
+          if(extra>0){ const mk='m'+lvl+dir+n.key;
+            out.push({more:true,label:'+'+extra+' more',key:mk});
+            edges.push(dir<0?[mk,n.key]:[n.key,mk]); }
+        });
+        if(out.length) cols[next]=out; else break;
+      }
+    };
+    expand(-1); expand(1);
+    const levels=Object.keys(cols).map(Number).sort((a,b)=>a-b);
+    if(levels.length===1) return '<div class="chain" style="padding:14px"><span class="empty">No script calls in either direction.</span></div>';
+    const CW=230, RH=34, NH=24, PADX=16, PADY=14, CHW=7;
+    const maxRows=Math.max(...levels.map(l=>cols[l].length));
+    const H=maxRows*RH+PADY*2;
+    const W=levels.length*CW+PADX*2;
+    const pos={};
+    levels.forEach((l,ci)=>{
+      const arr=cols[l]; const top=(H-arr.length*RH)/2;
+      arr.forEach((n,ri)=>{
+        const label=n.label.length>24?n.label.slice(0,23)+'\u2026':n.label;
+        const w=Math.max(label.length*CHW+18,60);
+        pos[n.key]={x:PADX+ci*CW,y:top+ri*RH+(RH-NH)/2,w:w,n:n,label:label};
+      });
+    });
+    let svg='';
+    edges.forEach(([a,b])=>{
+      const p1=pos[a],p2=pos[b]; if(!p1||!p2) return;
+      const x1=p1.x+p1.w,y1=p1.y+NH/2,x2=p2.x,y2=p2.y+NH/2,mx=(x1+x2)/2;
+      svg+='<path d="M'+x1+' '+y1+' C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2+'"/>';
+    });
+    levels.forEach(l=>cols[l].forEach(n=>{
+      const p=pos[n.key];
+      const cls='cnode'+(n.sel?' sel':(n.more?' more':(l<0?' caller':' callee')))+(n.ext?' extn':'');
+      svg+='<g class="'+cls+'"'+(n.id!=null&&!n.sel?' data-go="'+n.id+'"':'')+'>'+
+        '<title>'+esc(n.label)+(n.trig?' (trigger)':'')+(n.ext?' (external / unresolved)':'')+'</title>'+
+        '<rect x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+NH+'" rx="6"/>'+
+        '<text x="'+(p.x+9)+'" y="'+(p.y+16)+'">'+esc(p.label)+'</text></g>';
+    }));
+    return '<div class="scriptmeta"><span>Callers <b style="color:var(--in)">left</b></span>'+
+      '<span>Calls <b style="color:var(--out)">right</b></span>'+
+      '<span>Click a node to re-root \u00b7 depth '+DEPTH+'</span></div>'+
+      '<div class="chain"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'+svg+'</svg></div>';
   }
   function stepsSelection(){
     const sel=window.getSelection();
