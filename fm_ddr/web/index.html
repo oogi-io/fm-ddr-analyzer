@@ -67,8 +67,8 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .detail h2{font-size:19px;margin:0 0 2px}
 .detail .path{color:var(--muted);font-size:12px;margin-bottom:16px}
 .calc{background:var(--panel);border:1px solid var(--border);border-radius:8px;
-  padding:10px 12px;font:12px/1.5 "SF Mono",Menlo,monospace;white-space:pre-wrap;
-  overflow-x:auto;margin:10px 0}
+  padding:10px 12px;padding-right:70px;font:12px/1.5 "SF Mono",Menlo,monospace;white-space:pre-wrap;
+  overflow-x:auto;margin:10px 0;position:relative}
 .scriptmeta{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 4px;font-size:12px;color:var(--muted)}
 .scriptmeta b{color:var(--text);font-weight:600}
 .viewtoggle{display:inline-flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:6px 0}
@@ -361,8 +361,10 @@ function consumeText(tag,attrs,text){
 function finalize(e){
   const calc=e._calc.length?e._calc.join('\n'):null;
   if(e.k==='relationship' && e._ends) e.n=e._ends.join(' :: ');
+  // custom functions are copy-sources: keep their full body (others cap at 4k)
+  const calcCap=e.k==='custom_function'?65536:4000;
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
-    st:e.st, g:e.g, ef:e.ef||null, c:calc?calc.slice(0,4000):null, step:e._step||null});
+    st:e.st, g:e.g, ef:e.ef||null, c:calc?calc.slice(0,calcCap):null, step:e._step||null});
 }
 
 // ---- incremental tokenizer ----
@@ -740,7 +742,7 @@ function initViewer(DATA){
          '<button id="vt-chain"'+(scriptView==='chain'?' class="on"':'')+'>Call chain</button></div>';
       h+=scriptView==='steps'?renderScriptBody(e):renderCallChain(e);
     }
-    else if(e.c) h+='<div class="calc">'+esc(e.c)+'</div>';
+    else if(e.c) h+='<div class="calc"><button class="copybtn" id="copycalc">Copy</button>'+esc(e.c)+'</div>';
     h+='<div class="cols">';
     h+='<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
        renderRefs(ins,sourceDisplay)+'</div>';
@@ -752,6 +754,9 @@ function initViewer(DATA){
     const d=$('detail'); d.innerHTML=h;
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
     wireCopy();
+    const cc=document.getElementById('copycalc');
+    if(cc) cc.onclick=()=>{ navigator.clipboard.writeText(e.c||'').then(()=>{
+      cc.textContent='Copied'; setTimeout(()=>{cc.textContent='Copy';},1200); }); };
     const vs=document.getElementById('vt-steps'), vc=document.getElementById('vt-chain');
     if(vs) vs.onclick=()=>{scriptView='steps';select(id);};
     if(vc) vc.onclick=()=>{scriptView='chain';select(id);};
@@ -932,6 +937,7 @@ function initViewer(DATA){
       '<span>Calls <b style="color:var(--out)">right</b> ('+down+' level'+(down===1?'':'s')+')</span>'+
       '<span class="legend">solid perform \u00b7 long-dash PSoS \u00b7 dots trigger \u00b7 dash-dot button</span></div>'+
       '<div class="chainbar"><input id="chainq" placeholder="Find in chain..." autocomplete="off">'+
+      '<button class="csv" id="resetlayout">Reset layout</button>'+
       '<button class="csv" id="copymermaid">Copy Mermaid</button>'+
       '<button class="csv" id="dlchain">Download SVG</button>'+
       '<span class="legend">hover: highlight \u00b7 click: preview below</span></div>'+
@@ -1097,6 +1103,12 @@ function initViewer(DATA){
     if(cq) cq.oninput=()=>{
       chainQ=cq.value.trim();
       lastChain=buildChain(rootEnt,chainQ);
+      wrap.innerHTML=chainSVG(lastChain,chainQ);
+      adj=adjacency(); attachPanZoom(wrap); attachNodeDrag(wrap,nodeOff);
+    };
+    const rl=document.getElementById('resetlayout');
+    if(rl) rl.onclick=()=>{
+      Object.keys(nodeOff).forEach(k=>delete nodeOff[k]);
       wrap.innerHTML=chainSVG(lastChain,chainQ);
       adj=adjacency(); attachPanZoom(wrap); attachNodeDrag(wrap,nodeOff);
     };

@@ -32,7 +32,8 @@ def _collect(db_path):
     ents = []
     for r in conn.execute(
         "SELECT entity_id,kind,name,base_table,grp,parent_entity_id,step_type,file_id,"
-        "substr(calc_text,1,4000) AS calc,"
+        "CASE WHEN kind='custom_function' THEN substr(calc_text,1,65536) "
+        "ELSE substr(calc_text,1,4000) END AS calc,"
         "substr(json_extract(extra_json,'$.step_text'),1,2000) AS step_text"
         " FROM entities"):
         ents.append({
