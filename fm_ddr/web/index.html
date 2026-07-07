@@ -767,6 +767,20 @@ function initViewer(DATA){
     d.scrollTop=0;
   }
   const INDENT_OPEN=/^(If|Loop|Else If|Else)$/, INDENT_CLOSE=/^(End If|End Loop|Else If|Else)$/;
+  // Multi-line StepText (calcs in Set Variable/Set Field, SQL, ...): indent
+  // continuation lines to the step's block level (+2 hang) so structure
+  // survives; collapse the author's runs of blank lines to a single one.
+  function fmtStepText(text,ind){
+    const pad='  '.repeat(ind), cont=pad+'  ';
+    const out=[]; let blanks=0;
+    // FileMaker's StepText separates lines with carriage returns
+    text.split(/\r\n|\r|\n/).forEach((l,i)=>{
+      if(l.trim()===''){ if(++blanks>1) return; out.push(''); return; }
+      blanks=0;
+      out.push((i===0?pad:cont)+l.replace(/^\s+/,''));
+    });
+    return out.join('\n');
+  }
   const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
   let currentScriptText=''; let currentLineTexts=[]; let scriptView='steps';
   function renderScriptBody(e){
@@ -789,7 +803,7 @@ function initViewer(DATA){
       // step-type name ("# (comment)")
       let text=st.sx||(IS_COMMENT_STEP(t)?'':t);
       const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#');
-      const line='  '.repeat(ind)+text;
+      const line=text?fmtStepText(text,ind):'';
       plain.push(line); currentLineTexts.push(text);
       h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+
          (text?esc(line):'&nbsp;')+
@@ -954,7 +968,7 @@ function initViewer(DATA){
       if(INDENT_CLOSE.test(t)) ind=Math.max(0,ind-1);
       let text=st.sx||(IS_COMMENT_STEP(t)?'':t);
       const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#');
-      h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+(text?esc('  '.repeat(ind)+text):'&nbsp;')+'</div>';
+      h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+(text?esc(fmtStepText(text,ind)):'&nbsp;')+'</div>';
       if(INDENT_OPEN.test(t)) ind++;
     });
     return h;
