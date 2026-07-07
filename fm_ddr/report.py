@@ -32,6 +32,7 @@ def _collect(db_path):
     ents = []
     for r in conn.execute(
         "SELECT entity_id,kind,name,base_table,grp,parent_entity_id,step_type,file_id,"
+        "data_type,field_type,"
         "CASE WHEN kind='custom_function' THEN substr(calc_text,1,65536) "
         "ELSE substr(calc_text,1,4000) END AS calc,"
         "substr(json_extract(extra_json,'$.step_text'),1,2000) AS step_text"
@@ -40,7 +41,8 @@ def _collect(db_path):
             "id": r["entity_id"], "k": r["kind"], "n": r["name"],
             "bt": r["base_table"], "g": r["grp"], "p": r["parent_entity_id"],
             "f": file_idx.get(r["file_id"], 0),
-            "st": r["step_type"], "c": r["calc"], "sx": r["step_text"],
+            "st": r["step_type"], "dt": r["data_type"], "ft": r["field_type"],
+            "c": r["calc"], "sx": r["step_text"],
         })
 
     edges = []

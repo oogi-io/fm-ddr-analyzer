@@ -169,6 +169,17 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .htable .hrow span.num{flex:0 0 70px;text-align:right}
 .caveat{background:var(--out-bg);border:1px solid var(--out);border-radius:8px;
   padding:10px 14px;font-size:12px;margin:14px 0;color:var(--text)}
+.dtable{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+.dtable th{position:sticky;top:0;background:var(--chip);color:var(--muted);text-align:left;
+  padding:6px 10px;cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--border);user-select:none}
+.dtable th.num{text-align:right}
+.dtable th:hover{color:var(--accent)}
+.dtable th .ar{font-size:9px;margin-left:3px}
+.dtable td{padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;max-width:340px}
+.dtable td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+.dtable tbody tr{cursor:pointer}
+.dtable tbody tr:hover{background:var(--accent-bg)}
 .item .snip{color:var(--muted);font-size:11px;font-family:"SF Mono",Menlo,monospace;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .snip mark{background:transparent;color:var(--accent);font-weight:600}
@@ -364,7 +375,8 @@ function finalize(e){
   // custom functions are copy-sources: keep their full body (others cap at 4k)
   const calcCap=e.k==='custom_function'?65536:4000;
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
-    st:e.st, g:e.g, ef:e.ef||null, c:calc?calc.slice(0,calcCap):null, step:e._step||null});
+    st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null,
+    c:calc?calc.slice(0,calcCap):null, step:e._step||null});
 }
 
 // ---- incremental tokenizer ----
@@ -523,7 +535,7 @@ async function run(input){
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,st:e.st,c:e.c,sx:e.step?e.step.slice(0,2000):null}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,
@@ -712,11 +724,14 @@ function initViewer(DATA){
     if(e.k==='script_step'){const p=byId[e.p];return{label:p?p.n:'script',via:e.st,id:p?p.id:x.s,amb:x.a};}
     return{label:e.n,via:null,id:e.id,amb:x.a};}
   function groupBy(a,k){const m={};a.forEach(x=>{(m[x[k]]=m[x[k]]||[]).push(x);});return m;}
-  function render(){
+  function filteredRows(){
     const q=$('q').value.trim().toLowerCase();
-    const rows=browsable.filter(e=>activeKinds.has(e.k)&&
+    return browsable.filter(e=>activeKinds.has(e.k)&&
       (activeFile<0||e.f===activeFile)&&
-      (!q||(e.n||'').toLowerCase().includes(q)||(e.bt||'').toLowerCase().includes(q))).slice(0,600);
+      (!q||(e.n||'').toLowerCase().includes(q)||(e.bt||'').toLowerCase().includes(q)));
+  }
+  function render(){
+    const rows=filteredRows().slice(0,600);
     const list=$('list'); list.innerHTML='';
     rows.forEach(e=>{const d=document.createElement('div');d.className='item'+(e.id===selId?' sel':'');
       const sub=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
@@ -724,10 +739,11 @@ function initViewer(DATA){
         (sub?'<div class="m">'+esc(sub)+'</div>':'');
       d.onclick=()=>select(e.id); list.appendChild(d);});
     if(!rows.length) list.innerHTML='<div class="item m">No matches</div>';
+    if(tableMode) renderTable();
   }
   function select(id,fromHash){
     const e=byId[id]; if(!e) return;
-    selId=id; render();
+    tableMode=false; selId=id; render();
     if(!fromHash && location.hash!=='#e'+id){
       try{ location.hash='e'+id; }catch(x){}
     }
@@ -783,6 +799,7 @@ function initViewer(DATA){
   }
   const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
   let currentScriptText=''; let currentLineTexts=[]; let scriptView='steps';
+  let tableMode=false, sortCol='name', sortDir=1;
   function renderScriptBody(e){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
@@ -1229,6 +1246,73 @@ function initViewer(DATA){
         styledChainSVG(wrap.querySelector('svg')),'image/svg+xml');
     };
   }
+  // ---- sortable entity table (FMPerception-style flat view) ----
+  const refBy=e=>(inbound[e.id]||[]).length;
+  const stepCount=e=>(stepsSorted[e.id]||[]).length;
+  const commentCount=e=>(stepsSorted[e.id]||[]).filter(st=>IS_COMMENT_STEP(st.st)).length;
+  const callCount=e=>outboundFor(e.id).filter(x=>x.c==='perform_script').length;
+  const CX=/^(If|Else If|Loop)$/;
+  const complexity=e=>1+(stepsSorted[e.id]||[]).filter(st=>CX.test(st.st||'')).length;
+  function tableColumns(kinds){
+    const multi=kinds.size!==1;
+    const only=multi?null:[...kinds][0];
+    const cols=[{k:'name',label:'Name',get:e=>e.n||'',num:false}];
+    if(multi) cols.push({k:'kind',label:'Kind',get:e=>kl(e.k),num:false});
+    if(files.length>1) cols.push({k:'file',label:'File',get:e=>(files[e.f]||'').replace(/\.fmp12$/,''),num:false});
+    if(only==='script'){
+      cols.push({k:'group',label:'Group',get:e=>e.g||'',num:false});
+      cols.push({k:'steps',label:'Steps',get:stepCount,num:true});
+      cols.push({k:'comments',label:'Comments',get:commentCount,num:true});
+      cols.push({k:'calls',label:'Calls',get:callCount,num:true});
+      cols.push({k:'cx',label:'Complexity',get:complexity,num:true});
+    } else if(only==='field'){
+      cols.push({k:'bt',label:'Table',get:e=>e.bt||'',num:false});
+      cols.push({k:'ft',label:'Type',get:e=>e.ft||'',num:false});
+      cols.push({k:'dt',label:'Data',get:e=>e.dt||'',num:false});
+    } else if(only==='table_occurrence'){
+      cols.push({k:'bt',label:'Base table',get:e=>e.bt||'',num:false});
+    } else if(only==='layout'){
+      cols.push({k:'group',label:'Group',get:e=>e.g||'',num:false});
+    }
+    cols.push({k:'refby',label:'Referenced by',get:refBy,num:true});
+    return cols;
+  }
+  function renderTable(){
+    const rows=filteredRows();
+    const kinds=new Set(rows.map(e=>e.k));
+    const cols=tableColumns(kinds);
+    if(!cols.some(c=>c.k===sortCol)) sortCol='name';
+    const col=cols.find(c=>c.k===sortCol);
+    const sorted=rows.slice().sort((a,b)=>{
+      const va=col.get(a), vb=col.get(b);
+      const r=col.num?((va||0)-(vb||0)):(''+va).localeCompare(''+vb,undefined,{numeric:true,sensitivity:'base'});
+      return r*sortDir;
+    });
+    const CAP=3000, shown=sorted.slice(0,CAP);
+    let h='<h2>Entities <span class="count">'+rows.length+'</span></h2>'+
+      '<div class="path">Filtered by the sidebar chips + search \u00b7 click a header to sort \u00b7 click a row to open</div>';
+    if(!rows.length){ $('detail').innerHTML=h+'<p class="empty">No matches for the current filters.</p>'; return; }
+    h+='<table class="dtable"><thead><tr>';
+    cols.forEach(c=>{ const active=c.k===sortCol;
+      h+='<th class="'+(c.num?'num':'')+'" data-col="'+c.k+'">'+esc(c.label)+
+         (active?'<span class="ar">'+(sortDir>0?'\u25b2':'\u25bc')+'</span>':'')+'</th>'; });
+    h+='</tr></thead><tbody>';
+    shown.forEach(e=>{ h+='<tr data-go="'+e.id+'">';
+      cols.forEach(c=>{ const v=c.get(e);
+        h+='<td class="'+(c.num?'num':'')+'">'+esc(c.num?(''+v):(v||''))+'</td>'; });
+      h+='</tr>'; });
+    h+='</tbody></table>';
+    if(rows.length>CAP) h+='<p class="empty">Showing the first '+CAP+' of '+rows.length+' \u2014 narrow with the filters.</p>';
+    const d=$('detail'); const keep=d.scrollTop; d.innerHTML=h;
+    d.querySelectorAll('th[data-col]').forEach(th=>th.onclick=()=>{
+      const k=th.dataset.col;
+      if(sortCol===k) sortDir=-sortDir;
+      else { sortCol=k; const c=cols.find(x=>x.k===k); sortDir=(c&&c.num)?-1:1; }
+      renderTable();
+    });
+    d.querySelectorAll('tr[data-go]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.go));
+    d.scrollTop=keep;
+  }
   // ---- solution health report ----
   function downloadText(name,text,mime){
     const a=document.createElement('a');
@@ -1406,21 +1490,28 @@ function initViewer(DATA){
   $('q').placeholder='Search names \u00b7 Enter: search in code';
   (function(){
     const ctrl=$('q').parentElement;
+    let tb=document.getElementById('tablebtn');
+    if(!tb){ tb=document.createElement('button'); tb.id='tablebtn'; tb.className='healthbtn';
+      tb.textContent='Table view (sortable)'; ctrl.appendChild(tb); }
+    tb.onclick=()=>{ tableMode=true; selId=null; render();
+      try{ if(location.hash!=='#table') location.hash='table'; }catch(x){} };
     let hb=document.getElementById('healthbtn');
     if(!hb){ hb=document.createElement('button'); hb.id='healthbtn'; hb.className='healthbtn';
       hb.textContent='Solution health report'; ctrl.appendChild(hb); }
-    hb.onclick=()=>{ selId=null; render(); renderHealth();
+    hb.onclick=()=>{ tableMode=false; selId=null; render(); renderHealth();
       try{ if(location.hash!=='#health') location.hash='health'; }catch(x){} };
   })();
   $('detail').innerHTML='<p class="empty">Select an entity, or search above.</p>';
   window.onhashchange=()=>{
-    if(location.hash==='#health'){ selId=null; render(); renderHealth(); return; }
+    if(location.hash==='#table'){ tableMode=true; selId=null; render(); return; }
+    if(location.hash==='#health'){ tableMode=false; selId=null; render(); renderHealth(); return; }
     const m=location.hash.match(/^#e(\d+)$/);
     if(m&&byId[+m[1]]&&selId!==+m[1]) select(+m[1],true);
   };
+  if(location.hash==='#table') tableMode=true;
   render();
   if(location.hash==='#health'){ renderHealth(); }
-  else { const m0=location.hash.match(/^#e(\d+)$/);
+  else if(!tableMode){ const m0=location.hash.match(/^#e(\d+)$/);
     if(m0&&byId[+m0[1]]) select(+m0[1],true); }
 }
 </script>
