@@ -51,7 +51,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .controls{padding:10px;border-bottom:1px solid var(--border)}
 #q{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:8px;
   background:var(--bg);color:var(--text);font-size:13px}
-.kinds{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.kinds{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .kinds button{border:1px solid var(--border);background:var(--bg);color:var(--muted);
   border-radius:20px;padding:3px 9px;font-size:11px;cursor:pointer}
 .kinds button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
@@ -86,7 +86,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .stepline:hover .lncopy{display:inline-flex;align-items:center}
 .lncopy:hover{color:var(--accent);border-color:var(--accent)}
 .lncopy svg{width:11px;height:11px}
-.filechips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
+.filechips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .filechips:empty{display:none}
 .filechips::before,.kinds::before{display:block;width:100%;font-size:10px;font-weight:600;
   text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin-bottom:1px}
@@ -137,9 +137,9 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 <div class="wrap" id="wrap">
   <div class="sidebar">
     <div class="controls">
-      <input id="q" placeholder="Search entities..." autocomplete="off">
       <div class="filechips" id="filechips"></div>
       <div class="kinds" id="kinds"></div>
+      <input id="q" placeholder="Search entities..." autocomplete="off">
     </div>
     <div class="list" id="list"></div>
   </div>
@@ -568,7 +568,8 @@ $('export').onclick=()=>{
     '<title>DDR - '+esc0(DATA.meta.label)+'</title><style>'+style+'</style></head><body>'+
     '<header><h1>FM DDR Analyzer</h1><span class="sub" id="meta"></span></header>'+
     '<div class="wrap" id="wrap" style="display:flex"><div class="sidebar"><div class="controls">'+
-    '<input id="q" placeholder="Search entities..." autocomplete="off"><div class="kinds" id="kinds"></div></div>'+
+    '<div class="filechips" id="filechips"></div><div class="kinds" id="kinds"></div>'+
+    '<input id="q" placeholder="Search entities..." autocomplete="off"></div>'+
     '<div class="list" id="list"></div></div><div class="detail" id="detail"></div></div>'+
     '<scr'+'ipt>'+viewerSrc+'\ninitViewer('+blob+');</scr'+'ipt></body></html>';
   const url=URL.createObjectURL(new Blob([html],{type:'text/html'}));
