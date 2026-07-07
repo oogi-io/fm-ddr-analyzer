@@ -602,10 +602,25 @@ function initViewer(DATA){
     }
   }
   const kindsEl=$('kinds'); kindsEl.innerHTML='';
+  const kindBtns={};
+  const syncKinds=()=>{ DATA.browsable.forEach(k=>kindBtns[k].classList.toggle('on',activeKinds.has(k))); };
   DATA.browsable.forEach(k=>{const b=document.createElement('button');
     b.textContent=kl(k)+' '+(DATA.counts[k]||0); b.classList.add('on');
-    b.onclick=()=>{b.classList.toggle('on'); activeKinds.has(k)?activeKinds.delete(k):activeKinds.add(k); render();};
-    kindsEl.appendChild(b);});
+    b.title='Click: only '+kl(k)+' (again: all) \u00b7 shift-click: add/remove';
+    b.onclick=(ev)=>{
+      if(ev.shiftKey||ev.metaKey||ev.ctrlKey){
+        // additive: toggle just this kind in the current selection
+        activeKinds.has(k)?activeKinds.delete(k):activeKinds.add(k);
+      } else if(activeKinds.size===1&&activeKinds.has(k)){
+        // clicking the soloed chip restores all
+        DATA.browsable.forEach(x=>activeKinds.add(x));
+      } else {
+        // solo this kind
+        activeKinds.clear(); activeKinds.add(k);
+      }
+      syncKinds(); render();
+    };
+    kindBtns[k]=b; kindsEl.appendChild(b);});
   function outboundFor(id){const e=byId[id];let outs=(outbound[id]||[]).slice();
     if(e&&e.k==='script')(stepsByScript[id]||[]).forEach(sid=>{if(outbound[sid])outs=outs.concat(outbound[sid]);});
     return outs;}
