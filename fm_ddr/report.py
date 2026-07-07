@@ -100,8 +100,9 @@ def report(db_path, out_path=None):
 <div class="wrap" id="wrap" style="display:flex">
   <div class="sidebar">
     <div class="controls">
-      <input id="q" placeholder="Search entities..." autocomplete="off">
+      <div class="filechips" id="filechips"></div>
       <div class="kinds" id="kinds"></div>
+      <input id="q" placeholder="Search entities..." autocomplete="off">
     </div>
     <div class="list" id="list"></div>
   </div>
