@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-07-07" type="Report" version="99.9.9">
+<File name="MicroB.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="2" name="LOG">
+			<FieldCatalog>
+				<Field id="1" dataType="Text" fieldType="Normal" name="message">
+					<Comment/>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<ScriptCatalog>
+		<Group groupCollapsed="False" includeInMenu="True" id="1" name="API">
+			<Script includeInMenu="True" id="2" name="Remote Helper">
+				<StepList>
+					<Step enable="True" id="86" name="Show Custom Dialog">
+						<StepText>Show Custom Dialog [ "remote" ]</StepText>
+					</Step>
+				</StepList>
+			</Script>
+		</Group>
+	</ScriptCatalog>
+</File>
+</FMPReport>

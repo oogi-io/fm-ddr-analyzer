@@ -1,0 +1,339 @@
+{
+ "entities": [
+  [
+   "account|Admin||0",
+   "",
+   ""
+  ],
+  [
+   "base_table|CTC||0",
+   "",
+   ""
+  ],
+  [
+   "base_table|INV||0",
+   "",
+   ""
+  ],
+  [
+   "custom_function|MakeTitle||0",
+   "",
+   ""
+  ],
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|amount|base_table|INV||0|0",
+   "INV",
+   ""
+  ],
+  [
+   "field|email|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|sql_only_field|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|zkp|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|zkp|base_table|INV||0|0",
+   "INV",
+   ""
+  ],
+  [
+   "layout_group|Interfaces||0",
+   "",
+   ""
+  ],
+  [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "",
+   "Interfaces"
+  ],
+  [
+   "layout|Invoices|layout_group|Interfaces||0|0",
+   "",
+   "Interfaces"
+  ],
+  [
+   "privilege_set|[Full Access]||0",
+   "",
+   ""
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "",
+   ""
+  ],
+  [
+   "script_group|Main||0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Go to Layout|script|Main Script|script_group|Main||0|0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|1",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|2",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Set Variable|script|Helper Script|script_group|Main||0|0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script_step|Show Custom Dialog|script|Orphan Script|script_group|Main||0|0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script|Helper Script|script_group|Main||0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script|Main Script|script_group|Main||0|0",
+   "",
+   "Main"
+  ],
+  [
+   "script|Orphan Script|script_group|Main||0|0",
+   "",
+   "Main"
+  ],
+  [
+   "table_occurrence|CTC||0",
+   "CTC",
+   ""
+  ],
+  [
+   "table_occurrence|INV||0",
+   "INV",
+   ""
+  ],
+  [
+   "table_occurrence|ctc_INV||0",
+   "INV",
+   ""
+  ],
+  [
+   "table_occurrence|ext_LOG||0",
+   "LOG",
+   ""
+  ],
+  [
+   "theme|Minimal||0",
+   "",
+   ""
+  ],
+  [
+   "value_list|VL Custom||0",
+   "",
+   ""
+  ],
+  [
+   "value_list|VL Fields||0",
+   "",
+   ""
+  ]
+ ],
+ "refs": [
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "calc",
+   "field",
+   "CTC::email",
+   "field|email|base_table|CTC||0|0",
+   0
+  ],
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "calc",
+   "field",
+   "CTC::zkp",
+   "field|zkp|base_table|CTC||0|0",
+   0
+  ],
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "calc",
+   "field",
+   "ext_LOG::message",
+   "",
+   0
+  ],
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "calc",
+   "field",
+   "zkp",
+   "field|zkp|base_table|CTC||0|0",
+   1
+  ],
+  [
+   "field|Segment|base_table|CTC||0|0",
+   "function_ref",
+   "custom_function",
+   "MakeTitle",
+   "custom_function|MakeTitle||0",
+   0
+  ],
+  [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "go_to_layout",
+   "layout",
+   "Invoices",
+   "layout|Invoices|layout_group|Interfaces||0|0",
+   0
+  ],
+  [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_object",
+   "field",
+   "CTC::email",
+   "field|email|base_table|CTC||0|0",
+   0
+  ],
+  [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "trigger",
+   "script",
+   "Helper Script",
+   "script|Helper Script|script_group|Main||0|0",
+   0
+  ],
+  [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "value_list_source",
+   "value_list",
+   "VL Custom",
+   "value_list|VL Custom||0",
+   0
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "join_predicate",
+   "field",
+   "CTC::zkp",
+   "field|zkp|base_table|CTC||0|0",
+   0
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "join_predicate",
+   "field",
+   "ctc_INV::zkp",
+   "field|zkp|base_table|INV||0|0",
+   0
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "join_predicate",
+   "table_occurrence",
+   "CTC",
+   "table_occurrence|CTC||0",
+   0
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "join_predicate",
+   "table_occurrence",
+   "ctc_INV",
+   "table_occurrence|ctc_INV||0",
+   0
+  ],
+  [
+   "relationship|CTC :: ctc_INV||0",
+   "sort",
+   "field",
+   "ctc_INV::amount",
+   "field|amount|base_table|INV||0|0",
+   0
+  ],
+  [
+   "script_step|Go to Layout|script|Main Script|script_group|Main||0|0|0",
+   "go_to_layout",
+   "layout",
+   "Invoices",
+   "layout|Invoices|layout_group|Interfaces||0|0",
+   0
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|0",
+   "perform_script",
+   "script",
+   "Helper Script",
+   "script|Helper Script|script_group|Main||0|0",
+   0
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|1",
+   "perform_script",
+   "script",
+   "Ghost Script",
+   "",
+   0
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|2",
+   "perform_script",
+   "script",
+   "Remote Helper",
+   "",
+   0
+  ],
+  [
+   "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
+   "field_reference",
+   "field",
+   "CTC::email",
+   "field|email|base_table|CTC||0|0",
+   0
+  ],
+  [
+   "script_step|Set Variable|script|Helper Script|script_group|Main||0|0|0",
+   "function_ref",
+   "custom_function",
+   "MakeTitle",
+   "custom_function|MakeTitle||0",
+   0
+  ],
+  [
+   "value_list|VL Fields||0",
+   "value_list_field",
+   "field",
+   "ctc_INV::amount",
+   "field|amount|base_table|INV||0|0",
+   0
+  ]
+ ]
+}
