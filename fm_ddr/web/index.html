@@ -879,18 +879,26 @@ function initViewer(DATA){
     q=(q||'').toLowerCase();
     const levels=Object.keys(g.cols).map(Number).sort((a,b)=>a-b);
     if(levels.length===1) return '<div class="chain" style="padding:14px"><span class="empty">No script calls in either direction.</span></div>';
-    const CW=230, RH=34, NH=24, PADX=16, PADY=14, CHW=7;
+    const RH=34, NH=24, PADX=16, PADY=14, CHW=7, GAP=56, TRUNC=44;
     const maxRows=Math.max(...levels.map(l=>g.cols[l].length));
-    const H=maxRows*RH+PADY*2, W=levels.length*CW+PADX*2;
-    const pos={};
-    levels.forEach((l,ci)=>{
-      const arr=g.cols[l]; const top=(H-arr.length*RH)/2;
-      arr.forEach((n,ri)=>{
-        const label=n.label.length>24?n.label.slice(0,23)+'\u2026':n.label;
-        const w=Math.max(label.length*CHW+18+(n.entry?10:0),60);
-        pos[n.key]={x:PADX+ci*CW,y:top+ri*RH+(RH-NH)/2,w:w,n:n,label:label};
+    const H=maxRows*RH+PADY*2;
+    // columns size to their longest label (truncated only past TRUNC chars)
+    const meta=levels.map(l=>{
+      const arr=g.cols[l].map(n=>{
+        const label=n.label.length>TRUNC?n.label.slice(0,TRUNC-1)+'\u2026':n.label;
+        return {n:n,label:label,w:Math.max(label.length*CHW+18+(n.entry?10:0),60)};
       });
+      return {arr:arr,colw:Math.max(...arr.map(a=>a.w))};
     });
+    let x=PADX; const pos={};
+    meta.forEach(m=>{
+      const top=(H-m.arr.length*RH)/2;
+      m.arr.forEach((a,ri)=>{
+        pos[a.n.key]={x:x,y:top+ri*RH+(RH-NH)/2,w:a.w,n:a.n,label:a.label};
+      });
+      x+=m.colw+GAP;
+    });
+    const W=x-GAP+PADX;
     let svg='';
     g.edges.forEach(ed=>{
       const p1=pos[ed.a],p2=pos[ed.b]; if(!p1||!p2) return;
@@ -989,17 +997,35 @@ function initViewer(DATA){
     const wrap=document.getElementById('chainwrap'); if(!wrap) return;
     attachPanZoom(wrap);
     // delegated hover-highlight + click-preview (survives search re-render)
-    const neighbors=()=>{ const m={};
-      lastChain.edges.forEach(ed=>{ (m[ed.a]=m[ed.a]||{})[ed.b]=1; (m[ed.b]=m[ed.b]||{})[ed.a]=1; });
-      return m; };
-    let nb=neighbors();
+    // hovering traces the FULL lineage through the node: everything upstream
+    // that can reach it and everything downstream it can reach
+    const adjacency=()=>{ const fwd={}, rev={};
+      lastChain.edges.forEach(ed=>{ (fwd[ed.a]=fwd[ed.a]||[]).push(ed.b);
+        (rev[ed.b]=rev[ed.b]||[]).push(ed.a); });
+      return {fwd:fwd,rev:rev}; };
+    let adj=adjacency();
+    const lineage=(key)=>{
+      const nodes={}; nodes[key]=1; const edges={};
+      const walk=(start,map,dir)=>{
+        const stack=[start];
+        while(stack.length){
+          const k=stack.pop();
+          (map[k]||[]).forEach(nk=>{
+            edges[dir==='f'?k+'>'+nk:nk+'>'+k]=1;
+            if(!nodes[nk]){ nodes[nk]=1; stack.push(nk); }
+          });
+        }
+      };
+      walk(key,adj.fwd,'f'); walk(key,adj.rev,'r');
+      return {nodes:nodes,edges:edges};
+    };
     wrap.onmouseover=(ev)=>{
       const g=ev.target.closest&&ev.target.closest('.cnode'); if(!g) return;
-      const key=g.dataset.key;
+      const lin=lineage(g.dataset.key);
       wrap.querySelectorAll('.cnode').forEach(n=>{
-        if(n.dataset.key!==key&&!(nb[key]&&nb[key][n.dataset.key])) n.classList.add('dim');});
+        if(!lin.nodes[n.dataset.key]) n.classList.add('dim');});
       wrap.querySelectorAll('path').forEach(p=>{
-        if(p.dataset.a!==key&&p.dataset.b!==key) p.classList.add('dim');});
+        if(!lin.edges[p.dataset.a+'>'+p.dataset.b]) p.classList.add('dim');});
     };
     wrap.onmouseout=(ev)=>{
       if(ev.target.closest&&ev.target.closest('.cnode')&&!wrap.contains(ev.relatedTarget&&ev.relatedTarget.closest&&ev.relatedTarget.closest('.cnode')))
@@ -1016,7 +1042,7 @@ function initViewer(DATA){
       chainQ=cq.value.trim();
       lastChain=buildChain(rootEnt,chainQ);
       wrap.innerHTML=chainSVG(lastChain,chainQ);
-      nb=neighbors(); attachPanZoom(wrap);
+      adj=adjacency(); attachPanZoom(wrap);
     };
     const cm=document.getElementById('copymermaid');
     if(cm) cm.onclick=()=>{
