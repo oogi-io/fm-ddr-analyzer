@@ -1,0 +1,16 @@
+# Parsed databases and DDR source files (large, generated / client data)
+*.db
+*.db-wal
+*.db-shm
+*.xml
+# ...except the synthetic test fixture (no client data, hand-written)
+!tests/fixtures/*.xml
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Generated HTML reports (embed client schema) — but keep the web app itself
+*.html
+!fm_ddr/web/index.html

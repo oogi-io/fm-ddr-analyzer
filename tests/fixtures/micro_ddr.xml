@@ -1,0 +1,212 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-07-07" type="Report" version="99.9.9">
+<File name="MicroTest.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="10" name="CTC">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="zkp">
+					<Comment/>
+					<AutoEnter alwaysEvaluate="False"/>
+					<Storage storeCalculationResults="True" index="All" indexLanguage="English" global="False" maxRepetition="1"/>
+				</Field>
+				<Field id="2" dataType="Text" fieldType="Normal" name="email">
+					<Comment/>
+				</Field>
+				<Field id="3" dataType="Text" fieldType="Calculated" name="Segment">
+					<Calculation table="CTC"><![CDATA[If ( CTC::zkp > 5 ; MakeTitle ( CTC::email ) ; "none" ) & "<html><script>alert(1)</script></html>"]]></Calculation>
+					<DisplayCalculation>
+						<Chunk type="NoRef">If ( </Chunk>
+						<Chunk type="FieldRef"><Field table="CTC" id="1" name="zkp"></Field></Chunk>
+						<Chunk type="NoRef"> &gt; 5 ; </Chunk>
+						<Chunk type="CustomFunctionRef">MakeTitle</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FieldRef">CTC::email</Chunk>
+						<Chunk type="NoRef"> ) ; "none" ) + </Chunk>
+						<Chunk type="FieldRef">zkp</Chunk>
+						<Chunk type="NoRef"> + </Chunk>
+						<Chunk type="FieldRef"><Field table="ext_LOG" id="1" name="message"></Field></Chunk>
+					</DisplayCalculation>
+					<Comment/>
+					<Storage storeCalculationResults="True" index="None" indexLanguage="English" global="False" maxRepetition="1"/>
+				</Field>
+				<Field id="4" dataType="Text" fieldType="Normal" name="sql_only_field">
+					<Comment>Referenced ONLY inside ExecuteSQL text - documents the structural blind spot</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+		<BaseTable id="2" records="5" name="INV">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="zkp">
+					<Comment>Duplicate leaf name across tables - resolution must go through the TO</Comment>
+				</Field>
+				<Field id="2" dataType="Number" fieldType="Normal" name="amount">
+					<Comment/>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="CTC" name="CTC"/>
+			<Table id="2" color="#AABBCC" baseTableId="2" baseTable="INV" name="INV"/>
+			<Table id="3" color="#CCBBAA" baseTableId="2" baseTable="INV" name="ctc_INV"/>
+			<Table id="4" color="#778899" baseTableId="1" baseTable="LOG" name="ext_LOG">
+				<FileReference id="1" name="MicroB"/>
+			</Table>
+		</TableList>
+		<RelationshipList>
+			<Relationship id="1">
+				<LeftTable cascadeCreate="False" cascadeDelete="False" name="CTC">
+					<SortList Maintain="True" value="False"/>
+				</LeftTable>
+				<RightTable cascadeCreate="True" cascadeDelete="False" name="ctc_INV">
+					<SortList Maintain="True" value="True">
+						<Sort type="Ascending">
+							<PrimaryField>
+								<Field table="ctc_INV" id="2" name="amount"/>
+							</PrimaryField>
+						</Sort>
+					</SortList>
+				</RightTable>
+				<JoinPredicateList>
+					<JoinPredicate type="Equal">
+						<LeftField>
+							<Field table="CTC" id="1" name="zkp"/>
+						</LeftField>
+						<RightField>
+							<Field table="ctc_INV" id="1" name="zkp"/>
+						</RightField>
+					</JoinPredicate>
+				</JoinPredicateList>
+			</Relationship>
+		</RelationshipList>
+	</RelationshipGraph>
+	<LayoutCatalog>
+		<Group groupCollapsed="False" includeInMenu="True" id="1" name="Interfaces">
+			<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Contacts">
+				<Object type="Field" key="10" LabelKey="0" flags="0" rotation="0">
+					<ScriptTriggers>
+						<Trigger event="OnObjectEnter" id="1" triggerFlags="1">
+							<Script id="2" name="Helper Script">
+							</Script>
+							<TriggerText>Helper Script</TriggerText>
+						</Trigger>
+					</ScriptTriggers>
+					<Bounds top="10" left="10" bottom="30" right="200"/>
+					<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="2" tableViewVisibility="0" quickFind="0" pictFormat="5">
+						<Name>CTC::email</Name>
+						<ValueList name="VL Custom" id="1"/>
+						<DDRInfo>
+							<Field name="" id="0" repetition="1" maxRepetition="1" table=""/>
+							<ValueList name="" id="0"/>
+						</DDRInfo>
+					</FieldObj>
+				</Object>
+				<Object type="Button" key="11" LabelKey="0" flags="0" rotation="0">
+					<Bounds top="40" left="10" bottom="70" right="120"/>
+					<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
+						<Step enable="True" id="6" name="Go to Layout">
+							<StepText>Go to Layout [ "Invoices" ]</StepText>
+							<LayoutDestination value="SelectedLayout"></LayoutDestination>
+							<Layout id="2" name="Invoices"></Layout>
+						</Step>
+					</ButtonObj>
+					<LabelCalc>
+						<Calculation><![CDATA["Open invoices"]]></Calculation>
+						<DisplayCalculation><Chunk type="NoRef">"Open invoices"</Chunk></DisplayCalculation>
+					</LabelCalc>
+				</Object>
+			</Layout>
+			<Layout width="640" quickFind="True" includeInMenu="True" id="2" name="Invoices">
+			</Layout>
+		</Group>
+	</LayoutCatalog>
+	<ValueListCatalog>
+		<ValueList id="1" name="VL Custom">
+			<Source value="Custom"/>
+			<CustomValues>
+				<Text>alpha
+beta</Text>
+			</CustomValues>
+		</ValueList>
+		<ValueList id="2" name="VL Fields">
+			<Source value="Field"/>
+			<PrimaryField show="True" sort="True">
+				<Field table="ctc_INV" id="2" name="amount"/>
+			</PrimaryField>
+			<ShowRelated value="False"/>
+		</ValueList>
+	</ValueListCatalog>
+	<ScriptCatalog>
+		<Group groupCollapsed="False" includeInMenu="True" id="1" name="Main">
+			<Script includeInMenu="True" id="1" name="Main Script">
+				<StepList>
+					<Step enable="True" id="1" name="Perform Script">
+						<StepText>Perform Script [ "Helper Script" ]</StepText>
+						<Script id="2" name="Helper Script"></Script>
+					</Step>
+					<Step enable="True" id="76" name="Set Field">
+						<StepText>Set Field [ CTC::email; ExecuteSQL ]</StepText>
+						<Calculation><![CDATA["x" & ExecuteSQL ( "SELECT sql_only_field FROM CTC" ; "" ; "" )]]></Calculation>
+						<DisplayCalculation>
+							<Chunk type="NoRef">"x" &amp; </Chunk>
+							<Chunk type="FunctionRef">ExecuteSQL</Chunk>
+							<Chunk type="NoRef"> ( "SELECT sql_only_field FROM CTC" ; "" ; "" )</Chunk>
+						</DisplayCalculation>
+						<FieldReference id="2" name="CTC::email" repetition="1" UUID="AAAA-BBBB"></FieldReference>
+					</Step>
+					<Step enable="True" id="6" name="Go to Layout">
+						<StepText>Go to Layout [ "Invoices" ]</StepText>
+						<LayoutDestination value="SelectedLayout"></LayoutDestination>
+						<Layout id="2" name="Invoices"></Layout>
+					</Step>
+					<Step enable="True" id="1" name="Perform Script">
+						<StepText>Perform Script [ "Ghost Script" from file "OtherFile" ]</StepText>
+						<Script id="777" name="Ghost Script"></Script>
+					</Step>
+					<Step enable="True" id="1" name="Perform Script">
+						<StepText>Perform Script [ "Remote Helper" from file: "MicroB" ]</StepText>
+						<FileReference id="1" name="MicroB">
+							<UniversalPathList>file:MicroB</UniversalPathList>
+						</FileReference>
+						<Script id="2" name="Remote Helper"></Script>
+					</Step>
+				</StepList>
+			</Script>
+			<Script includeInMenu="True" id="2" name="Helper Script">
+				<StepList>
+					<Step enable="True" id="89" name="Set Variable">
+						<StepText>Set Variable [ $t; MakeTitle ( "x" ) ]</StepText>
+						<Calculation><![CDATA[MakeTitle ( "x" )]]></Calculation>
+						<DisplayCalculation>
+							<Chunk type="CustomFunctionRef">MakeTitle</Chunk>
+							<Chunk type="NoRef"> ( "x" )</Chunk>
+						</DisplayCalculation>
+					</Step>
+				</StepList>
+			</Script>
+			<Script includeInMenu="True" id="3" name="Orphan Script">
+				<StepList>
+					<Step enable="True" id="86" name="Show Custom Dialog">
+						<StepText>Show Custom Dialog [ "hi" ]</StepText>
+					</Step>
+				</StepList>
+			</Script>
+		</Group>
+	</ScriptCatalog>
+	<CustomFunctionCatalog>
+		<CustomFunction id="1" functionArity="1" visible="True" parameters="input" name="MakeTitle">
+			<Calculation><![CDATA[Upper ( Left ( input ; 1 ) ) & Lower ( Middle ( input ; 2 ; 999 ) )]]></Calculation>
+		</CustomFunction>
+	</CustomFunctionCatalog>
+	<AccountCatalog>
+		<Account id="1" privilegeSet="[Full Access]" emptyPassword="False" changePasswordOnNextLogin="False" managedBy="FileMaker" status="Active" name="Admin"/>
+	</AccountCatalog>
+	<PrivilegesCatalog>
+		<PrivilegeSet comment="" id="1" menu="All" name="[Full Access]"/>
+	</PrivilegesCatalog>
+	<ThemeCatalog>
+		<Theme name="Minimal" id="1"/>
+	</ThemeCatalog>
+</File>
+</FMPReport>
