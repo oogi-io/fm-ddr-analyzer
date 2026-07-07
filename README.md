@@ -146,12 +146,15 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   counts. Works in the web app, the exported report, and the CLI report alike.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
-- [ ] **Copy as FM snippet / Edit → patch (ideas).** Copying a script as a
-  pasteable fmxmlsnippet — and, further, making changes in the viewer and
-  emitting them for the FileMaker upgrade tool — both require retaining the
-  raw step XML (the parser currently keeps only the rendered StepText) plus
-  a DDR-XML → clipboard-XML conversion. Parked together until the read-only
-  explorer has proven itself.
+- [ ] **Copy as FM snippet (fmxmlsnippet).** Copy a script (or selected
+  steps) to the clipboard in FileMaker's snippet format so it pastes straight
+  into Script Workspace. Prerequisite: retain the raw `<Step>` XML at parse
+  time (the parser currently keeps only the rendered StepText) and convert
+  DDR step XML to the clipboard format.
+- [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
+  them as input for the FileMaker upgrade tool to apply. Shares the raw-XML
+  prerequisite with snippet copy; parked until the read-only explorer has
+  proven itself.
 - [ ] Health report: dead fields, orphan scripts, missing references, TO sprawl.
 
 ## Project structure
