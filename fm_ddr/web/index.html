@@ -908,7 +908,7 @@ function initViewer(DATA){
         (ed.c>1?' stroke-width="2"':'')+
         ' d="M'+x1+' '+y1+' C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2+'">'+
         '<title>'+names[ed.t]+(ed.c>1?' \u00d7'+ed.c:'')+'</title></path>';
-      if(ed.c>1) svg+='<text class="ecount" x="'+(mx-6)+'" y="'+((y1+y2)/2-3)+'">\u00d7'+ed.c+'</text>';
+      if(ed.c>1) svg+='<text class="ecount" data-a="'+ed.a+'" data-b="'+ed.b+'" x="'+(mx-6)+'" y="'+((y1+y2)/2-3)+'">\u00d7'+ed.c+'</text>';
     });
     Object.keys(pos).forEach(k=>{
       const p=pos[k], n=p.n, l=levels.find(L=>g.cols[L].includes(n));
@@ -980,7 +980,9 @@ function initViewer(DATA){
       apply();
     },{passive:false});
     let drag=null;
-    svg.addEventListener('mousedown',ev=>{ drag={x:ev.clientX,y:ev.clientY,vx:vb.x,vy:vb.y,moved:false};
+    svg.addEventListener('mousedown',ev=>{
+      if(ev.target.closest&&ev.target.closest('.cnode')) return; // node drag handles it
+      drag={x:ev.clientX,y:ev.clientY,vx:vb.x,vy:vb.y,moved:false};
       svg.classList.add('panning'); });
     window.addEventListener('mousemove',ev=>{ if(!drag) return;
       const r=svg.getBoundingClientRect();
@@ -993,9 +995,63 @@ function initViewer(DATA){
       drag=null; });
     svg.addEventListener('dblclick',()=>{ vb={x:0,y:0,w:W,h:H}; apply(); });
   }
+  const NODE_H=24;
+  function attachNodeDrag(wrap,off){
+    const svg=wrap.querySelector('svg'); if(!svg) return;
+    // base geometry from the rendered DOM
+    const base={};
+    wrap.querySelectorAll('.cnode').forEach(g=>{
+      const r=g.querySelector('rect');
+      base[g.dataset.key]={x:+r.getAttribute('x'),y:+r.getAttribute('y'),w:+r.getAttribute('width')};
+    });
+    const pt=k=>{ const b=base[k]; const o=off[k]||{dx:0,dy:0};
+      return {x:b.x+o.dx,y:b.y+o.dy,w:b.w}; };
+    const redraw=(key)=>{
+      wrap.querySelectorAll('path[data-a],text.ecount').forEach(el=>{
+        if(el.dataset.a!==key&&el.dataset.b!==key) return;
+        const A=pt(el.dataset.a), B=pt(el.dataset.b);
+        if(!A||!B) return;
+        const x1=A.x+A.w,y1=A.y+NODE_H/2,x2=B.x,y2=B.y+NODE_H/2,mx=(x1+x2)/2;
+        if(el.tagName==='path')
+          el.setAttribute('d','M'+x1+' '+y1+' C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2);
+        else { el.setAttribute('x',mx-6); el.setAttribute('y',(y1+y2)/2-3); }
+      });
+    };
+    const applyOff=(key)=>{
+      const g=wrap.querySelector('.cnode[data-key="'+CSS.escape(key)+'"]');
+      const o=off[key]; if(g&&o) g.setAttribute('transform','translate('+o.dx+' '+o.dy+')');
+      redraw(key);
+    };
+    Object.keys(off).forEach(k=>{ if(base[k]) applyOff(k); });
+    let nd=null;
+    svg.addEventListener('mousedown',ev=>{
+      const g=ev.target.closest&&ev.target.closest('.cnode'); if(!g) return;
+      const o=off[g.dataset.key]||{dx:0,dy:0};
+      nd={key:g.dataset.key,g:g,sx:ev.clientX,sy:ev.clientY,dx:o.dx,dy:o.dy,moved:false};
+    });
+    window.addEventListener('mousemove',ev=>{
+      if(!nd) return;
+      const vbA=(svg.getAttribute('viewBox')||'').split(' ').map(Number);
+      const r=svg.getBoundingClientRect();
+      const scale=(vbA[2]||r.width)/r.width;
+      const mdx=(ev.clientX-nd.sx)*scale, mdy=(ev.clientY-nd.sy)*scale;
+      if(Math.abs(ev.clientX-nd.sx)+Math.abs(ev.clientY-nd.sy)>4) nd.moved=true;
+      if(!nd.moved) return;
+      off[nd.key]={dx:nd.dx+mdx,dy:nd.dy+mdy};
+      nd.g.setAttribute('transform','translate('+off[nd.key].dx+' '+off[nd.key].dy+')');
+      redraw(nd.key);
+    });
+    window.addEventListener('mouseup',()=>{
+      if(!nd) return;
+      if(nd.moved){ wrap._suppressClick=true; setTimeout(()=>{wrap._suppressClick=false;},0); }
+      nd=null;
+    });
+  }
   function wireChain(rootEnt){
     const wrap=document.getElementById('chainwrap'); if(!wrap) return;
+    const nodeOff={};
     attachPanZoom(wrap);
+    attachNodeDrag(wrap,nodeOff);
     // delegated hover-highlight + click-preview (survives search re-render)
     // hovering traces the FULL lineage through the node: everything upstream
     // that can reach it and everything downstream it can reach
@@ -1042,7 +1098,7 @@ function initViewer(DATA){
       chainQ=cq.value.trim();
       lastChain=buildChain(rootEnt,chainQ);
       wrap.innerHTML=chainSVG(lastChain,chainQ);
-      adj=adjacency(); attachPanZoom(wrap);
+      adj=adjacency(); attachPanZoom(wrap); attachNodeDrag(wrap,nodeOff);
     };
     const cm=document.getElementById('copymermaid');
     if(cm) cm.onclick=()=>{
