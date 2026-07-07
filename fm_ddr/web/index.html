@@ -763,7 +763,9 @@ function initViewer(DATA){
     return out;
   }
   function renderCallChain(root){
-    const DEPTH=3, CAP=20;
+    // full chain: BFS runs until the frontier is empty; the visited set makes
+    // it terminate (each script appears once), 200 is only a safety net
+    const DEPTH=200, CAP=20;
     const cols={0:[{id:root.id,label:root.n||'?',kind:'script',sel:true,key:'n'+root.id}]};
     const edges=[]; const visited={}; visited[root.id]=1;
     const expand=(dir)=>{
@@ -826,9 +828,10 @@ function initViewer(DATA){
         '<rect x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+NH+'" rx="6"/>'+
         '<text x="'+(p.x+9)+'" y="'+(p.y+16)+'">'+esc(p.label)+'</text></g>';
     }));
-    return '<div class="scriptmeta"><span>Callers <b style="color:var(--in)">left</b></span>'+
-      '<span>Calls <b style="color:var(--out)">right</b></span>'+
-      '<span>Click a node to re-root \u00b7 depth '+DEPTH+'</span></div>'+
+    const up=-Math.min(...levels), down=Math.max(...levels);
+    return '<div class="scriptmeta"><span>Callers <b style="color:var(--in)">left</b> ('+up+' level'+(up===1?'':'s')+')</span>'+
+      '<span>Calls <b style="color:var(--out)">right</b> ('+down+' level'+(down===1?'':'s')+')</span>'+
+      '<span>Full chain \u00b7 click a node to re-root</span></div>'+
       '<div class="chain"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'+svg+'</svg></div>';
   }
   function stepsSelection(){

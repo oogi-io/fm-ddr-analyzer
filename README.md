@@ -147,7 +147,8 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   exported report, and the CLI report alike.
 - [x] **Call chain diagram.** Toggle any script's detail between Steps and a
   layered SVG call chain: callers flow in from the left (green), called
-  scripts to the right (orange), 3 levels deep each way, externals dashed,
+  scripts to the right (orange), the **full chain** in both directions
+  (cycle-safe; each script appears once), externals dashed, per-level
   fan-out capped with "+N more", every node clickable to re-root.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
