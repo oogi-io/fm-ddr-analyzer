@@ -72,7 +72,11 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .scriptmeta{display:flex;gap:16px;flex-wrap:wrap;margin:8px 0 4px;font-size:12px;color:var(--muted)}
 .scriptmeta b{color:var(--text);font-weight:600}
 .steps{background:var(--panel);border:1px solid var(--border);border-radius:8px;
-  padding:10px 0;margin:10px 0;font:12px/1.7 "SF Mono",Menlo,monospace;overflow-x:auto}
+  padding:10px 0;margin:10px 0;font:12px/1.7 "SF Mono",Menlo,monospace;overflow-x:auto;position:relative}
+.copybtn{position:absolute;top:8px;right:10px;border:1px solid var(--border);
+  background:var(--bg);color:var(--muted);border-radius:6px;padding:3px 10px;
+  font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;z-index:2}
+.copybtn:hover{border-color:var(--accent);color:var(--accent)}
 .stepline{padding:0 14px;white-space:pre}
 .stepline.cmt{color:var(--muted)}
 .stepline:hover{background:var(--accent-bg)}
@@ -665,30 +669,45 @@ function initViewer(DATA){
     h+='</div>';
     const d=$('detail'); d.innerHTML=h;
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
+    wireCopy();
     d.scrollTop=0;
   }
   const INDENT_OPEN=/^(If|Loop|Else If|Else)$/, INDENT_CLOSE=/^(End If|End Loop|Else If|Else)$/;
+  const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
+  let currentScriptText='';
   function renderScriptBody(e){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
-    const comments=steps.filter(st=>st.st==='Comment'||st.st==='# (comment)').length;
+    const comments=steps.filter(st=>IS_COMMENT_STEP(st.st)).length;
     const calls=(outbound[e.id]||[]).concat(...steps.map(st=>outbound[st.id]||[]))
       .filter(x=>x.c==='perform_script').length;
     let h='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span>'+
       '<span>Comments: <b>'+comments+'</b></span>'+
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
-    h+='<div class="steps">'; let ind=0;
+    h+='<div class="steps"><button class="copybtn" id="copyscript">Copy script</button>';
+    let ind=0; const plain=[];
     steps.forEach(st=>{
       const t=st.st||'';
       if(INDENT_CLOSE.test(t)) ind=Math.max(0,ind-1);
-      const text=st.sx||t;
-      const isCmt=t==='Comment'||text.startsWith('#');
+      // an empty comment step has no StepText; render a blank line, not the
+      // step-type name ("# (comment)")
+      let text=st.sx||(IS_COMMENT_STEP(t)?'':t);
+      const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#');
+      const line='  '.repeat(ind)+text;
+      plain.push(line);
       h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+
-         '  '.repeat(ind)+esc(text)+'</div>';
+         (text?esc(line):'&nbsp;')+'</div>';
       if(INDENT_OPEN.test(t)) ind++;
     });
     h+='</div>';
+    currentScriptText=(e.n||'')+'\n'+'='.repeat(Math.min((e.n||'').length,60))+'\n'+plain.join('\n')+'\n';
     return h;
+  }
+  function wireCopy(){
+    const b=document.getElementById('copyscript'); if(!b) return;
+    b.onclick=()=>{ navigator.clipboard.writeText(currentScriptText).then(()=>{
+      b.textContent='Copied'; setTimeout(()=>{b.textContent='Copy script';},1200);
+    }).catch(()=>{ b.textContent='Copy failed'; }); };
   }
   function renderRefs(refs,resolveFn){
     if(!refs.length) return '<p class="empty">None</p>';
