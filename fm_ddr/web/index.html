@@ -735,7 +735,8 @@ function initViewer(DATA){
     const path=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
     let h='<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
-      (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+'</div>';
+      (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+
+      ' <button class="csv" id="shareent" title="Download a small self-contained HTML of just this entity">Share\u2026</button></div>';
     if(e.k==='script'){
       h+='<div class="viewtoggle">'+
          '<button id="vt-steps"'+(scriptView==='steps'?' class="on"':'')+'>Steps</button>'+
@@ -754,6 +755,8 @@ function initViewer(DATA){
     const d=$('detail'); d.innerHTML=h;
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
     wireCopy();
+    const sh=document.getElementById('shareent');
+    if(sh) sh.onclick=()=>shareEntity(e);
     const cc=document.getElementById('copycalc');
     if(cc) cc.onclick=()=>{ navigator.clipboard.writeText(e.c||'').then(()=>{
       cc.textContent='Copied'; setTimeout(()=>{cc.textContent='Copy';},1200); }); };
@@ -1001,6 +1004,57 @@ function initViewer(DATA){
       drag=null; });
     svg.addEventListener('dblclick',()=>{ vb={x:0,y:0,w:W,h:H}; apply(); });
   }
+  function styledChainSVG(svgEl){
+    const el=svgEl.cloneNode(true);
+    const cs=getComputedStyle(document.documentElement);
+    const v=n=>cs.getPropertyValue(n).trim();
+    const st='<style>svg{background:'+v('--panel')+'} '+
+      '.cnode rect{fill:'+v('--bg')+';stroke:'+v('--border')+'} '+
+      '.cnode text{fill:'+v('--text')+';font:11px Menlo,monospace} '+
+      '.sel rect{fill:'+v('--accent-bg')+';stroke:'+v('--accent')+'} '+
+      '.caller rect{stroke:'+v('--in')+'} .callee rect{stroke:'+v('--out')+'} '+
+      '.extn rect{stroke-dasharray:4 3} .extn text,.more text{fill:'+v('--muted')+'} '+
+      '.entrydot{fill:'+v('--in')+'} .ecount{fill:'+v('--muted')+';font:9px Menlo,monospace} '+
+      'path{fill:none;stroke:'+v('--border')+';stroke-width:1.2} '+
+      'path.t-trigger{stroke-dasharray:2 3} path.t-psos{stroke-dasharray:7 3} '+
+      'path.t-button{stroke-dasharray:1 2 5 2}</style>';
+    el.setAttribute('xmlns','http://www.w3.org/2000/svg');
+    return '<?xml version="1.0"?>'+el.outerHTML.replace('>',('>'+st));
+  }
+  // ---- share one entity as a tiny static HTML (no JS inside) ----
+  function shareEntity(e){
+    const style=document.querySelector('style').textContent;
+    const path=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
+    const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
+    let body='<header><h1>FM DDR Analyzer</h1><span class="sub">'+esc(DATA.meta.label)+
+      (DATA.meta.ddr_version?' \u00b7 DDR '+DATA.meta.ddr_version:'')+' \u00b7 shared entity</span></header>'+
+      '<div class="detail" style="overflow:visible">'+
+      '<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
+      (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+'</div>';
+    if(e.k==='script'){
+      const steps=stepsSorted[e.id]||[];
+      body+='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span></div>';
+      const liveChain=document.querySelector('#chainwrap svg');
+      if(liveChain) body+='<div class="chain" style="overflow:visible">'+
+        styledChainSVG(liveChain).replace(/^<\?xml[^>]*>/,'')+'</div>';
+      if(steps.length) body+='<div class="steps">'+renderStepLines(steps)+'</div>';
+    } else if(e.c){
+      body+='<div class="calc">'+esc(e.c)+'</div>';
+    }
+    const ins=inbound[e.id]||[], outs=outboundFor(e.id);
+    body+='<div class="cols">'+
+      '<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
+      renderRefs(ins,sourceDisplay)+'</div>'+
+      '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
+      renderRefs(outs,x=>{const via=(byId[x.s]&&byId[x.s].k==='script_step')?byId[x.s].st:null;
+        return x.t!=null?{label:byId[x.t]?byId[x.t].n:'?',id:x.t,via:via,amb:x.a}
+                        :{label:x.tr||('('+x.tk+')'),ext:true};})+'</div></div></div>';
+    const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
+      '<meta name="viewport" content="width=device-width, initial-scale=1">'+
+      '<title>'+esc(e.n||'entity')+' \u2014 FM DDR</title><style>'+style+
+      ' .ref{cursor:default} .lncopy{display:none !important}</style></head><body>'+body+'</body></html>';
+    downloadText((e.n||'entity').replace(/\W+/g,'_')+'_share.html',html,'text/html');
+  }
   const NODE_H=24;
   function attachNodeDrag(wrap,off){
     const svg=wrap.querySelector('svg'); if(!svg) return;
@@ -1133,22 +1187,8 @@ function initViewer(DATA){
     };
     const dl=document.getElementById('dlchain');
     if(dl) dl.onclick=()=>{
-      const el=wrap.querySelector('svg').cloneNode(true);
-      const cs=getComputedStyle(document.documentElement);
-      const v=n=>cs.getPropertyValue(n).trim();
-      const st='<style>svg{background:'+v('--panel')+'} '+
-        '.cnode rect{fill:'+v('--bg')+';stroke:'+v('--border')+'} '+
-        '.cnode text{fill:'+v('--text')+';font:11px Menlo,monospace} '+
-        '.sel rect{fill:'+v('--accent-bg')+';stroke:'+v('--accent')+'} '+
-        '.caller rect{stroke:'+v('--in')+'} .callee rect{stroke:'+v('--out')+'} '+
-        '.extn rect{stroke-dasharray:4 3} .extn text,.more text{fill:'+v('--muted')+'} '+
-        '.entrydot{fill:'+v('--in')+'} .ecount{fill:'+v('--muted')+';font:9px Menlo,monospace} '+
-        'path{fill:none;stroke:'+v('--border')+';stroke-width:1.2} '+
-        'path.t-trigger{stroke-dasharray:2 3} path.t-psos{stroke-dasharray:7 3} '+
-        'path.t-button{stroke-dasharray:1 2 5 2}</style>';
-      el.setAttribute('xmlns','http://www.w3.org/2000/svg');
-      const svgText='<?xml version="1.0"?>'+el.outerHTML.replace('>',('>'+st));
-      downloadText((rootEnt.n||'chain').replace(/\W+/g,'_')+'_callchain.svg',svgText,'image/svg+xml');
+      downloadText((rootEnt.n||'chain').replace(/\W+/g,'_')+'_callchain.svg',
+        styledChainSVG(wrap.querySelector('svg')),'image/svg+xml');
     };
   }
   // ---- solution health report ----

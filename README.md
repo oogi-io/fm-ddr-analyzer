@@ -167,6 +167,14 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   chain with Re-root / Open fully, drag-pan + wheel-zoom (double-click
   resets), Copy as Mermaid, Download SVG, and a print stylesheet (Cmd+P →
   clean PDF of chain, script text, or health report).
+- [x] **Share one insight.** Every entity has a Share button that downloads
+  a small self-contained static HTML (no JavaScript inside): the script's
+  steps, its call chain exactly as arranged on screen, and its references.
+  Kilobytes — safe to mail or Slack without sharing the whole schema. For
+  whole-solution sharing, drop an exported report on a shared drive and use
+  deep links (`report.html#e123`).
+- [ ] **Copy-link button.** One-click copy of an entity's deep link for the
+  shared-drive workflow.
 - [ ] **Union impact graph.** Select several scripts and see one merged
   call graph with shared dependencies emphasized — "the five scripts I'm
   about to change, and everything they touch". Its own session.
