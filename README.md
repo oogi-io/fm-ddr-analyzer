@@ -150,6 +150,16 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   scripts to the right (orange), the **full chain** in both directions
   (cycle-safe; each script appears once), externals dashed, per-level
   fan-out capped with "+N more", every node clickable to re-root.
+- [x] **Navigate like an app.** Browser Back/Forward work while exploring;
+  every entity has a deep link (`#e123`) that also works inside exported
+  reports; `#health` opens the health report directly.
+- [x] **Search in code.** Enter-search scans every calculation and script
+  step; results show highlighted snippets and clicking a step match opens
+  the script scrolled to that exact line.
+- [x] **Solution health report.** Unused-field and orphan-script candidates,
+  unresolved and ambiguous references, hotspots and biggest scripts — every
+  list clickable, each downloadable as CSV, with the coverage caveats printed
+  on the page. The call chain is downloadable as a standalone SVG.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
 - [ ] **Copy as FM snippet (fmxmlsnippet).** Copy a script (or selected
