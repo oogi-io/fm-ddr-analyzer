@@ -942,7 +942,8 @@ function initViewer(DATA){
       '<div class="chainbar"><input id="chainq" placeholder="Find in chain..." autocomplete="off">'+
       '<button class="csv" id="resetlayout">Reset layout</button>'+
       '<button class="csv" id="copymermaid">Copy Mermaid</button>'+
-      '<button class="csv" id="dlchain">Download SVG</button>'+
+      '<button class="csv" id="dlpng">Download PNG</button>'+
+      '<button class="csv" id="dlchain">SVG</button>'+
       '<span class="legend">hover: highlight \u00b7 click: preview below</span></div>'+
       '<div id="chainwrap">'+chainSVG(lastChain,'')+'</div><div id="chainpreview"></div>';
   }
@@ -1019,7 +1020,27 @@ function initViewer(DATA){
       'path.t-trigger{stroke-dasharray:2 3} path.t-psos{stroke-dasharray:7 3} '+
       'path.t-button{stroke-dasharray:1 2 5 2}</style>';
     el.setAttribute('xmlns','http://www.w3.org/2000/svg');
+    // export the whole diagram, not the current zoom/pan viewport
+    el.setAttribute('viewBox','0 0 '+el.getAttribute('width')+' '+el.getAttribute('height'));
     return '<?xml version="1.0"?>'+el.outerHTML.replace('>',('>'+st));
+  }
+  function chainPNG(svgEl,name){
+    const svgText=styledChainSVG(svgEl);
+    const img=new Image();
+    img.onload=()=>{
+      const W=+svgEl.getAttribute('width'), H=+svgEl.getAttribute('height');
+      const c=document.createElement('canvas'); c.width=W*2; c.height=H*2;
+      const ctx=c.getContext('2d');
+      ctx.fillStyle=getComputedStyle(document.documentElement).getPropertyValue('--panel').trim()||'#fff';
+      ctx.fillRect(0,0,c.width,c.height);
+      ctx.drawImage(img,0,0,c.width,c.height);
+      c.toBlob(b=>{
+        const a=document.createElement('a');
+        a.href=URL.createObjectURL(b); a.download=name; a.click();
+        URL.revokeObjectURL(a.href);
+      },'image/png');
+    };
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svgText);
   }
   // ---- share one entity as a tiny static HTML (no JS inside) ----
   function shareEntity(e){
@@ -1185,6 +1206,9 @@ function initViewer(DATA){
       navigator.clipboard.writeText(lines.join('\n')).then(()=>{
         cm.textContent='Copied'; setTimeout(()=>cm.textContent='Copy Mermaid',1200);});
     };
+    const dp=document.getElementById('dlpng');
+    if(dp) dp.onclick=()=>chainPNG(wrap.querySelector('svg'),
+      (rootEnt.n||'chain').replace(/\W+/g,'_')+'_callchain.png');
     const dl=document.getElementById('dlchain');
     if(dl) dl.onclick=()=>{
       downloadText((rootEnt.n||'chain').replace(/\W+/g,'_')+'_callchain.svg',
