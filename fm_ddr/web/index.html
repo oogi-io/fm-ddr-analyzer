@@ -77,9 +77,15 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   background:var(--bg);color:var(--muted);border-radius:6px;padding:3px 10px;
   font:11px -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;cursor:pointer;z-index:2}
 .copybtn:hover{border-color:var(--accent);color:var(--accent)}
-.stepline{padding:0 14px;white-space:pre}
+.stepline{padding:0 14px;white-space:pre;position:relative}
 .stepline.cmt{color:var(--muted)}
 .stepline:hover{background:var(--accent-bg)}
+.lncopy{display:none;position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  border:1px solid var(--border);background:var(--bg);color:var(--muted);
+  border-radius:4px;padding:1px 5px;cursor:pointer;line-height:1}
+.stepline:hover .lncopy{display:inline-flex;align-items:center}
+.lncopy:hover{color:var(--accent);border-color:var(--accent)}
+.lncopy svg{width:11px;height:11px}
 .filechips{display:flex;flex-wrap:wrap;gap:5px;margin-top:10px}
 .filechips:empty{display:none}
 .filechips::before,.kinds::before{display:block;width:100%;font-size:10px;font-weight:600;
@@ -674,7 +680,7 @@ function initViewer(DATA){
   }
   const INDENT_OPEN=/^(If|Loop|Else If|Else)$/, INDENT_CLOSE=/^(End If|End Loop|Else If|Else)$/;
   const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
-  let currentScriptText='';
+  let currentScriptText=''; let currentLineTexts=[];
   function renderScriptBody(e){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
@@ -684,9 +690,11 @@ function initViewer(DATA){
     let h='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span>'+
       '<span>Comments: <b>'+comments+'</b></span>'+
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
-    h+='<div class="steps"><button class="copybtn" id="copyscript">Copy script</button>';
-    let ind=0; const plain=[];
-    steps.forEach(st=>{
+    h+='<div class="steps" id="stepsblock"><button class="copybtn" id="copyscript">Copy script</button>';
+    let ind=0; const plain=[]; currentLineTexts=[];
+    const ICON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+
+      '<rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H4.5A1.5 1.5 0 0 0 3 3.5v8A1.5 1.5 0 0 0 4.5 13H5"/></svg>';
+    steps.forEach((st,i)=>{
       const t=st.st||'';
       if(INDENT_CLOSE.test(t)) ind=Math.max(0,ind-1);
       // an empty comment step has no StepText; render a blank line, not the
@@ -694,20 +702,41 @@ function initViewer(DATA){
       let text=st.sx||(IS_COMMENT_STEP(t)?'':t);
       const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#');
       const line='  '.repeat(ind)+text;
-      plain.push(line);
+      plain.push(line); currentLineTexts.push(text);
       h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+
-         (text?esc(line):'&nbsp;')+'</div>';
+         (text?esc(line):'&nbsp;')+
+         (text?'<button class="lncopy" data-ln="'+i+'" title="Copy this step">'+ICON+'</button>':'')+
+         '</div>';
       if(INDENT_OPEN.test(t)) ind++;
     });
     h+='</div>';
     currentScriptText=(e.n||'')+'\n'+'='.repeat(Math.min((e.n||'').length,60))+'\n'+plain.join('\n')+'\n';
     return h;
   }
+  function stepsSelection(){
+    const sel=window.getSelection();
+    if(!sel||sel.isCollapsed) return null;
+    const blk=document.getElementById('stepsblock');
+    if(!blk||!blk.contains(sel.anchorNode)) return null;
+    return sel.toString();
+  }
   function wireCopy(){
     const b=document.getElementById('copyscript'); if(!b) return;
-    b.onclick=()=>{ navigator.clipboard.writeText(currentScriptText).then(()=>{
-      b.textContent='Copied'; setTimeout(()=>{b.textContent='Copy script';},1200);
-    }).catch(()=>{ b.textContent='Copy failed'; }); };
+    const doCopy=(text,label)=>navigator.clipboard.writeText(text).then(()=>{
+      b.textContent='Copied'; setTimeout(()=>{b.textContent=label();},1200);
+    }).catch(()=>{ b.textContent='Copy failed'; });
+    const label=()=>stepsSelection()?'Copy selection':'Copy script';
+    b.onclick=()=>{ const sel=stepsSelection(); doCopy(sel||currentScriptText,label); };
+    document.onselectionchange=()=>{ if(b.textContent!=='Copied'&&b.textContent!=='Copy failed') b.textContent=label(); };
+    // one delegated handler for all per-line copy icons
+    const blk=document.getElementById('stepsblock');
+    if(blk) blk.onclick=(ev)=>{
+      const ic=ev.target.closest&&ev.target.closest('.lncopy'); if(!ic) return;
+      ev.stopPropagation();
+      navigator.clipboard.writeText(currentLineTexts[+ic.dataset.ln]||'').then(()=>{
+        ic.style.color='var(--in)'; setTimeout(()=>{ic.style.color='';},900);
+      });
+    };
   }
   function renderRefs(refs,resolveFn){
     if(!refs.length) return '<p class="empty">None</p>';
