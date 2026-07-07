@@ -143,7 +143,12 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   DDR folder (every `*_fmp12.xml` loads, cross-file links resolve), filter by
   file, and click a script to read it as **full step text** — document order,
   block indentation (If/Loop/Else), comment steps dimmed, step/comment/call
-  counts. Works in the web app, the exported report, and the CLI report alike.
+  counts, copy per line / selection / whole script. Works in the web app, the
+  exported report, and the CLI report alike.
+- [x] **Call chain diagram.** Toggle any script's detail between Steps and a
+  layered SVG call chain: callers flow in from the left (green), called
+  scripts to the right (orange), 3 levels deep each way, externals dashed,
+  fan-out capped with "+N more", every node clickable to re-root.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
 - [ ] **Copy as FM snippet (fmxmlsnippet).** Copy a script (or selected
