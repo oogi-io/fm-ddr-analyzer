@@ -139,8 +139,16 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   and field refs through external table occurrences (98.8% resolution measured
   on a 9-file production solution). External refs whose file is absent stay unresolved
   instead of silently mis-linking to same-id local objects.
+- [x] **Explorer UX.** FMPerception-style flow in the browser: drop the whole
+  DDR folder (every `*_fmp12.xml` loads, cross-file links resolve), filter by
+  file, and click a script to read it as **full step text** — document order,
+  block indentation (If/Loop/Else), comment steps dimmed, step/comment/call
+  counts. Works in the web app, the exported report, and the CLI report alike.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
+- [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
+  them as input for the FileMaker upgrade tool to apply. Parked until the
+  read-only explorer has proven itself.
 - [ ] Health report: dead fields, orphan scripts, missing references, TO sprawl.
 
 ## Project structure
