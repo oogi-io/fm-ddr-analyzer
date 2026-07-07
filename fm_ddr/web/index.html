@@ -124,6 +124,30 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .ext{color:var(--muted);font-style:italic;cursor:default}
 .empty{color:var(--muted)}
 .count{color:var(--muted);font-weight:400;font-size:12px}
+.searchhead{padding:7px 12px;font-size:11px;color:var(--muted);background:var(--chip);
+  border-bottom:1px solid var(--border);position:sticky;top:0}
+.healthbtn{width:100%;margin-top:10px;border:1px solid var(--border);background:var(--bg);
+  color:var(--muted);border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;text-align:left}
+.healthbtn:hover{border-color:var(--accent);color:var(--accent)}
+.hsec{margin:18px 0}
+.hsec h3{font-size:12px;text-transform:uppercase;letter-spacing:.04em;margin:0 0 8px;
+  display:flex;align-items:center;gap:10px}
+.hsec h3 .csv{font-size:10px;text-transform:none;letter-spacing:0;border:1px solid var(--border);
+  border-radius:5px;padding:1px 7px;color:var(--muted);cursor:pointer;background:var(--bg)}
+.hsec h3 .csv:hover{color:var(--accent);border-color:var(--accent)}
+.htable{border:1px solid var(--border);border-radius:8px;overflow:hidden;font-size:12px}
+.htable .hrow{display:flex;gap:12px;padding:5px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+.htable .hrow:last-child{border-bottom:0}
+.htable .hrow:hover{background:var(--accent-bg)}
+.htable .hrow.hh{background:var(--chip);color:var(--muted);cursor:default;font-size:11px}
+.htable .hrow span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.htable .hrow span.num{flex:0 0 70px;text-align:right}
+.caveat{background:var(--out-bg);border:1px solid var(--out);border-radius:8px;
+  padding:10px 14px;font-size:12px;margin:14px 0;color:var(--text)}
+.item .snip{color:var(--muted);font-size:11px;font-family:"SF Mono",Menlo,monospace;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .snip mark{background:transparent;color:var(--accent);font-weight:600}
+.stepline.hit{background:var(--accent-bg);outline:1px solid var(--accent)}
 </style>
 </head>
 <body>
@@ -674,8 +698,12 @@ function initViewer(DATA){
       d.onclick=()=>select(e.id); list.appendChild(d);});
     if(!rows.length) list.innerHTML='<div class="item m">No matches</div>';
   }
-  function select(id){
-    selId=id; const e=byId[id]; render();
+  function select(id,fromHash){
+    const e=byId[id]; if(!e) return;
+    selId=id; render();
+    if(!fromHash && location.hash!=='#e'+id){
+      try{ location.hash='e'+id; }catch(x){}
+    }
     const ins=inbound[id]||[], outs=outboundFor(id);
     const path=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
@@ -702,6 +730,23 @@ function initViewer(DATA){
     const vs=document.getElementById('vt-steps'), vc=document.getElementById('vt-chain');
     if(vs) vs.onclick=()=>{scriptView='steps';select(id);};
     if(vc) vc.onclick=()=>{scriptView='chain';select(id);};
+    const dl=document.getElementById('dlchain');
+    if(dl) dl.onclick=()=>{
+      const el=d.querySelector('.chain svg').cloneNode(true);
+      // the page classes don't travel with the file: embed a resolved stylesheet
+      const cs=getComputedStyle(document.documentElement);
+      const v=n=>cs.getPropertyValue(n).trim();
+      const st='<style>svg{background:'+v('--panel')+'} '+
+        '.cnode rect{fill:'+v('--bg')+';stroke:'+v('--border')+'} '+
+        '.cnode text{fill:'+v('--text')+';font:11px Menlo,monospace} '+
+        '.sel rect{fill:'+v('--accent-bg')+';stroke:'+v('--accent')+'} '+
+        '.caller rect{stroke:'+v('--in')+'} .callee rect{stroke:'+v('--out')+'} '+
+        '.extn rect{stroke-dasharray:4 3} .extn text,.more text{fill:'+v('--muted')+'} '+
+        'path{fill:none;stroke:'+v('--border')+';stroke-width:1.2}</style>';
+      el.setAttribute('xmlns','http://www.w3.org/2000/svg');
+      const svgText='<?xml version="1.0"?>'+el.outerHTML.replace('>',('>'+st));
+      downloadText((e.n||'chain').replace(/\W+/g,'_')+'_callchain.svg',svgText,'image/svg+xml');
+    };
     d.scrollTop=0;
   }
   const INDENT_OPEN=/^(If|Loop|Else If|Else)$/, INDENT_CLOSE=/^(End If|End Loop|Else If|Else)$/;
@@ -831,8 +876,84 @@ function initViewer(DATA){
     const up=-Math.min(...levels), down=Math.max(...levels);
     return '<div class="scriptmeta"><span>Callers <b style="color:var(--in)">left</b> ('+up+' level'+(up===1?'':'s')+')</span>'+
       '<span>Calls <b style="color:var(--out)">right</b> ('+down+' level'+(down===1?'':'s')+')</span>'+
-      '<span>Full chain \u00b7 click a node to re-root</span></div>'+
+      '<span>Full chain \u00b7 click a node to re-root</span>'+
+      '<span><button class="csv" id="dlchain">Download SVG</button></span></div>'+
       '<div class="chain"><svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'">'+svg+'</svg></div>';
+  }
+  // ---- solution health report ----
+  function downloadText(name,text,mime){
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([text],{type:mime||'text/plain'}));
+    a.download=name; a.click(); URL.revokeObjectURL(a.href);
+  }
+  function toCSV(rows){
+    return rows.map(r=>r.map(v=>{v=(v==null?'':''+v);
+      return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',')).join('\n')+'\n';
+  }
+  function hTable(title,cols,rows,csvName){
+    const id='csv'+Math.abs(title.split('').reduce((a,c)=>a*31+c.charCodeAt(0)|0,7));
+    let h='<div class="hsec"><h3>'+esc(title)+' <span class="count">'+rows.length+'</span>'+
+      (rows.length?' <button class="csv" data-csv="'+id+'">Download CSV</button>':'')+'</h3>';
+    if(!rows.length){ h+='<p class="empty">None</p></div>'; return {h:h,id:id,csv:null}; }
+    h+='<div class="htable"><div class="hrow hh">'+cols.map((c,i)=>'<span'+(i>0&&typeof rows[0][i+1]==='number'?' class="num"':'')+'>'+esc(c)+'</span>').join('')+'</div>';
+    rows.slice(0,50).forEach(r=>{
+      h+='<div class="hrow"'+(r[0]!=null?' data-go="'+r[0]+'"':'')+'>'+
+        r.slice(1).map((v,i)=>'<span'+(typeof v==='number'?' class="num"':'')+'>'+esc(v)+'</span>').join('')+'</div>';
+    });
+    if(rows.length>50) h+='<div class="hrow hh"><span>\u2026 '+(rows.length-50)+' more \u2014 use Download CSV for the full list</span></div>';
+    h+='</div></div>';
+    return {h:h,id:id,csv:toCSV([cols].concat(rows.map(r=>r.slice(1)))),name:csvName};
+  }
+  function renderHealth(){
+    const hasIn={}; DATA.edges.forEach(x=>{ if(x.t!=null) hasIn[x.t]=1; });
+    const fname=e=>files.length>1?(files[e.f]||''):'';
+    const unusedFields=DATA.entities.filter(e=>e.k==='field'&&!hasIn[e.id])
+      .map(e=>[e.id,(e.bt||'')+'::'+(e.n||''),fname(e)]);
+    const orphanScripts=DATA.entities.filter(e=>e.k==='script'&&!hasIn[e.id])
+      .map(e=>[e.id,e.n||'',e.g||'',fname(e)]);
+    const unresolved={};
+    DATA.edges.forEach(x=>{ if(x.t==null){ const k=x.tk+' \u00b7 '+x.c;
+      unresolved[k]=(unresolved[k]||0)+1; } });
+    const unresRows=Object.entries(unresolved).sort((a,b)=>b[1]-a[1])
+      .map(([k,n])=>[null,k,n]);
+    const amb=DATA.edges.filter(x=>x.a===1).map(x=>{
+      const src=byId[x.s]; let label=src?src.n:'?';
+      if(src&&src.k==='script_step'){const p=byId[src.p]; label=(p?p.n:'?')+' \u203a '+src.st;}
+      return [x.t,x.tr||'',label,x.c];});
+    const inCount={}; DATA.edges.forEach(x=>{ if(x.t!=null) inCount[x.t]=(inCount[x.t]||0)+1; });
+    const hotFields=DATA.entities.filter(e=>e.k==='field'&&inCount[e.id])
+      .sort((a,b)=>inCount[b.id]-inCount[a.id]).slice(0,15)
+      .map(e=>[e.id,(e.bt||'')+'::'+(e.n||''),inCount[e.id]]);
+    const bigScripts=DATA.entities.filter(e=>e.k==='script')
+      .map(e=>[e.id,e.n||'',(stepsByScript[e.id]||[]).length,fname(e)])
+      .sort((a,b)=>b[2]-a[2]).slice(0,15);
+    const pct=Math.round(100*DATA.refsResolved/Math.max(DATA.refsTotal,1));
+
+    let h='<h2>Solution health</h2><div class="path">'+esc(DATA.meta.label)+
+      (DATA.meta.ddr_version?' \u00b7 DDR '+DATA.meta.ddr_version:'')+'</div>';
+    h+='<div class="scriptmeta">'+
+      '<span>Entities: <b>'+DATA.entities.length+'</b></span>'+
+      '<span>References: <b>'+DATA.refsTotal+'</b> ('+pct+'% resolved)</span>'+
+      '<span>Ambiguous: <b>'+amb.length+'</b></span>'+
+      (files.length>1?'<span>Files: <b>'+files.length+'</b></span>':'')+'</div>';
+    h+='<div class="caveat"><b>Read before acting:</b> these are review lists, not delete lists. '+
+      'Usage inside ExecuteSQL strings, calculated names, custom menus, and anything outside this DDR '+
+      '(other systems, users running scripts from the menu) is structurally invisible \u2014 '+
+      'use Enter-search (in code) as a second check. See COVERAGE.md in the repo.</div>';
+    const sections=[];
+    sections.push(hTable('Unused field candidates',['Field','File'],unusedFields,'unused_fields.csv'));
+    sections.push(hTable('Orphan script candidates',['Script','Group','File'],orphanScripts,'orphan_scripts.csv'));
+    sections.push(hTable('Unresolved references (external / calculated / broken)',['Kind \u00b7 context','Count'],unresRows,'unresolved.csv'));
+    sections.push(hTable('Ambiguous picks (verify)',['Target','Source','Context'],amb,'ambiguous.csv'));
+    sections.push(hTable('Most-referenced fields',['Field','Inbound refs'],hotFields,'hot_fields.csv'));
+    sections.push(hTable('Biggest scripts',['Script','Steps','File'],bigScripts,'big_scripts.csv'));
+    sections.forEach(x=>h+=x.h);
+    const d=$('detail'); d.innerHTML=h;
+    d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
+    sections.forEach(x=>{ if(!x.csv) return;
+      const b=d.querySelector('[data-csv="'+x.id+'"]');
+      if(b) b.onclick=(ev)=>{ ev.stopPropagation(); downloadText(x.name,x.csv,'text/csv'); }; });
+    d.scrollTop=0;
   }
   function stepsSelection(){
     const sel=window.getSelection();
@@ -873,9 +994,85 @@ function initViewer(DATA){
       h+='</div>';});
     return h;
   }
-  $('q').oninput=render; $('q').value='';
+  let codeResults=null;   // null = normal name-filter mode
+  function runCodeSearch(qraw){
+    const q=qraw.toLowerCase(); const res=[]; const CAPR=300;
+    for(const e of DATA.entities){
+      if(res.length>=CAPR) break;
+      if(e.k==='script_step'){
+        if(e.sx&&e.sx.toLowerCase().includes(q)){
+          const parent=byId[e.p];
+          if(parent) res.push({e:parent,snip:e.sx,stepId:e.id});
+        }
+      } else {
+        if(e.c&&e.c.toLowerCase().includes(q)) res.push({e:e,snip:e.c});
+        else if(e.sx&&e.sx.toLowerCase().includes(q)) res.push({e:e,snip:e.sx});
+      }
+    }
+    return res;
+  }
+  function snippet(text,q){
+    const i=text.toLowerCase().indexOf(q.toLowerCase());
+    const from=Math.max(0,i-28);
+    const pre=(from>0?'\u2026':'')+text.slice(from,i);
+    const hit=text.slice(i,i+q.length);
+    const post=text.slice(i+q.length,i+q.length+46);
+    return esc(pre)+'<mark>'+esc(hit)+'</mark>'+esc(post);
+  }
+  function renderCodeResults(q){
+    const list=$('list'); list.innerHTML='';
+    const head=document.createElement('div'); head.className='searchhead';
+    head.textContent='In code: '+codeResults.length+(codeResults.length>=300?'+':'')+
+      ' match'+(codeResults.length===1?'':'es')+' for \u201c'+q+'\u201d \u00b7 Esc or type to go back';
+    list.appendChild(head);
+    codeResults.forEach(r=>{
+      const d=document.createElement('div'); d.className='item';
+      d.innerHTML='<div class="n"><span class="kind-tag">'+kl(r.e.k)+'</span>'+esc(r.e.n||'(unnamed)')+'</div>'+
+        '<div class="snip">'+snippet(r.snip,q)+'</div>';
+      d.onclick=()=>{
+        if(r.stepId!=null) scriptView='steps';
+        select(r.e.id);
+        if(r.stepId!=null){
+          const steps=stepsSorted[r.e.id]||[];
+          const idx=steps.findIndex(st=>st.id===r.stepId);
+          const ln=document.querySelectorAll('#stepsblock .stepline')[idx];
+          if(ln){ ln.classList.add('hit'); ln.scrollIntoView({block:'center'});
+            setTimeout(()=>ln.classList.remove('hit'),2500); }
+        }
+      };
+      list.appendChild(d);
+    });
+    if(!codeResults.length){ const d=document.createElement('div');
+      d.className='item m'; d.textContent='No matches in calculations or script steps';
+      list.appendChild(d); }
+  }
+  $('q').onkeydown=(ev)=>{
+    if(ev.key==='Enter'){
+      const v=$('q').value.trim();
+      if(v.length>=2){ codeResults=runCodeSearch(v); renderCodeResults(v); }
+    } else if(ev.key==='Escape'){ codeResults=null; render(); }
+  };
+  $('q').oninput=()=>{ if(codeResults){ codeResults=null; } render(); };
+  $('q').value='';
+  $('q').placeholder='Search names \u00b7 Enter: search in code';
+  (function(){
+    const ctrl=$('q').parentElement;
+    let hb=document.getElementById('healthbtn');
+    if(!hb){ hb=document.createElement('button'); hb.id='healthbtn'; hb.className='healthbtn';
+      hb.textContent='Solution health report'; ctrl.appendChild(hb); }
+    hb.onclick=()=>{ selId=null; render(); renderHealth();
+      try{ if(location.hash!=='#health') location.hash='health'; }catch(x){} };
+  })();
   $('detail').innerHTML='<p class="empty">Select an entity, or search above.</p>';
+  window.onhashchange=()=>{
+    if(location.hash==='#health'){ selId=null; render(); renderHealth(); return; }
+    const m=location.hash.match(/^#e(\d+)$/);
+    if(m&&byId[+m[1]]&&selId!==+m[1]) select(+m[1],true);
+  };
   render();
+  if(location.hash==='#health'){ renderHealth(); }
+  else { const m0=location.hash.match(/^#e(\d+)$/);
+    if(m0&&byId[+m0[1]]) select(+m0[1],true); }
 }
 </script>
 </body>
