@@ -7,6 +7,30 @@ python3 -m fm_ddr.cli sql solution.db "<SQL>"
 # or: sqlite3 solution.db "<SQL>"
 ```
 
+## Investigation protocol (read this before debugging with the index)
+
+A precise index invites tunnel vision: name-lookup jumps you straight to the one artefact
+someone mentioned, and the surrounding mechanism never enters view. In an A/B test on a real
+production bug, an analyst using raw DDR text-searching out-performed one using this index —
+not because the queries were worse, but because the slow tool forced a survey pass that
+surfaced the controller script, while the index answered the narrow question and the
+investigation stopped there.
+
+When the task is *analyze / debug / find the mechanism* (not a one-fact lookup), do these in
+order — each is one query:
+
+1. **Survey before you dive.** List the script family (`name LIKE '%<domain>%'`) so callers,
+   siblings, and dispatch scripts are on the table before you deep-read anything.
+2. **Never conclude from a single script — climb to its callers** (`v_usage`, recipe below).
+   The mechanism you're hunting usually lives in the controller, one level up.
+3. **Sweep the `$$globals` the script writes** ("Variable hygiene" recipe below). Write-only
+   globals are latent bugs and cost one round-trip to detect.
+4. **Report FileMaker ids (`fm_id`), never the index's internal `entity_id`** — findings must
+   be checkable inside FileMaker.
+5. **The DDR is schema, not data.** Flag values, sort orders, and config rows are record
+   data — verify data-dependent hypotheses against the live system, and say which findings
+   are DDR-derived vs. live-verified.
+
 The main surface is the **`v_usage`** view (one row per reference edge, with
 readable source/target names) and the **`text_index`** FTS5 table (catch-all
 search). `refs.target_entity_id` is NULL for unresolved (external/calculated)
