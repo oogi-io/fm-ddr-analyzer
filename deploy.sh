@@ -43,7 +43,6 @@ if ! grep -qF "$BUILD" "$DIST/index.html"; then
   echo "deploy.sh: __BUILD__ marker not found in index.html; aborting." >&2
   rm -rf "$DIST"; exit 1
 fi
-cp helpers/install.sh "$DIST/install.sh"
 cp fm_ddr/web/about.html "$DIST/about.html"
 cp fm_ddr/web/_headers "$DIST/_headers"
 

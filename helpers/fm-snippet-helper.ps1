@@ -10,8 +10,10 @@
 # XML. (Or bind it to a hotkey with AutoHotkey etc.)
 #
 # NOTE: follows the community-documented format (UTF-8 bytes prefixed with a
-# 4-byte little-endian length, as used by FileMaker on Windows). Tested
-# pattern; report issues at the repo.
+# 4-byte little-endian length, as used by FileMaker on Windows).
+#
+# EXPERIMENTAL: the clipboard FORMAT is community-documented, but this script
+# has not yet been verified on Windows. Please report results at the repo.
 
 Add-Type -AssemblyName System.Windows.Forms
 
