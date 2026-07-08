@@ -26,6 +26,11 @@ SOURCE_KINDS = {
 # Leaf text elements whose character data we accumulate.
 CAPTURE_TAGS = {"Calculation", "StepText", "Chunk", "Name"}
 
+def _parser_version():
+    from fm_ddr import __version__
+    return __version__
+
+
 BATCH = 4000
 
 
@@ -529,10 +534,10 @@ def build(ddr_paths, db_path: str, label: str | None = None,
 
         ver, ctime = _peek_report_meta(ddr_paths[0])
         cur = conn.execute(
-            "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,label)"
-            " VALUES (?,?,?,?,?)",
+            "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,parser_version,label)"
+            " VALUES (?,?,?,?,?,?)",
             (";".join(os.path.abspath(p) for p in ddr_paths), ver, ctime,
-             datetime.now(timezone.utc).isoformat(),
+             datetime.now(timezone.utc).isoformat(), _parser_version(),
              label or os.path.basename(ddr_paths[0])))
         run_id = cur.lastrowid
 

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS ddr_run (
     ddr_version   TEXT,
     creation_time TEXT,
     parsed_at     TEXT,
+    parser_version TEXT,      -- fm_ddr version that built this index (stale-check)
     label         TEXT          -- optional human label e.g. "mysolution 2026-07-07"
 );
 
