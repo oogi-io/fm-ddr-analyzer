@@ -167,15 +167,184 @@ def cmd_snippet(args):
         print("on the clipboard (XMSS) - paste into FileMaker Script Workspace")
 
 
+
+def cmd_investigate(args):
+    """One-shot neighborhood report for a script: everything the investigation
+    protocol demands, in one command — survey context (callers incl. layout
+    buttons WITH their launch params), callees, $$global hygiene, and the full
+    body. Exists because every A/B-judged miss traced to one of these being
+    skipped when it took a separate query."""
+    conn = _connect(args.db)
+    # resolve the script (exact name, LIKE, or fm_id)
+    rows = conn.execute(
+        "SELECT entity_id, fm_id, name, grp FROM entities WHERE kind='script' "
+        "AND (name = ? OR fm_id = ?)", (args.script, args.script)).fetchall()
+    if not rows:
+        rows = conn.execute(
+            "SELECT entity_id, fm_id, name, grp FROM entities WHERE kind='script' "
+            "AND name LIKE ? ORDER BY name", (f"%{args.script}%",)).fetchall()
+    if not rows:
+        print(f"No script matching '{args.script}'.")
+        return
+    if len(rows) > 1:
+        print(f"'{args.script}' matches {len(rows)} scripts — pick one (name or fm_id):")
+        for _, fmid, nm, grp in rows[:30]:
+            print(f"  [{fmid}] {nm}" + (f"   ({grp})" if grp else ""))
+        return
+    eid, fmid, name, grp = rows[0]
+    nsteps = conn.execute(
+        "SELECT COUNT(*) FROM entities WHERE parent_entity_id=? AND kind='script_step'",
+        (eid,)).fetchone()[0]
+    print(f"# {name}")
+    print(f"fm_id {fmid} · group {grp or '-'} · {nsteps} steps\n")
+
+    # ---- callers (scripts, triggers, layout buttons) ----
+    callers = conn.execute("""
+        SELECT context, source_kind, source_parent_name, source_name, COUNT(*)
+        FROM v_usage WHERE target_id = ?
+        GROUP BY context, source_kind, source_parent_name, source_name
+        ORDER BY context, source_parent_name""", (eid,)).fetchall()
+    print(f"## Callers ({len(callers)})")
+    if not callers:
+        print("(none found — may still run from a menu, external file, or schedule)")
+    for ctx, sk, spn, sn, n in callers:
+        where = f"{spn} > {sn}" if spn and sn else (sn or spn or "?")
+        print(f"  {ctx:15} {sk:14} {where}" + (f"  x{n}" if n > 1 else ""))
+
+    # ---- layout launch sites with their params (the round-2 lesson) ----
+    launches = conn.execute("""
+        WITH RECURSIVE up(entity_id, parent, name, kind, top) AS (
+          SELECT o.entity_id, o.parent_entity_id, o.name, o.kind, o.entity_id
+          FROM refs r JOIN entities o ON o.entity_id = r.source_entity_id
+          WHERE r.target_entity_id = ? AND o.kind='layout_object'
+          UNION ALL
+          SELECT p.entity_id, p.parent_entity_id, p.name, p.kind, up.top
+          FROM up JOIN entities p ON p.entity_id = up.parent
+          WHERE up.kind != 'layout'
+        )
+        SELECT DISTINCT
+          (SELECT name FROM up u2 WHERE u2.top = up.top AND u2.kind='layout'),
+          o.name,
+          json_extract(o.extra_json,'$.object_type'),
+          json_extract(o.extra_json,'$.step_text'),
+          json_extract(o.extra_json,'$.hide_calc')
+        FROM up JOIN entities o ON o.entity_id = up.top
+        WHERE up.kind='layout'""", (eid,)).fetchall()
+    if launches:
+        print(f"\n## Layout launch sites ({len(launches)}) — check the params")
+        for lay, oname, otype, stext, hide in launches:
+            print(f"  layout {lay!r} · {otype or 'object'}"
+                  + (f" {oname!r}" if oname else ""))
+            if stext:
+                print("    " + (stext or "").replace("\n", "\n    ")[:2000])
+            if hide:
+                print(f"    hidden when: {hide[:300]}")
+
+    # ---- callees ----
+    callees = conn.execute("""
+        SELECT DISTINCT u.target_name FROM refs r
+        JOIN entities st ON st.entity_id = r.source_entity_id
+                        AND st.parent_entity_id = ?
+        JOIN v_usage u ON u.ref_id = r.ref_id
+        WHERE u.context='perform_script' ORDER BY 1""", (eid,)).fetchall()
+    print(f"\n## Calls out to ({len(callees)})")
+    for (nm,) in callees:
+        print(f"  {nm}")
+
+    # ---- $$global hygiene (write-only detector) ----
+    hygiene = conn.execute("""
+        WITH t AS (
+          SELECT json_extract(s.extra_json,'$.step_text') AS txt
+          FROM entities s WHERE s.parent_entity_id = ? AND s.kind='script_step'
+            AND json_extract(s.extra_json,'$.step_text') LIKE 'Set Variable [ $$%'
+        ), w AS (
+          SELECT DISTINCT substr(txt, instr(txt,'$$'),
+            CASE WHEN instr(substr(txt,instr(txt,'$$')),';') > 0
+                 THEN instr(substr(txt,instr(txt,'$$')),';') - 1 ELSE 40 END) AS var
+          FROM t
+        )
+        SELECT w.var,
+          (SELECT COUNT(*) FROM entities st WHERE st.kind='script_step'
+             AND json_extract(st.extra_json,'$.step_text')
+                 LIKE '%'||w.var||'%'
+             AND json_extract(st.extra_json,'$.step_text')
+                 NOT LIKE 'Set Variable [ '||w.var||';%') AS other_mentions
+        FROM w ORDER BY other_mentions""", (eid,)).fetchall()
+    if hygiene:
+        print(f"\n## $$globals written here ({len(hygiene)})")
+        for var, om in hygiene:
+            flag = "  <-- WRITE-ONLY in steps? confirm with: fm-ddr search <db> '\"%s\"'" % var.lstrip("$") if om == 0 else ""
+            print(f"  {var:48} step-mentions elsewhere: {om}{flag}")
+
+    # ---- body ----
+    if not args.no_body:
+        print(f"\n## Body ({nsteps} steps)")
+        for seq, stype, txt in conn.execute("""
+            SELECT seq, step_type, json_extract(extra_json,'$.step_text')
+            FROM entities WHERE parent_entity_id=? AND kind='script_step'
+            ORDER BY entity_id""", (eid,)):
+            print(f"  {txt or stype or ''}")
+
+
+SKILL_RAW_URL = ("https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/"
+                 "main/fm_ddr/skill/SKILL.md")
+
+
 def cmd_install_skill(args):
+    """Install the fmsonar skill for Claude Code, or check its freshness.
+
+    --check   compare the installed skill against the one shipped with this
+              fm_ddr version (fast, offline). Exit 0 = up to date, 1 = differs,
+              2 = not installed.
+    --remote  compare against the current GitHub main instead (network).
+    Neither flag: (re)install the packaged skill.
+    """
+    import hashlib
     import shutil
+
     src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill", "SKILL.md")
     dest_dir = os.path.expanduser("~/.claude/skills/fmsonar")
+    dest = os.path.join(dest_dir, "SKILL.md")
+    from fm_ddr import __version__
+
+    def digest(b):
+        return hashlib.sha256(b).hexdigest()[:12]
+
+    if args.check or args.remote:
+        if not os.path.exists(dest):
+            print(f"fmsonar skill is not installed ({dest} missing). "
+                  f"Run: fm-ddr install-skill")
+            sys.exit(2)
+        installed = open(dest, "rb").read()
+        if args.remote:
+            import urllib.request
+            try:
+                ref = urllib.request.urlopen(SKILL_RAW_URL, timeout=10).read()
+            except Exception as e:  # noqa: BLE001 — report and bail, offline is fine
+                print(f"Could not fetch {SKILL_RAW_URL}: {e}")
+                sys.exit(2)
+            ref_label = "GitHub main"
+            hint = ("update your install first (pipx reinstall fm-ddr-analyzer, "
+                    "or git pull in a clone), then: fm-ddr install-skill")
+        else:
+            ref = open(src, "rb").read()
+            ref_label = f"the skill shipped with fm_ddr {__version__}"
+            hint = "run: fm-ddr install-skill"
+        if digest(installed) == digest(ref):
+            print(f"fmsonar skill is up to date with {ref_label}.")
+            sys.exit(0)
+        print(f"fmsonar skill DIFFERS from {ref_label} "
+              f"(installed {digest(installed)}, reference {digest(ref)}).")
+        print(f"To update: {hint}")
+        sys.exit(1)
+
     os.makedirs(dest_dir, exist_ok=True)
-    shutil.copy(src, os.path.join(dest_dir, "SKILL.md"))
-    print(f"Installed the 'fmsonar' skill -> {dest_dir}")
+    shutil.copy(src, dest)
+    print(f"Installed the 'fmsonar' skill (fm_ddr {__version__}) -> {dest_dir}")
     print("Claude Code can now analyze FileMaker DDRs from ANY directory -")
     print("just mention a DDR or ask a where-used question.")
+    print("Freshness check anytime: fm-ddr install-skill --check   "
+          "(or --remote to compare against GitHub main)")
 
 
 def cmd_clip(args):
@@ -240,6 +409,16 @@ def main(argv=None):
                    help="no cell truncation (default clips cells at 80 chars)")
     q.set_defaults(func=cmd_sql)
 
+    inv = sub.add_parser("investigate",
+                         help="one-shot neighborhood report for a script "
+                              "(callers, layout launch params, callees, "
+                              "$$global hygiene, body)")
+    inv.add_argument("db")
+    inv.add_argument("script", help="script name (exact or partial) or fm_id")
+    inv.add_argument("--no-body", action="store_true",
+                     help="omit the full step body")
+    inv.set_defaults(func=cmd_investigate)
+
     sn = sub.add_parser("snippet",
                         help="copy a script's steps as a FileMaker clipboard snippet")
     sn.add_argument("ddr", help="DDR XML file containing the script")
@@ -252,6 +431,12 @@ def main(argv=None):
 
     ins = sub.add_parser("install-skill",
                          help="install the Claude Code skill globally (~/.claude/skills)")
+    ins.add_argument("--check", action="store_true",
+                     help="don't install; report whether the installed skill "
+                          "matches the one shipped with this fm_ddr version")
+    ins.add_argument("--remote", action="store_true",
+                     help="don't install; compare the installed skill against "
+                          "GitHub main (network)")
     ins.set_defaults(func=cmd_install_skill)
 
     cl = sub.add_parser("clip",

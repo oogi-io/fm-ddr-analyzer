@@ -20,7 +20,7 @@ SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
 # Ordered by preference: the nearest one on the stack wins.
 SOURCE_KINDS = {
     "field", "custom_function", "script_step", "relationship",
-    "layout", "value_list", "privilege_set", "custom_menu",
+    "layout", "layout_object", "value_list", "privilege_set", "custom_menu",
 }
 
 # Leaf text elements whose character data we accumulate.
@@ -193,6 +193,28 @@ class DDRHandler(xml.sax.ContentHandler):
                             name=a.get("name"), seq=ordinal)
             return
 
+        # A layout object: button, field, tab/slide panel, portal, group, ...
+        # Objects nest (panels/portals/groups hold child Objects); the parent
+        # chain mirrors that. Hide conditions, tooltips, and button launch
+        # params attach to the OBJECT so the UI control plane is queryable.
+        if tag == "Object" and self.has_ancestor("Layout"):
+            ent = self.new_entity("layout_object", a,
+                                  name=(a.get("name") or None),
+                                  extra_json=_json({"object_type": a.get("type"),
+                                                    "key": a.get("key")}))
+            ent["_otype"] = a.get("type")
+            return
+
+        if (tag == "Bounds" and parent == "Object" and self.entity_stack
+                and self.entity_stack[-1]["kind"] == "layout_object"):
+            try:
+                self.entity_stack[-1]["_bounds"] = ",".join(
+                    str(int(float(a.get(k, "0"))))
+                    for k in ("top", "left", "bottom", "right"))
+            except ValueError:
+                pass
+            return
+
         if tag == "CustomFunction" and self.has_ancestor("CustomFunctionCatalog"):
             self.new_entity("custom_function", a,
                             extra_json=_json({"parameters": a.get("parameters"),
@@ -340,7 +362,12 @@ class DDRHandler(xml.sax.ContentHandler):
         src = self.current_source()
         if tag == "Calculation":
             if src is not None:
-                src.setdefault("_calc_parts", []).append(text)
+                if src["kind"] == "layout_object" and self.has_ancestor("HideCondition"):
+                    src["_hide_calc"] = text
+                elif src["kind"] == "layout_object" and self.has_ancestor("ToolTip"):
+                    src["_tooltip_calc"] = text
+                else:
+                    src.setdefault("_calc_parts", []).append(text)
         elif tag == "StepText":
             if src is not None:
                 src["_step_text"] = text
@@ -360,17 +387,41 @@ class DDRHandler(xml.sax.ContentHandler):
             # plain built-in FunctionRef / NoRef chunks are left to FTS search.
 
     def _finalize_entity(self, ent):
+        import json as _j
         calc = "\n".join(ent.get("_calc_parts") or []) or None
         step_text = ent.get("_step_text")
         if ent["kind"] == "relationship" and ent.get("_ends"):
             ent["name"] = " :: ".join(ent["_ends"])
-        # for steps, the display text is the searchable body; keep calc separately
-        body = " ".join(filter(None, [ent.get("name"), calc, step_text]))
+        extra = ent.get("extra_json")
+        hide, tip, bounds = (ent.get("_hide_calc"), ent.get("_tooltip_calc"),
+                             ent.get("_bounds"))
+        if ent["kind"] == "layout_object" and (hide or tip or bounds):
+            d = _j.loads(extra) if extra else {}
+            if hide:
+                d["hide_calc"] = hide
+            if tip:
+                d["tooltip_calc"] = tip
+            if bounds:
+                d["bounds"] = bounds
+            extra = _json(d)
+        # for steps, the display text is the searchable body; keep calc separately.
+        # layout objects add their type, hide/tooltip calcs, and children so both
+        # the object row and the aggregated layout body are searchable.
+        body = " ".join(filter(None,
+            [ent.get("name"), ent.get("_otype"), calc, step_text, hide, tip]
+            + (ent.get("_child_texts") or [])))
+        # bubble object text up: portals/panels aggregate their children, the
+        # layout aggregates everything — keeps the "read a full layout body"
+        # recipe working (and now includes object names).
+        if ent["kind"] == "layout_object" and self.entity_stack:
+            parent_ent = self.entity_stack[-1]
+            if parent_ent["kind"] in ("layout", "layout_object") and body.strip():
+                parent_ent.setdefault("_child_texts", []).append(body)
         self.ent_rows.append((
             ent["entity_id"], ent["file_id"], ent["kind"], ent["fm_id"], ent["name"],
             ent["parent_entity_id"], ent["base_table"], ent["data_type"], ent["field_type"],
             calc, ent["step_type"], ent["seq"], ent["grp"], ent["records"],
-            ent["ext_file"], _merge_extra(ent.get("extra_json"), step_text),
+            ent["ext_file"], _merge_extra(extra, step_text),
         ))
         if body.strip():
             self.fts_rows.append((ent["entity_id"], ent["file_id"], ent["kind"],

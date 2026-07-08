@@ -123,6 +123,35 @@ truncates for display, but the DB does not). This is the recipe to reach for
 when you need to reason about a script's actual logic — reserve raw XML
 streaming for step attributes that fmsonar doesn't capture.
 
+## Layout objects (v1.3.0+): buttons, hide conditions, launch params — structured
+
+Every layout object is an entity (`kind='layout_object'`), nested under its layout
+(panels/portals/groups parent their children). Buttons carry their launch step and params in
+`extra_json.step_text`; hide conditions in `extra_json.hide_calc`; tooltips in
+`extra_json.tooltip_calc`; plus `object_type`, `key`, `bounds`.
+
+Objects on a layout, with what each button launches and when it hides:
+
+```sql
+SELECT o.name, json_extract(o.extra_json,'$.object_type') AS type,
+       json_extract(o.extra_json,'$.step_text')  AS launches,
+       json_extract(o.extra_json,'$.hide_calc')  AS hidden_when
+FROM entities o JOIN entities l ON l.entity_id = o.parent_entity_id
+WHERE l.kind='layout' AND l.name = 'Admin - Task Options' AND o.kind='layout_object';
+-- nested objects hang under their panel/portal, not the layout: recurse on
+-- parent_entity_id (or search the layout body blob) when hunting deep objects
+```
+
+References from inside an object (button script params, conditional formatting, tooltips)
+attribute to the OBJECT as source, so `v_usage` shows which button — not just which layout —
+touches a field or calls a script.
+
+One-shot script neighborhood (callers + layout launch params + callees + $$global hygiene + body):
+
+```bash
+python3 -m fm_ddr.cli investigate solution.db "Task Option Picker Continue"
+```
+
 ## "Read a full layout body" (buttons, hide conditions, launch params)
 
 Layouts have readable bodies too — the FTS table stores each layout's searchable text
@@ -138,8 +167,8 @@ Launch parameters and `Session.GetValue(...)` / `$$flag` gates live here, NOT in
 `script_step` rows, so querying step_text for them returns nothing. When the body shows a
 session/global flag gating visibility, immediately FTS that flag name solution-wide — a
 flag that is read on a layout but set by no launch anywhere is the layout-side twin of the
-write-only global bug. Known limits: object *names* are not in the blob, and precise object
-geometry isn't captured — fall back to the raw DDR XML for those.
+write-only global bug. Since v1.3.0 the blob also includes object names, and objects are queryable individually
+(see "Layout objects" above); use `extra_json.bounds` for coarse geometry.
 
 ## Variable hygiene ($$globals)
 

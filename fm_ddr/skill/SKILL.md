@@ -75,15 +75,21 @@ lookup), these are mandatory, one query each:
    latent bug and costs one round-trip to detect.
 4. **Report FileMaker `fm_id`, never the internal `entity_id`** - findings
    must be checkable inside FileMaker.
-5. **If the mechanism involves UI behavior, read the layout body like a
-   script body** - `SELECT body FROM text_index WHERE kind='layout' AND
-   name=...`. Button launch params, hide conditions, and session/global
-   gates live on layouts, not in script_step rows. A flag read on a layout
-   but set by no launch anywhere is a bug of the same family as the
-   write-only global.
+5. **If the mechanism involves UI behavior, query the layout objects**
+   (v1.3.0+): every object is an entity - buttons carry
+   `extra_json.step_text` (launch params), `hide_calc`, `tooltip_calc`.
+   The layout's aggregated body is still one query:
+   `SELECT body FROM text_index WHERE kind='layout' AND name=...`.
+   A flag read on a layout but set by no launch anywhere is a bug of the
+   same family as the write-only global.
+
 6. **The DDR is schema, not data** - verify flag values / sort orders /
    config rows against the live system, and label findings DDR-derived vs
    live-verified.
+
+Shortcut: `fm-ddr investigate <db> "<script>"` runs steps 2-4 (plus layout
+launch sites with their params, and the full body) in ONE command - reach
+for it first when a script is the entry point.
 
 ## 4. Honesty guardrails (non-negotiable)
 
@@ -101,4 +107,7 @@ lookup), these are mandatory, one query each:
 
 - Interactive HTML for the user: `fm-ddr report <db> -o out.html` (self-contained; send it to them).
 - Copy a script as a FileMaker-pasteable snippet: `fm-ddr snippet <ddr.xml> "Script Name" --clip` (macOS).
+- Skill freshness: `fm-ddr install-skill --check` compares this installed skill
+  against the one shipped with your fm_ddr install (`--remote` = against GitHub
+  main). If it reports drift, tell the user and offer to update.
 - The web app for humans is https://fmsonar.com (same engine, in-browser).
