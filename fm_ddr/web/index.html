@@ -128,6 +128,18 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .stepline:hover .lncopy{display:inline-flex;align-items:center}
 .lncopy:hover{color:var(--accent);border-color:var(--accent)}
 .lncopy svg{width:11px;height:11px}
+.snipinfo{position:absolute;top:8px;right:242px;border:1px solid var(--border);
+  background:var(--bg);color:var(--muted);border-radius:50%;width:22px;height:22px;
+  font:12px -apple-system,sans-serif;cursor:pointer;z-index:2;line-height:1}
+.snipinfo:hover{color:var(--accent);border-color:var(--accent)}
+.infopop{position:absolute;top:38px;right:10px;z-index:25;background:var(--bg);
+  border:1px solid var(--border);border-radius:10px;padding:12px 14px;width:330px;
+  box-shadow:0 10px 30px rgba(0,0,0,.3);font:12px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  white-space:normal}
+.infopop b{display:block;margin-bottom:4px}
+.infopop ol{margin:6px 0 6px 18px;padding:0}
+.infopop li{margin:2px 0}
+.infopop .csv{margin-right:4px}
 .filechips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
 .filechips:empty{display:none}
 .filechips::before,.kinds::before{display:block;width:100%;font-size:10px;font-weight:600;
@@ -808,6 +820,8 @@ function initViewer(DATA){
     if(sh) sh.onclick=()=>shareEntity(e);
     const fs=document.getElementById('copyfmsnip');
     if(fs) fs.onclick=()=>copyFMSnippet(e,fs);
+    const si=document.getElementById('snipinfobtn');
+    if(si) si.onclick=(ev)=>{ev.stopPropagation();toggleSnipInfo();};
     const cc=document.getElementById('copycalc');
     if(cc) cc.onclick=()=>{ navigator.clipboard.writeText(e.c||'').then(()=>{
       cc.textContent='Copied'; setTimeout(()=>{cc.textContent='Copy';},1200); }); };
@@ -846,7 +860,8 @@ function initViewer(DATA){
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
     h+='<div class="steps" id="stepsblock">'+
       (window.__DDR_SOURCE?'<button class="copybtn" id="copyfmsnip" style="right:110px" '+
-        'title="Copies fmxmlsnippet XML as text. Convert once before pasting into FileMaker: our helper (offered after copy) or FmClipTools.">Copy FM snippet</button>':'')+
+        'title="Copy this script as fmxmlsnippet XML text">Copy FM snippet</button>'+
+        '<button class="snipinfo" id="snipinfobtn" title="How to paste into FileMaker">\u24d8</button>':'')+
       '<button class="copybtn" id="copyscript">Copy script</button>';
     let ind=0; const plain=[]; currentLineTexts=[];
     const ICON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+
@@ -1446,23 +1461,56 @@ function initViewer(DATA){
     });
     return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
   }
-  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# One-time setup: chmod +x "fm-snippet-helper.command"\n# Then double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data XMSS%s\\302\\273\\n\' "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done — paste into FileMaker Script Workspace."\n';
+  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n';
   const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData(\'Mac-XMSS\', $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host \'Done - paste into FileMaker Script Workspace.\'\n';
-  function showSnippetHint(){
-    let h=document.getElementById('sniphint');
-    if(h) return;
-    h=document.createElement('div'); h.id='sniphint'; h.className='caveat';
-    h.innerHTML='Copied as XML <b>text</b>. FileMaker only pastes its own clipboard '+
-      'format, so convert once before pasting \u2014 either with our one-time helper: '+
-      '<button class="csv" id="dlhelpmac">macOS helper</button> '+
-      '<button class="csv" id="dlhelpwin">Windows helper</button> '+
-      '<span class="via">(download once; macOS: <code>chmod +x</code> then double-click after each copy '+
-      '\u00b7 or <code>fm-ddr clip</code>)</span> \u2014 or with '+
-      '<a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a> '+
-      'if you already use it.';
+  // minimal STORE zip (no compression) with the unix exec bit preserved,
+  // so the downloaded macOS helper runs without any chmod
+  function makeExecZip(name,content){
+    const data=new TextEncoder().encode(content);
+    let c=~0; const T=[];
+    for(let n=0;n<256;n++){let x=n;for(let k=0;k<8;k++)x=x&1?0xEDB88320^(x>>>1):x>>>1;T[n]=x;}
+    for(let i=0;i<data.length;i++)c=T[(c^data[i])&0xFF]^(c>>>8);
+    const crc=(~c)>>>0;
+    const nameB=new TextEncoder().encode(name);
+    const lfh=30+nameB.length, cdSize=46+nameB.length;
+    const buf=new ArrayBuffer(lfh+data.length+cdSize+22);
+    const v=new DataView(buf); const u=new Uint8Array(buf);
+    let o=0;
+    v.setUint32(o,0x04034b50,true); v.setUint16(o+4,20,true); v.setUint16(o+6,0,true);
+    v.setUint16(o+8,0,true); v.setUint32(o+10,0,true);
+    v.setUint32(o+14,crc,true); v.setUint32(o+18,data.length,true); v.setUint32(o+22,data.length,true);
+    v.setUint16(o+26,nameB.length,true); v.setUint16(o+28,0,true);
+    u.set(nameB,o+30); u.set(data,lfh); o=lfh+data.length;
+    const cdOff=o;
+    v.setUint32(o,0x02014b50,true); v.setUint16(o+4,(3<<8)|30,true); v.setUint16(o+6,20,true);
+    v.setUint16(o+8,0,true); v.setUint16(o+10,0,true); v.setUint32(o+12,0,true);
+    v.setUint32(o+16,crc,true); v.setUint32(o+20,data.length,true); v.setUint32(o+24,data.length,true);
+    v.setUint16(o+28,nameB.length,true);
+    v.setUint32(o+38,0o100755<<16,true); v.setUint32(o+42,0,true);
+    u.set(nameB,o+46); o+=cdSize;
+    v.setUint32(o,0x06054b50,true); v.setUint16(o+8,1,true); v.setUint16(o+10,1,true);
+    v.setUint32(o+12,cdSize,true); v.setUint32(o+16,cdOff,true); v.setUint16(o+20,0,true);
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([buf],{type:'application/zip'}));
+    a.download=name.replace(/\.command$/,'')+'.zip'; a.click(); URL.revokeObjectURL(a.href);
+  }
+  function toggleSnipInfo(force){
+    let p=document.getElementById('infopop');
+    if(p){ p.remove(); if(!force) return; }
+    p=document.createElement('div'); p.id='infopop'; p.className='infopop';
+    p.onclick=ev=>ev.stopPropagation();
+    p.innerHTML='<b>Pasting into FileMaker</b>'+
+      'This copies snippet XML as text; FileMaker pastes only its own clipboard format. '+
+      'A tiny helper converts it \u2014 install once:'+
+      '<ol><li>Download: <button class="csv" id="dlhelpmac">macOS</button>'+
+      '<button class="csv" id="dlhelpwin">Windows</button></li>'+
+      '<li>macOS: unzip; first run only: right-click \u2192 Open</li>'+
+      '<li>From then on: copy here \u2192 run helper \u2192 paste in FileMaker</li></ol>'+
+      '<span class="via">Already use <a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a>? '+
+      'Its \u201cXML to FM Objects\u201d does the same job. CLI: <code>fm-ddr clip</code>.</span>';
     const blk=document.getElementById('stepsblock');
-    if(blk) blk.parentNode.insertBefore(h, blk);
-    document.getElementById('dlhelpmac').onclick=()=>downloadText('fm-snippet-helper.command',HELPER_MAC,'text/plain');
+    if(blk) blk.appendChild(p);
+    document.getElementById('dlhelpmac').onclick=()=>makeExecZip('fm-snippet-helper.command',HELPER_MAC);
     document.getElementById('dlhelpwin').onclick=()=>downloadText('fm-snippet-helper.ps1',HELPER_WIN,'text/plain');
   }
   async function copyFMSnippet(e,btn){
@@ -1472,7 +1520,8 @@ function initViewer(DATA){
       const res=ddrStepsToSnippet(raw);
       await navigator.clipboard.writeText(res.xml);
       btn.textContent='Copied ('+res.steps+' steps)';
-      showSnippetHint();
+      try{ if(!localStorage.getItem('fmsnipHintSeen')){
+        localStorage.setItem('fmsnipHintSeen','1'); toggleSnipInfo(true); } }catch(x){}
     }catch(err){ btn.textContent='Failed: '+(err.message||err); }
     setTimeout(()=>{btn.textContent='Copy FM snippet';},2200);
   }
@@ -1594,7 +1643,7 @@ function initViewer(DATA){
     document.getElementById('sortbtn').onclick=(ev)=>{ ev.stopPropagation(); toggleSortPop(); };
     document.getElementById('healthbtn').onclick=()=>{ selId=null; render(); renderHealth();
       try{ if(location.hash!=='#health') location.hash='health'; }catch(x){} };
-    document.addEventListener('click',()=>{ const p=document.getElementById('sortpop'); if(p) p.remove(); });
+    document.addEventListener('click',()=>{ ['sortpop','infopop'].forEach(id=>{const p=document.getElementById(id); if(p) p.remove();}); });
     updateSortBtn();
   })();
   $('detail').innerHTML='<p class="empty">Select an entity, or search above.</p>';

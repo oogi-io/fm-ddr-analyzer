@@ -77,7 +77,7 @@ def _sniff_class(snippet_xml: str) -> str:
     """Clipboard class from the first object type inside the snippet."""
     for tag, cls in (("<Step ", "XMSS"), ("<CustomFunction ", "XMFN"),
                      ("<BaseTable ", "XMTB"), ("<Script ", "XMSC"),
-                     ("<Field ", "XMFD"), ("<Layout", "XML2")):
+                     ("<Layout", "XML2"), ("<Field ", "XMFD")):
         if tag in snippet_xml:
             return cls
     return "XMSS"

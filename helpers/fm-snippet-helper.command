@@ -6,8 +6,8 @@
 # "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),
 # so they paste straight into Script Workspace.
 #
-# One-time setup: chmod +x "fm-snippet-helper.command"
-# Then double-click it (or bind it to a hotkey) after copying snippet XML.
+# Install once: unzip, then on first run right-click -> Open (Gatekeeper).
+# After that, double-click it (or bind it to a hotkey) after copying snippet XML.
 
 set -e
 TEXT=$(pbpaste)
@@ -23,8 +23,8 @@ case "$TEXT" in
   *'<Script '*)          CLASS=XMSC ;;   # whole scripts
   *'<CustomFunction '*)  CLASS=XMFN ;;   # custom functions
   *'<BaseTable '*)       CLASS=XMTB ;;   # tables
+  *'<Layout'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)
   *'<Field '*)           CLASS=XMFD ;;   # field definitions
-  *'<Layout'*)           CLASS=XML2 ;;   # layout objects
   *) echo "Unrecognized snippet content."; exit 1 ;;
 esac
 
