@@ -1,6 +1,6 @@
 # FMSonar
 
-*FileMaker DDR explorer — repo/engine name: `fm-ddr-analyzer`*
+*FileMaker DDR explorer — live at **[fmsonar.com](https://fmsonar.com)** · repo/engine name: `fm-ddr-analyzer`*
 
 Parse a FileMaker **Database Design Report** (DDR, the `*_fmp12.xml` files) into a
 normalized **SQLite** database you can query for cross-references — *"where is this
