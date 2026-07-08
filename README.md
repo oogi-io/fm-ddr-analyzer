@@ -189,11 +189,13 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   Viewer-wide, not chain-only; pairs with the health report.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
-- [ ] **Copy as FM snippet (fmxmlsnippet).** Copy a script (or selected
-  steps) to the clipboard in FileMaker's snippet format so it pastes straight
-  into Script Workspace. Prerequisite: retain the raw `<Step>` XML at parse
-  time (the parser currently keeps only the rendered StepText) and convert
-  DDR step XML to the clipboard format.
+- [x] **Copy as FM snippet (CLI, macOS).** `fm-ddr snippet DDR.xml "Script
+  Name" --clip` transforms a script's DDR steps into FileMaker's clipboard
+  format and places it on the private XMSS pasteboard flavor — paste straight
+  into Script Workspace. The transform reproduces FileMaker's own copied
+  output byte-for-byte (268/268 steps on the reference script); see
+  SNIPPET_FORMAT.md for the reverse-engineered format. Browsers cannot set
+  the XMSS flavor, so the web app cannot paste directly — CLI only.
 - [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
   them as input for the FileMaker upgrade tool to apply. Shares the raw-XML
   prerequisite with snippet copy; parked until the read-only explorer has

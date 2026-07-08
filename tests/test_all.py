@@ -324,6 +324,24 @@ class TestParser(unittest.TestCase):
         self.assertEqual(got, want)
 
 
+class TestSnippet(unittest.TestCase):
+    def test_ddr_to_fmxmlsnippet(self):
+        from fm_ddr.snippet import extract_script_xml, ddr_steps_to_snippet
+        xml = extract_script_xml(FIXTURE, "Main Script")
+        snip, n = ddr_steps_to_snippet(xml)
+        self.assertEqual(n, 5)
+        self.assertTrue(snip.startswith('<fmxmlsnippet type="FMObjectList">'))
+        # DDR-only elements are stripped
+        self.assertNotIn("StepText", snip)
+        self.assertNotIn("DisplayCalculation", snip)
+        # references and calcs pass through
+        self.assertIn('<Script id="2" name="Helper Script">', snip)
+        self.assertIn('<Layout id="2" name="Invoices">', snip)
+        self.assertIn("<![CDATA[", snip)
+        # self-closing expanded to FileMaker's form
+        self.assertNotIn("/>", snip)
+
+
 @unittest.skipUnless(shutil.which("node"), "node not available")
 class TestJSParity(unittest.TestCase):
     """The web app's JS parser must produce the identical graph, edge by edge."""
