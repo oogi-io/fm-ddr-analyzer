@@ -183,6 +183,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .sortpop button.on{color:var(--accent)}
 .item .metric{float:right;color:var(--accent);font-variant-numeric:tabular-nums;
   font-size:12px;font-weight:650;margin-left:8px}
+.fmid{font-size:11px;color:var(--muted);font-family:"SF Mono",Menlo,monospace}
 .item .snip{color:var(--muted);font-size:11px;font-family:"SF Mono",Menlo,monospace;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .snip mark{background:transparent;color:var(--accent);font-weight:600}
@@ -538,7 +539,7 @@ async function run(input){
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,
@@ -743,7 +744,7 @@ function initViewer(DATA){
     }).slice(0,600);
     const list=$('list'); list.innerHTML='';
     rows.forEach(e=>{const d=document.createElement('div');d.className='item'+(e.id===selId?' sel':'');
-      const sub=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
+      const sub=[e.fm!=null?'FMID '+e.fm:null,e.bt,e.g].filter(Boolean).join(' \u00b7 ');
       d.innerHTML='<div class="n"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(e.n||'(unnamed)')+
         (so.num?'<span class="metric">'+so.get(e)+'</span>':'')+'</div>'+
         (sub?'<div class="m">'+esc(sub)+'</div>':'');
@@ -762,6 +763,7 @@ function initViewer(DATA){
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
     let h='<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
       (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+
+      (e.fm!=null?' <span class="fmid">FMID '+esc(e.fm)+'</span>':'')+
       ' <button class="csv" id="shareent" title="Download a small self-contained HTML of just this entity">Share\u2026</button></div>';
     if(e.k==='script'){
       h+='<div class="viewtoggle">'+
