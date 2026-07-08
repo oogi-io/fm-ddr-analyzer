@@ -76,6 +76,29 @@ SELECT target_raw FROM v_usage
 WHERE source_kind='field' AND source_name='FullName_c' AND target_kind='field';
 ```
 
+## "Read a full script body" (in order)
+
+Every script step is stored as a `script_step` entity under its parent script,
+with a `seq` ordinal and the FileMaker-readable StepText in
+`extra_json.step_text`. So you can dump a complete script in execution order —
+no need to re-stream the raw DDR XML just to read a script:
+
+```sql
+SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text') AS step_text
+FROM entities s
+JOIN entities scr ON scr.entity_id = s.parent_entity_id AND scr.kind='script'
+WHERE scr.name = 'Navigate to Dashboard' AND s.kind='script_step'
+ORDER BY s.seq;
+-- LIKE 'Navigate%' if you don't want to type the full signature;
+-- add AND json_extract(s.extra_json,'$.step_text') LIKE '%SomeField%'
+-- to jump straight to the steps that mention a variable/field.
+```
+
+`extra_json.step_text` is the full, untruncated StepText (the HTML report
+truncates for display, but the DB does not). This is the recipe to reach for
+when you need to reason about a script's actual logic — reserve raw XML
+streaming for step attributes that fmsonar doesn't capture.
+
 ## Health / tech-debt hints
 
 Candidate **dead fields** (never referenced anywhere — read COVERAGE.md first;
