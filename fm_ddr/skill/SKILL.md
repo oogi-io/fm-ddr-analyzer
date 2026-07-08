@@ -1,0 +1,76 @@
+---
+name: fmsonar
+description: Analyze FileMaker solutions via their DDR (Database Design Report). Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, or asks structural questions about a FileMaker solution. Works from any directory; databases are cached centrally.
+---
+
+You analyze FileMaker solutions using the `fm-ddr` CLI (FMSonar's engine).
+Never hand-parse DDR XML - build the SQLite index and query it.
+
+## 1. Locate or build the database
+
+Databases live in the central cache `~/.fmsonar/dbs/<solution>.db` - create the
+directory if needed. Reuse a cached DB if it is newer than its source DDR.
+
+To build, you need the user's DDR export (FileMaker: Tools > Database Design
+Report > XML). If you don't know where it is, ask - don't scan the whole disk.
+
+```bash
+mkdir -p ~/.fmsonar/dbs
+# multi-file solutions: ALWAYS build from Summary.xml so cross-file references resolve
+fm-ddr build "/path/to/DDR/Summary.xml" -o ~/.fmsonar/dbs/<solution>.db --label "<solution> <date>"
+# single-file solutions: point at the *_fmp12.xml directly
+```
+
+`build` warns below 95% resolution - usually a missing sibling XML of a
+multi-file solution, not a broken solution. If `fm-ddr` is not on PATH, fall
+back to `python3 -m fm_ddr.cli` from a checkout of
+github.com/oogi-io/fm-ddr-analyzer.
+
+## 2. Query
+
+```bash
+fm-ddr where  <db> "TO::Field"      # resolved where-used (field/script/layout/TO/CF)
+fm-ddr search <db> "text"           # FTS across every calc / step / name
+fm-ddr stats  <db>                  # counts + resolution health
+fm-ddr sql    <db> "SELECT ..."     # anything else
+```
+
+The SQL surface: `entities` (every named thing; steps carry `step_type`,
+`seq` = order within script, full text via
+`json_extract(extra_json,'$.step_text')`), `refs` (source USES target;
+`context` says how), and the views - **`v_usage`** (readable edges),
+`v_unused_fields`, `v_orphan_scripts`, `v_unresolved`, `v_ambiguous`.
+
+Key contexts: `step_target` = the field a step acts on (Set Field's write
+target - combine with `step_type='Set Field'` for true writers, but note a
+Set Field between Enter Find Mode and Perform Find is a find criterion, not a
+write). `calc` = used in a calculation. `perform_script`/`trigger` = script
+calls. Full recipes: QUERIES.md in the repo.
+
+## 3. The investigation loop
+
+1. **Blast radius first**: group `v_usage` for the target by
+   `source_kind, context` before listing rows.
+2. **Drill the subset that matters** (e.g. writers via `step_target` +
+   `step_type='Set Field'`, rolled up to the parent script).
+3. **ALWAYS finish with the FTS blind-spot check**:
+   `fm-ddr search <db> '"<name>"'` - ExecuteSQL strings and calculated names
+   are structurally invisible.
+
+## 4. Honesty guardrails (non-negotiable)
+
+- Never report "unused"/"safe to delete" from the views alone: ExecuteSQL
+  strings, calculated names, custom menus, and everything outside the DDR
+  (Data API/OData clients, users running scripts from the menu) are invisible.
+  Present candidates, run the FTS check, state the caveats.
+- Unresolved refs are usually legitimate (other files, calculated
+  destinations, unbound globals) - check `v_unresolved` before calling
+  anything broken. `ambiguous=1` = the resolver guessed among same-named
+  candidates; say so when it matters.
+- Read-only: never modify a DB; rebuild from the DDR instead.
+
+## 5. Extras
+
+- Interactive HTML for the user: `fm-ddr report <db> -o out.html` (self-contained; send it to them).
+- Copy a script as a FileMaker-pasteable snippet: `fm-ddr snippet <ddr.xml> "Script Name" --clip` (macOS).
+- The web app for humans is https://fmsonar.com (same engine, in-browser).

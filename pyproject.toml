@@ -29,4 +29,4 @@ fm-ddr = "fm_ddr.cli:main"
 packages = ["fm_ddr"]
 
 [tool.setuptools.package-data]
-fm_ddr = ["*.sql", "web/index.html"]
+fm_ddr = ["*.sql", "web/index.html", "skill/SKILL.md"]
