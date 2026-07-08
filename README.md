@@ -74,7 +74,10 @@ python3 -m fm_ddr.cli sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"
 ```
 
 Because the output is plain SQLite, an AI (or `sqlite3`, Datasette, DB Browser,
-etc.) can query it directly. See **[QUERIES.md](QUERIES.md)** for canonical recipes.
+etc.) can query it directly. **[AGENTS.md](AGENTS.md)** teaches AI coding tools
+(Claude Code, Cursor, Copilot — they read it automatically) how to work these
+databases: the schema, the views-as-API, the investigation loop, and the
+honesty guardrails. **[QUERIES.md](QUERIES.md)** has the canonical SQL recipes.
 
 ## Data model
 
