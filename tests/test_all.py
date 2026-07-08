@@ -433,6 +433,44 @@ class TestSnippet(unittest.TestCase):
         self.assertEqual(n, 1)
         self.assertIn("Set Variable", snip)
 
+    def test_snippet_id_disambiguation(self):
+        from fm_ddr.snippet import extract_script_xml
+        # right id resolves, wrong id is not found (no silent fallback)
+        xml = extract_script_xml(FIXTURE, "Main Script", script_id="1")
+        self.assertIn("<StepList>", xml)
+        with self.assertRaises(ValueError):
+            extract_script_xml(FIXTURE, "Main Script", script_id="9999")
+
+    def test_snippet_clip_guarded_off_macos(self):
+        import sys
+        from fm_ddr.snippet import set_clipboard_xmss
+        if sys.platform == "darwin":
+            self.skipTest("guard only triggers off macOS")
+        with self.assertRaises(RuntimeError):
+            set_clipboard_xmss('<fmxmlsnippet type="FMObjectList"></fmxmlsnippet>')
+
+
+class TestCLI(unittest.TestCase):
+    def test_errors_print_friendly_not_traceback(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit) as cm:
+            main(["build", "/no/such/file_fmp12.xml", "-o",
+                  os.path.join(tempfile.mkdtemp(), "x.db")])
+        self.assertEqual(cm.exception.code, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
+    def test_search_never_crashes_on_fts_syntax(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        db = build_fixture_db(tempfile.mkdtemp())
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["search", db, "email AND ("])   # malformed FTS - must not crash
+        self.assertIn("Text search", out.getvalue())
+
 
 @unittest.skipUnless(shutil.which("node"), "node not available")
 class TestJSParity(unittest.TestCase):
