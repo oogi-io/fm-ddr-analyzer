@@ -1538,17 +1538,51 @@ const HELPER_UNINSTALL='#!/bin/bash\n# FM Snippet Helper - uninstall (macOS)\n# 
       {name:'fm-snippet-watcher.sh',content:HELPER_WATCHER,exec:true}]);
     document.getElementById('dlhelpwin').onclick=()=>downloadText('fm-snippet-helper.ps1',HELPER_WIN,'text/plain');
   }
-  async function copyFMSnippet(e,btn){
+  function manualCopyPanel(xml){
+    // last-resort fallback: put the XML in a selected textarea for manual copy
+    let p=document.getElementById('infopop'); if(p) p.remove();
+    p=document.createElement('div'); p.id='infopop'; p.className='infopop';
+    p.onclick=ev=>ev.stopPropagation();
+    p.innerHTML='<b>Press \u2318C to copy</b>'+
+      'Your browser blocked the automatic copy \u2014 the snippet is selected below.'+
+      '<textarea style="width:100%;height:110px;margin-top:6px;background:var(--panel);'+
+      'color:var(--text);border:1px solid var(--border);border-radius:6px;font:11px Menlo,monospace"></textarea>';
+    const icon=document.getElementById('snipinfobtn');
+    if(icon){ const r=icon.getBoundingClientRect();
+      p.style.position='fixed'; p.style.top=(r.bottom+8)+'px';
+      p.style.right=Math.max(10,(innerWidth-r.right-4))+'px'; }
+    document.body.appendChild(p);
+    const ta=p.querySelector('textarea'); ta.value=xml; ta.focus(); ta.select();
+  }
+  function copyFMSnippet(e,btn){
     btn.textContent='Extracting\u2026';
-    try{
-      const raw=await extractScriptXML(e.f||0, e.n||'');
+    let nsteps=0, xmlOut='';
+    const work=extractScriptXML(e.f||0, e.n||'').then(raw=>{
       const res=ddrStepsToSnippet(raw);
-      await navigator.clipboard.writeText(res.xml);
-      btn.textContent='Copied ('+res.steps+' steps)';
+      nsteps=res.steps; xmlOut=res.xml;
+      return res.xml;
+    });
+    // Safari expires the user-gesture during the (slow) extraction, so the
+    // clipboard call itself must happen synchronously inside the click -
+    // hand it a ClipboardItem whose content is a promise
+    let write;
+    if(window.ClipboardItem && navigator.clipboard.write){
+      write=navigator.clipboard.write([new ClipboardItem({
+        'text/plain': work.then(x=>new Blob([x],{type:'text/plain'}))})]);
+    } else {
+      write=work.then(x=>navigator.clipboard.writeText(x));
+    }
+    Promise.all([write,work]).then(()=>{
+      btn.textContent='Copied ('+nsteps+' steps)';
       try{ if(!localStorage.getItem('fmsnipHintSeen')){
         localStorage.setItem('fmsnipHintSeen','1'); toggleSnipInfo(true); } }catch(x){}
-    }catch(err){ btn.textContent='Failed: '+(err.message||err); }
-    setTimeout(()=>{btn.textContent='Copy FM snippet';},2200);
+      setTimeout(()=>{btn.textContent='Copy FM snippet';},2200);
+    }).catch(err=>{
+      work.then(x=>{ btn.textContent='Copy blocked \u2014 manual'; manualCopyPanel(x);
+        setTimeout(()=>{btn.textContent='Copy FM snippet';},2600);
+      }).catch(e2=>{ btn.textContent='Failed: '+(e2.message||e2);
+        setTimeout(()=>{btn.textContent='Copy FM snippet';},2600); });
+    });
   }
   function stepsSelection(){
     const sel=window.getSelection();
