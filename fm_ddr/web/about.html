@@ -112,7 +112,7 @@ pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;pa
   patterns, and the honesty rules. Install once, ask from any project:</p>
   <pre>pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
 fm-ddr install-skill   # Claude Code: global skill</pre>
-  <p style="font-size:14.5px">Then simply: <i>"analyze the DDR on my desktop — which scripts <b>write</b> to CTC::email?"</i> Your assistant builds the index into a local cache and answers with SQL-backed evidence — including the caveats an honest analysis needs.</p>
+  <p style="font-size:14.5px">Then simply: <i>"analyze the DDR on my desktop — which scripts <b>write</b> to CTC::email?"</i> The first question builds the index <b>once</b> into a local cache (seconds, even for huge solutions). Every question after that — today, next week, from any project — answers instantly against the same index, with SQL-backed evidence and the caveats an honest analysis needs. Re-export the DDR when the solution changes, and the next question rebuilds automatically.</p>
 
   <h2><span class="hash">#</span>What you can do in the browser</h2>
   <div class="feat">
