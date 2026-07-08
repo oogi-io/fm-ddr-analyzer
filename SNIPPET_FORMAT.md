@@ -56,12 +56,17 @@ the clipboard snippet. The DDR is not lossy about references — only about the
 rendered `StepText` and the `DisplayCalculation` chunk breakdown, both of which
 we discard. That is what makes DDR → pasteable-snippet feasible.
 
-## Caveats to verify on real pastes
+## Verification status
 
+**Paste-verified in FileMaker (2026-07-08):** a DDR-generated snippet pasted
+into Script Workspace and reconstructed correctly — end of chain confirmed
+(DDR -> transform -> clipboard -> FileMaker). `DisableStepCollapsed` omission
+confirmed harmless.
+
+Remaining caveats:
 - IDs are the source file's internal ids. Pasting into the **same** file/version
-  is safe. Pasting into a different file may re-map or break references — same
-  limitation as FileMaker's own copy/paste across files.
-- `DisableStepCollapsed` omitted (assumed optional) — confirmed harmless on the
-  test paste; watch for step types not present in the sample.
-- Only script steps (`XMSS`) mapped here. Custom functions (`XMFN`) and fields
-  (`XMFD`) would need their own (simpler) mappings.
+  is the verified case. Pasting into a different file may re-map or break
+  references — same limitation as FileMaker's own copy/paste across files.
+- Only script steps (`XMSS`) mapped so far. Custom functions (`XMFN`) and
+  fields (`XMFD`) need their own (simpler) mappings — reference copies from
+  FileMaker required to diff, same method.
