@@ -128,9 +128,11 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .stepline:hover .lncopy{display:inline-flex;align-items:center}
 .lncopy:hover{color:var(--accent);border-color:var(--accent)}
 .lncopy svg{width:11px;height:11px}
-.snipinfo{position:absolute;top:8px;right:242px;border:1px solid var(--border);
-  background:var(--bg);color:var(--muted);border-radius:50%;width:22px;height:22px;
-  font:12px -apple-system,sans-serif;cursor:pointer;z-index:2;line-height:1}
+.stepstoolbar{position:absolute;top:8px;right:10px;display:flex;gap:6px;align-items:center;z-index:2}
+.stepstoolbar .copybtn{position:static}
+.snipinfo{border:1px solid var(--border);background:var(--bg);color:var(--muted);
+  border-radius:50%;width:22px;height:22px;font:12px -apple-system,sans-serif;
+  cursor:pointer;line-height:1;flex:0 0 auto}
 .snipinfo:hover{color:var(--accent);border-color:var(--accent)}
 .infopop{position:absolute;top:38px;right:10px;z-index:25;background:var(--bg);
   border:1px solid var(--border);border-radius:10px;padding:12px 14px;width:330px;
@@ -858,11 +860,11 @@ function initViewer(DATA){
     let h='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span>'+
       '<span>Comments: <b>'+comments+'</b></span>'+
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
-    h+='<div class="steps" id="stepsblock">'+
-      (window.__DDR_SOURCE?'<button class="copybtn" id="copyfmsnip" style="right:110px" '+
-        'title="Copy this script as fmxmlsnippet XML text">Copy FM snippet</button>'+
-        '<button class="snipinfo" id="snipinfobtn" title="How to paste into FileMaker">\u24d8</button>':'')+
-      '<button class="copybtn" id="copyscript">Copy script</button>';
+    h+='<div class="steps" id="stepsblock"><div class="stepstoolbar">'+
+      (window.__DDR_SOURCE?'<button class="snipinfo" id="snipinfobtn" title="How to paste into FileMaker">\u24d8</button>'+
+        '<button class="copybtn" id="copyfmsnip" '+
+        'title="Copy this script as fmxmlsnippet XML text">Copy FM snippet</button>':'')+
+      '<button class="copybtn" id="copyscript">Copy script</button></div>';
     let ind=0; const plain=[]; currentLineTexts=[];
     const ICON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+
       '<rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H4.5A1.5 1.5 0 0 0 3 3.5v8A1.5 1.5 0 0 0 4.5 13H5"/></svg>';
@@ -1461,7 +1463,7 @@ function initViewer(DATA){
     });
     return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
   }
-  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n';
+  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n\n# close this Terminal window on success (errors above leave it open)\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
   const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData(\'Mac-XMSS\', $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host \'Done - paste into FileMaker Script Workspace.\'\n';
   // minimal STORE zip (no compression) with the unix exec bit preserved,
   // so the downloaded macOS helper runs without any chmod

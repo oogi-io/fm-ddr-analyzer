@@ -37,3 +37,8 @@ osascript "$TMP"
 rm -f "$TMP"
 
 echo "Done ($CLASS) — paste into FileMaker."
+
+# close this Terminal window on success (errors above leave it open)
+if [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then
+  osascript -e 'tell application "Terminal" to close front window' >/dev/null 2>&1 &
+fi
