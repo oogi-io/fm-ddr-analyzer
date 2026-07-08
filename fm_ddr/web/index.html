@@ -43,6 +43,10 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 #bar > div{height:100%;width:0;background:var(--accent);transition:width .15s}
 #pmsg{color:var(--muted);font-size:12px;margin-top:8px}
 .err{color:#c0392b;margin-top:14px}
+.credit{color:var(--muted);font-size:11px;padding:10px 12px;border-top:1px solid var(--border)}
+.credit a{color:var(--muted)}
+.credit a:hover{color:var(--accent)}
+#landing .credit{border-top:0;margin-top:30px;text-align:center}
 
 /* viewer */
 .wrap{display:none;height:calc(100vh - 50px)}
@@ -227,6 +231,9 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   </div>
   <div id="progress"><div id="bar"><div></div></div><div id="pmsg"></div></div>
   <div class="err" id="err"></div>
+  <div class="credit">Made by <a href="https://oogi.io" target="_blank" rel="noopener">OOGI BV</a>
+    — Thomas De Smet · <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a> ·
+    <a href="https://github.com/oogi-io/fm-ddr-analyzer" target="_blank" rel="noopener">Source (MIT)</a></div>
 </div>
 
 <div class="wrap" id="wrap">
@@ -1154,10 +1161,13 @@ function initViewer(DATA){
       renderRefs(ins,sourceDisplay)+'</div>'+
       '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
       renderRefs(outs,targetDisplay)+'</div></div></div>';
+    const credit='<div class="credit" style="border-top:1px solid var(--border);margin-top:20px">'+
+      'Generated with FM DDR Analyzer \u00b7 <a href="https://oogi.io">OOGI BV</a> \u2014 Thomas De Smet '+
+      '\u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a></div>';
     const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1">'+
       '<title>'+esc(e.n||'entity')+' \u2014 FM DDR</title><style>'+style+
-      ' .ref{cursor:default} .lncopy{display:none !important}</style></head><body>'+body+'</body></html>';
+      ' .ref{cursor:default} .lncopy{display:none !important}</style></head><body>'+body+credit+'</body></html>';
     downloadText((e.n||'entity').replace(/\W+/g,'_')+'_share.html',html,'text/html');
   }
   const NODE_H=24;
@@ -1463,8 +1473,8 @@ function initViewer(DATA){
     });
     return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
   }
-  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n\n# close this Terminal window on success (errors above leave it open)\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
-  const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData(\'Mac-XMSS\', $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host \'Done - paste into FileMaker Script Workspace.\'\n';
+  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n# OOGI BV - Thomas De Smet <tdesmet@oogi.io> - MIT\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n\n# close this Terminal window on success (errors above leave it open)\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
+  const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n# OOGI BV - Thomas De Smet <tdesmet@oogi.io> - MIT\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n# pick the clipboard format from the first object inside the snippet\n$class = \'Mac-XMSS\'\nif     ($text -match \'<CustomFunction \') { $class = \'Mac-XMFN\' }\nelseif ($text -match \'<BaseTable \')      { $class = \'Mac-XMTB\' }\nelseif ($text -match \'<Step \')           { $class = \'Mac-XMSS\' }\nelseif ($text -match \'<Script \')         { $class = \'Mac-XMSC\' }\nelseif ($text -match \'<Layout\')          { $class = \'Mac-XML2\' }\nelseif ($text -match \'<Field \')          { $class = \'Mac-XMFD\' }\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData($class, $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host "Done ($class) - paste into FileMaker."\n';
   // minimal STORE zip (no compression) with the unix exec bit preserved,
   // so the downloaded macOS helper runs without any chmod
   function makeExecZip(name,content){
@@ -1635,6 +1645,15 @@ function initViewer(DATA){
   };
   $('q').oninput=()=>{ if(codeResults){ codeResults=null; } render(); };
   $('q').value='';
+  (function(){
+    const sb=$('list')&&$('list').parentElement;
+    if(sb&&!document.getElementById('credit')){
+      const c=document.createElement('div'); c.id='credit'; c.className='credit';
+      c.innerHTML='Made by <a href="https://oogi.io" target="_blank" rel="noopener">OOGI BV</a> '+
+        '\u2014 Thomas De Smet \u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a>';
+      sb.appendChild(c);
+    }
+  })();
   $('q').placeholder='Search names \u00b7 Enter: search in code';
   (function(){
     const ctrl=$('q').parentElement;

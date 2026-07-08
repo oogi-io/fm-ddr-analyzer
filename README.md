@@ -234,3 +234,7 @@ fm-ddr-analyzer/
 | Storage | SQLite | Portable, queryable by AI/tools, no server |
 | Search | FTS5 | Catch-all text search where structured extraction is incomplete |
 | Language | Python 3.10+, stdlib only | No dependencies to install |
+
+---
+
+Made by [OOGI BV](https://oogi.io) — Thomas De Smet · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
