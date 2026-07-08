@@ -30,15 +30,21 @@ def extract_script_xml(ddr_path: str, script_name: str) -> str:
     with open(ddr_path, encoding=enc, errors="replace") as f:
         for line in f:
             if not cap:
-                # a definition opens (not self-closing) and carries the name
+                # candidate: opens (not self-closing) and carries the name.
+                # NOTE: trigger references use the same open+close form, so a
+                # candidate only counts as the definition if it turns out to
+                # contain a StepList - otherwise we keep scanning.
                 if "<Script" in line and needle in line and not line.rstrip().endswith("/>"):
-                    cap = True
+                    cap, buf, depth = True, [], 0
                 else:
                     continue
             buf.append(line)
             depth += len(open_re.findall(line)) - line.count("</Script>")
             if depth <= 0:
-                return "".join(buf)
+                xml = "".join(buf)
+                if "<StepList" in xml:
+                    return xml
+                cap = False  # was a reference (e.g. a trigger) - keep looking
     raise ValueError(f'script "{script_name}" not found in {ddr_path}')
 
 

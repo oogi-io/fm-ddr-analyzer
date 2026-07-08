@@ -341,6 +341,17 @@ class TestSnippet(unittest.TestCase):
         # self-closing expanded to FileMaker's form
         self.assertNotIn("/>", snip)
 
+    def test_snippet_skips_earlier_references(self):
+        # Helper Script is referenced by a layout trigger (open+close <Script>
+        # pair) BEFORE its definition; extraction must skip that and find the
+        # real definition with its StepList
+        from fm_ddr.snippet import extract_script_xml, ddr_steps_to_snippet
+        xml = extract_script_xml(FIXTURE, "Helper Script")
+        self.assertIn("<StepList>", xml)
+        snip, n = ddr_steps_to_snippet(xml)
+        self.assertEqual(n, 1)
+        self.assertIn("Set Variable", snip)
+
 
 @unittest.skipUnless(shutil.which("node"), "node not available")
 class TestJSParity(unittest.TestCase):
