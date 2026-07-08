@@ -99,6 +99,52 @@ truncates for display, but the DB does not). This is the recipe to reach for
 when you need to reason about a script's actual logic — reserve raw XML
 streaming for step attributes that fmsonar doesn't capture.
 
+## Variable hygiene ($$globals)
+
+Variables live inside step text, not in `refs`, so they need text queries.
+A `$$global` that a script **writes but nothing ever reads** is a classic
+latent bug (wrong-global typo, dead handoff). Two-step recipe:
+
+**1) Census** — every `$$global` a script sets, with solution-wide step counts
+(write-only candidates sort to the top):
+
+```sql
+WITH t AS (
+  SELECT json_extract(s.extra_json,'$.step_text') AS txt
+  FROM entities s
+  JOIN entities scr ON scr.entity_id = s.parent_entity_id AND scr.kind='script'
+  WHERE scr.name LIKE 'My Script%' AND s.kind='script_step'
+    AND json_extract(s.extra_json,'$.step_text') LIKE 'Set Variable [ $$%'
+), script_writes AS (
+  SELECT DISTINCT substr(txt, instr(txt,'$$'),
+    CASE WHEN instr(substr(txt,instr(txt,'$$')),';') > 0
+         THEN instr(substr(txt,instr(txt,'$$')),';') - 1 ELSE 40 END) AS var
+  FROM t
+)
+SELECT w.var,
+  (SELECT COUNT(*) FROM entities st WHERE st.kind='script_step'
+     AND json_extract(st.extra_json,'$.step_text') LIKE 'Set Variable [ '||w.var||';%') AS writes,
+  (SELECT COUNT(*) FROM entities st WHERE st.kind='script_step'
+     AND json_extract(st.extra_json,'$.step_text') LIKE '%'||w.var||'%'
+     AND json_extract(st.extra_json,'$.step_text') NOT LIKE 'Set Variable [ '||w.var||';%') AS other_mentions
+FROM script_writes w
+ORDER BY other_mentions;
+```
+
+**2) Confirm across ALL entity kinds** before calling anything write-only —
+globals are also read in layout-object calcs, tooltips, and field calcs:
+
+```sql
+SELECT kind, name, snippet(text_index, 4, '[', ']', '...', 8) AS match
+FROM text_index WHERE text_index MATCH '"MY_GLOBAL_NAME"' LIMIT 20;
+```
+
+The FTS tokenizer drops the `$$` prefix, so this over-matches (recall-oriented,
+by design): a var whose only hits are its own `Set Variable` writes is
+**definitively write-only**; anything else needs a human glance. Verified on a
+real solution: this pair of queries surfaces a write-only global bug in one
+round-trip that a per-question grep hunt took an entire session to find.
+
 ## Health / tech-debt hints
 
 Candidate **dead fields** (never referenced anywhere — read COVERAGE.md first;
