@@ -153,7 +153,7 @@ beta</Text>
 							<Chunk type="FunctionRef">ExecuteSQL</Chunk>
 							<Chunk type="NoRef"> ( "SELECT sql_only_field FROM CTC" ; "" ; "" )</Chunk>
 						</DisplayCalculation>
-						<FieldReference id="2" name="CTC::email" repetition="1" UUID="AAAA-BBBB"></FieldReference>
+						<Field table="CTC" id="2" name="email"/>
 					</Step>
 					<Step enable="True" id="6" name="Go to Layout">
 						<StepText>Go to Layout [ "Invoices" ]</StepText>

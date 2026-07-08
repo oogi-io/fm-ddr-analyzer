@@ -192,6 +192,24 @@ class TestParser(unittest.TestCase):
         self.assertEqual({r[0] for r in rows}, {"script_step", "layout"})
         self.assertTrue(all(r[1] for r in rows))
 
+    def test_step_target_captured(self):
+        # Set Field's write target is a direct <Field> child of <Step> in real
+        # DDRs (the agent-discovered gap: it was missed entirely before)
+        rows = self.conn.execute('''
+            SELECT st.step_type, te.base_table, te.name FROM refs r
+            JOIN entities st ON st.entity_id=r.source_entity_id
+            JOIN entities te ON te.entity_id=r.target_entity_id
+            WHERE r.context='step_target' ''').fetchall()
+        self.assertEqual(rows, [("Set Field", "CTC", "email")])
+
+    def test_step_seq_is_ordinal(self):
+        rows = self.conn.execute('''
+            SELECT s.seq FROM entities s
+            JOIN entities p ON p.entity_id=s.parent_entity_id
+            WHERE s.kind='script_step' AND p.name='Main Script'
+            ORDER BY s.entity_id''').fetchall()
+        self.assertEqual([r[0] for r in rows], [1, 2, 3, 4, 5])
+
     def test_calc_field_refs_both_chunk_forms(self):
         # element form (<Field> in Chunk) and text form ("CTC::email")
         raws = {r[0] for r in self.conn.execute(

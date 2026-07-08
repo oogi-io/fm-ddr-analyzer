@@ -29,15 +29,16 @@ multi-file build (missing sibling XMLs), not a broken solution.
   Useful columns: `entity_id, file_id, kind, fm_id` (FileMaker's own id),
   `name, parent_entity_id` (step→script, field→base_table), `base_table`
   (for fields/TOs), `data_type, field_type` (fields), `calc_text`,
-  `step_type` + `json_extract(extra_json,'$.step_text')` (steps), `grp`
+  `step_type`, `seq` (step order within its script) + `json_extract(extra_json,'$.step_text')` (steps), `grp`
   (script/layout group), `ext_file` (TO whose base table lives in another file).
 - **`refs`** — every "source USES target" edge:
   `source_entity_id, context, target_kind, target_name, target_to_name,
   target_raw, target_file, target_entity_id` (NULL = unresolved),
   `ambiguous` (1 = several same-named candidates; pick deterministic but verify).
-  Contexts: `calc, join_predicate, perform_script, go_to_layout, trigger,
-  layout_object, field_reference, value_list_source, value_list_field, sort,
-  to_reference, function_ref`.
+  Contexts: `calc, step_target` (field a step acts on — Set Field target etc.),
+  `join_predicate, perform_script, go_to_layout, trigger, layout_object,
+  field_reference, value_list_source, value_list_field, sort, to_reference,
+  function_ref`.
 - **`files`** — one row per FileMaker file in a multi-file solution.
 - **`text_index`** — FTS5 over every name, calculation, and step text.
 
@@ -57,8 +58,11 @@ For any "what happens if I change X" / "where is X used" question:
 
 1. **Structured blast radius** — group `v_usage` for the target by
    `source_kind, context` to see the shape before listing rows.
-2. **Drill the risky subset** — e.g. writers only:
-   join `refs` → `entities` steps with `step_type='Set Field'` → parent script.
+2. **Drill the risky subset** — e.g. true writers:
+   `refs` with `context='step_target'` whose source step has
+   `step_type='Set Field'` → parent script. (Careful: a Set Field between
+   `Enter Find Mode` and `Perform Find` is a find criterion, not a data
+   write — check neighboring steps by `seq` when it matters.)
 3. **FTS blind-spot check** — ALWAYS finish with
    `SELECT ... FROM text_index WHERE body MATCH '"<name>"'`
    to catch ExecuteSQL strings and other text-only usage the structure can't see.

@@ -323,8 +323,10 @@ function onStart(tag,a){
     else emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
     return; }
   if(tag==='Step' && parent==='StepList'){
-    const seq=(a.id!=null&&/^\d+$/.test(a.id))?parseInt(a.id,10):null;
-    newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=seq; return; }
+    let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
+    let ordinal=null;
+    if(owner){ owner._nsteps=(owner._nsteps||0)+1; ordinal=owner._nsteps; }
+    newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal; return; }
   if(tag==='CustomFunction' && anc('CustomFunctionCatalog')){ newEntity('custom_function',a); return; }
   if(tag==='ValueList'){
     if(parent==='ValueListCatalog') newEntity('value_list',a);
@@ -352,9 +354,10 @@ function onStart(tag,a){
     emitRef(anc('Layout')?'layout_object':'field_reference','field',{fm:a.id,name:leaf,to:to,raw:a.name}); return; }
   if(tag==='TableOccurrenceReference'){ emitRef('to_reference','table_occurrence',{fm:a.id,name:a.name,raw:a.name}); return; }
   if(tag==='Field' && (parent==='LeftField'||parent==='RightField'||parent==='Chunk'
-                       ||parent==='PrimaryField'||parent==='SecondaryField')){
+                       ||parent==='PrimaryField'||parent==='SecondaryField'||parent==='Step')){
     let ctx;
     if(parent==='Chunk') ctx='calc';
+    else if(parent==='Step') ctx='step_target';
     else if(parent==='PrimaryField'||parent==='SecondaryField')
       ctx=anc('ValueList')?'value_list_field':'sort';
     else ctx='join_predicate';
