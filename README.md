@@ -67,17 +67,22 @@ tools: point them at **AGENTS.md** next to a built database.
 
 ## Web app (no install)
 
-Open `fm_ddr/web/index.html` in a browser (or host it as a static page) and drop a DDR
-onto it. Parsing, resolution, and the interactive viewer all run client-side —
-no server, no upload. It also has a **Download report** button that exports a
+Just use **[fmsonar.com](https://fmsonar.com)** — free, always the latest build.
+Drop a DDR onto it; parsing, resolution, and the interactive viewer all run
+client-side — no server, no upload. The **Download report** button exports a
 self-contained HTML of the current solution to share.
+
+Prefer to self-host? The whole app is one file: open `fm_ddr/web/index.html`
+in a browser or serve it as a static page — it works identically.
 
 ## Install (Python CLI)
 
 Pure standard library — no dependencies, Python 3.10+.
 
 ```bash
-cd projects/fm-ddr-analyzer
+pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
+fm-ddr build /path/to/Solution_fmp12.xml -o solution.db
+# or from a clone, no install at all:
 python3 -m fm_ddr.cli build /path/to/Solution_fmp12.xml -o solution.db
 ```
 
