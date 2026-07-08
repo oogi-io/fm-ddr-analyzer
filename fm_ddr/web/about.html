@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FMSonar — see inside your FileMaker solution</title>
+<meta name="description" content="Free, in-browser FileMaker DDR explorer. Cross-references, call chains, health report, AI-ready — nothing leaves your machine.">
+<style>
+:root{
+  --bg:#fff; --panel:#f6f7f9; --panel2:#eef0f4; --border:#e2e5ea; --text:#1c1f24; --soft:#4b5260;
+  --muted:#697280; --accent:#2563eb; --accent-bg:#eaf1ff;
+  --in:#0a7d4d; --out:#9a4d00;
+  --mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#14161a; --panel:#1c1f26; --panel2:#22262e; --border:#2a2e37; --text:#e7e9ee; --soft:#c3c8d2;
+  --muted:#8b93a1; --accent:#6ea0ff; --accent-bg:#1e2a44;
+  --in:#5fd39b; --out:#e0a25f;
+}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:16px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-font-smoothing:antialiased}
+.wrap{max-width:840px;margin:0 auto;padding:56px 24px 90px}
+a{color:var(--accent)}
+h1{font-size:34px;line-height:1.2;letter-spacing:-.02em;margin:0;font-weight:700}
+.tag{color:var(--soft);font-size:18px;margin:10px 0 0}
+.meta{color:var(--muted);font-size:13px;margin:12px 0 0;font-family:var(--mono)}
+.cta{display:inline-flex;gap:10px;margin-top:26px;flex-wrap:wrap}
+.cta a{display:inline-block;padding:10px 18px;border-radius:9px;text-decoration:none;font-weight:600;font-size:15px}
+.cta .primary{background:var(--accent);color:#fff}
+.cta .ghost{border:1px solid var(--border);color:var(--text)}
+.tldr{margin:40px 0 8px;border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:20px 22px}
+.tldr .lab{font:600 11px/1 sans-serif;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+.tldr dl{display:grid;grid-template-columns:100px 1fr;gap:8px 16px;margin:0}
+.tldr dt{color:var(--muted);font-size:13px;font-weight:600}
+.tldr dd{margin:0;color:var(--soft);font-size:14.5px}
+.tldr dd b{color:var(--text)}
+h2{font-size:19px;margin:48px 0 12px;font-weight:650}
+h2 .hash{color:var(--muted);font-weight:400;margin-right:9px}
+p{color:var(--soft)}
+code{font-family:var(--mono);font-size:13px;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:1px 6px}
+pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;
+  font:13px/1.6 var(--mono);color:var(--text)}
+.pipe{display:flex;flex-wrap:wrap;align-items:stretch;gap:8px;margin:10px 0 4px}
+.node{flex:1 1 120px;min-width:120px;background:var(--panel);border:1px solid var(--border);border-radius:12px;
+  padding:16px 10px 12px;text-align:center;position:relative}
+.node .num{position:absolute;top:-10px;left:10px;width:20px;height:20px;border-radius:6px;display:grid;place-items:center;
+  font:600 11px/1 var(--mono);color:#fff;background:var(--accent)}
+.node b{display:block;font-size:13.5px}
+.node span{display:block;color:var(--muted);font-size:11.5px;line-height:1.4;margin-top:4px}
+.arr{align-self:center;color:var(--border);flex:0 0 auto;font-size:18px}
+@media(max-width:680px){.arr{transform:rotate(90deg)}}
+.badges{display:flex;flex-wrap:wrap;gap:8px;margin:16px 0 2px}
+.badge{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--soft);
+  border:1px solid var(--border);border-radius:20px;padding:5px 12px;background:var(--panel)}
+.badge b{color:var(--text)}
+.feat{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:10px;margin-top:14px}
+.card{border:1px solid var(--border);border-radius:12px;background:var(--panel);padding:14px 16px}
+.card b{display:block;font-size:14px;margin-bottom:4px}
+.card p{font-size:13.5px;margin:0;color:var(--muted)}
+.honest{border:1px solid var(--out);border-radius:12px;background:var(--panel);padding:16px 18px;margin-top:14px}
+.honest b{color:var(--out)}
+.honest p{font-size:14px;margin:6px 0 0}
+.credit{margin-top:64px;padding-top:18px;border-top:1px solid var(--border);color:var(--muted);font-size:13px}
+.credit a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>FMSonar</h1>
+  <p class="tag">Ping your FileMaker solution — every reference echoes back.<br>
+  One engine, two interfaces: <b>an explorer for you</b>, <b>a queryable index for your AI</b>.</p>
+  <p class="meta">free · open source (MIT) · runs entirely in your browser · nothing is uploaded</p>
+  <div class="cta">
+    <a class="primary" href="https://fmsonar.com">Open FMSonar</a>
+    <a class="ghost" href="#ai">Set up your AI</a>
+    <a class="ghost" href="https://github.com/oogi-io/fm-ddr-analyzer">Source on GitHub</a>
+  </div>
+
+  <div class="tldr">
+    <div class="lab">TL;DR</div>
+    <dl>
+      <dt>What</dt><dd>An explorer for FileMaker <b>Database Design Reports</b> — the full cross-reference map of a solution, alive in your browser.</dd>
+      <dt>For</dt><dd>FileMaker developers asking <b>"where is this used?"</b>, <b>"what breaks if I change it?"</b>, <b>"what's dead weight?"</b> — and their <b>AI assistants</b>, which get the same answers as a queryable SQLite index.</dd>
+      <dt>Input</dt><dd>The DDR XML export (FileMaker Pro: <b>Tools → Database Design Report → XML</b>) — single files or whole multi-file solutions.</dd>
+      <dt>Privacy</dt><dd>Parsing happens <b>inside your browser</b>. No server, no upload, works offline once loaded. Your client's schema never leaves your machine.</dd>
+      <dt>Cost</dt><dd>Free. MIT-licensed, engine and app both open source.</dd>
+    </dl>
+  </div>
+
+  <h2><span class="hash">#</span>How it works</h2>
+  <div class="pipe">
+    <div class="node"><span class="num">1</span><b>Your .fmp12</b><span>open in FileMaker Pro (advanced tools on)</span></div>
+    <div class="arr">→</div>
+    <div class="node"><span class="num">2</span><b>Export the DDR</b><span>Tools → Database Design Report → XML, all files</span></div>
+    <div class="arr">→</div>
+    <div class="node"><span class="num">3</span><b>Drop the folder</b><span>on fmsonar.com — a 400&nbsp;MB solution parses in seconds</span></div>
+    <div class="arr">→</div>
+    <div class="node"><span class="num">4</span><b>Explore</b><span>references, scripts, call chains, health — instantly</span></div>
+  </div>
+  <div class="badges">
+    <span class="badge">✓ <b>416 MB</b> parsed in-browser in ~7 s</span>
+    <span class="badge">✓ <b>148,000</b> references resolved (99%) on a 9-file solution</span>
+    <span class="badge">✓ <b>0</b> bytes uploaded</span>
+  </div>
+
+  <h2 id="ai"><span class="hash">#</span>For your AI, too</h2>
+  <p>The same engine builds a SQLite index designed for AI tools — with an
+  instruction file (<a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/AGENTS.md">AGENTS.md</a>)
+  and a Claude Code skill that teach any assistant the schema, the query
+  patterns, and the honesty rules. Install once, ask from any project:</p>
+  <pre>pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
+fm-ddr install-skill   # Claude Code: global skill</pre>
+  <p style="font-size:14.5px">Then simply: <i>"analyze the DDR on my desktop — which scripts <b>write</b> to CTC::email?"</i> Your assistant builds the index into a local cache and answers with SQL-backed evidence — including the caveats an honest analysis needs.</p>
+
+  <h2><span class="hash">#</span>What you can do in the browser</h2>
+  <div class="feat">
+    <div class="card"><b>Where-used, answered properly</b><p>Click anything — see every reference grouped by what references it: scripts, layouts, relationships, value lists. Writes distinguishable from reads.</p></div>
+    <div class="card"><b>Read whole scripts</b><p>Full step text with block indentation, comments dimmed. Copy a line, a selection, or the whole script.</p></div>
+    <div class="card"><b>Call chains, visually</b><p>Full-depth caller/callee graph — PSoS and triggers marked, hover to trace lineage, drag to untangle, export PNG or Mermaid.</p></div>
+    <div class="card"><b>Search inside the code</b><p>Full-text search across every calculation and script step — catches what structure can't, like ExecuteSQL strings.</p></div>
+    <div class="card"><b>Solution health report</b><p>Unused-field and orphan-script candidates, unresolved references, hotspots, biggest scripts — each list a CSV download.</p></div>
+    <div class="card"><b>Copy back into FileMaker</b><p>Any script copies as a real FileMaker clipboard snippet — paste it straight into Script Workspace (one-time helper install).</p></div>
+    <div class="card"><b>Share one insight</b><p>Any entity exports as a tiny self-contained HTML — steps, chain, references — safe to Slack or mail without sharing the schema.</p></div>
+    <div class="card"><b>Deep links</b><p>Put a full report on a shared drive and link colleagues to the exact script: <code>report.html#e12345</code>.</p></div>
+  </div>
+
+  <h2><span class="hash">#</span>Strengths &amp; limits — the honest version</h2>
+  <p><b>Why the index beats reading the raw XML:</b> parse once (~26&nbsp;s for a
+  9-file solution), then every question answers in milliseconds. Aggregations
+  become possible — hotspots, orphan candidates, blast radius by kind — which
+  raw scanning fundamentally can't do. And the resolution logic (table
+  occurrences, cross-file references, ambiguity) is computed once by tested
+  code instead of re-derived per question.</p>
+  <p><b>Where its model ends:</b> the index deliberately extracts entities,
+  references, calculations and script steps — <i>not</i> auto-enter/validation
+  details, layout geometry, custom-menu internals, or import/export orders.
+  Those answers are still in your DDR XML; for them, read it directly. And the
+  index is a snapshot: change the solution, re-export, rebuild.</p>
+  <div class="honest"><b>Honesty, by design</b>
+    <p>Static analysis has blind spots — fields named inside ExecuteSQL strings, calculated names, activity outside the DDR (Data API, OData, users running scripts from menus). FMSonar documents exactly what it can and cannot see (<a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md">COVERAGE.md</a>), flags ambiguous matches, and its AI guardrails require a full-text blind-spot check before anything is called "unused". Review lists, never delete lists.</p>
+  </div>
+
+  <h2><span class="hash">#</span>Get it</h2>
+  <p><a href="https://fmsonar.com"><b>fmsonar.com</b></a> — the app, no install. &nbsp;·&nbsp; <a href="https://github.com/oogi-io/fm-ddr-analyzer">GitHub</a> — engine, CLI, docs, MIT.</p>
+
+  <div class="credit"><a href="https://oogi.io">Thomas De Smet</a> · <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a></div>
+</div>
+</body>
+</html>
