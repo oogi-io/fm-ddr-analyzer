@@ -187,6 +187,10 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
 - [ ] **Annotations.** Mark entities (deprecated / refactor / reviewed) with
   notes; persisted per solution, exportable, embedded in shared reports.
   Viewer-wide, not chain-only; pairs with the health report.
+- [ ] **Signed helper installer.** Replace the unsigned zip / curl|bash
+  install paths with a signed + notarized .pkg (Developer ID) so macOS
+  installs the snippet watcher without any Gatekeeper friction. Parked
+  until a dedicated signing session.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
 - [x] **Copy as FM snippet (web + CLI).** In the web app, every script has a
