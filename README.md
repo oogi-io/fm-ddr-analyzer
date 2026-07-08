@@ -193,8 +193,10 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   "Copy FM snippet" button that re-streams the source file, extracts that
   script's raw steps, and copies fmxmlsnippet XML as text (byte-identical to
   FileMaker's own clipboard copy). Browsers cannot write FileMaker's private
-  clipboard flavor, so paste needs a one-time bridge: `fm-ddr snippet --clip`
-  today, a downloadable helper planned (Phase 2), or FmClipTools.
+  clipboard flavor, so paste needs a one-time bridge. Pick any: the bundled
+  helpers in `helpers/` (macOS `.command`, Windows `.ps1` — also downloadable
+  from the app after copying), `fm-ddr clip` (converts clipboard text in
+  place), or FmClipTools if you already use it.
 - [x] **Copy as FM snippet (CLI, macOS).** `fm-ddr snippet DDR.xml "Script
   Name" --clip` transforms a script's DDR steps into FileMaker's clipboard
   format and places it on the private XMSS pasteboard flavor — paste straight

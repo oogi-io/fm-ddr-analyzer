@@ -86,6 +86,20 @@ def set_clipboard_xmss(snippet_xml: str) -> None:
         os.unlink(path)
 
 
+def clip_text_to_fm() -> int:
+    """Convert fmxmlsnippet XML text on the clipboard into the FileMaker
+    clipboard flavor (macOS). Returns the byte size placed."""
+    import sys
+    if sys.platform != "darwin":
+        raise RuntimeError("clip is macOS-only here; on Windows use "
+                           "helpers/fm-snippet-helper.ps1")
+    text = subprocess.run(["pbpaste"], capture_output=True, text=True).stdout
+    if not text.startswith("<fmxmlsnippet"):
+        raise ValueError("clipboard does not contain fmxmlsnippet XML")
+    set_clipboard_xmss(text)
+    return len(text.encode("utf-8"))
+
+
 def snippet(ddr_path: str, script_name: str, out_path: str | None = None,
             to_clipboard: bool = False) -> dict:
     script_xml = extract_script_xml(ddr_path, script_name)
