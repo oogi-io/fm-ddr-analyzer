@@ -18,8 +18,15 @@ import subprocess
 import tempfile
 
 
-def extract_script_xml(ddr_path: str, script_name: str) -> str:
-    """Stream a DDR and return the raw XML of the named script definition."""
+def extract_script_xml(ddr_path: str, script_name: str,
+                       script_id: str | None = None) -> str:
+    """Stream a DDR and return the raw XML of the named script definition.
+
+    FileMaker allows two scripts to share a name; by default the first matching
+    definition is returned (streaming stops there, which matters on huge DDRs).
+    Pass script_id (FileMaker's own id) to select a specific one when the name
+    is ambiguous.
+    """
     enc = "utf-16-le"
     with open(ddr_path, "rb") as f:
         if f.read(2) != b"\xff\xfe":
@@ -43,9 +50,14 @@ def extract_script_xml(ddr_path: str, script_name: str) -> str:
             if depth <= 0:
                 xml = "".join(buf)
                 if "<StepList" in xml:
-                    return xml
-                cap = False  # was a reference (e.g. a trigger) - keep looking
-    raise ValueError(f'script "{script_name}" not found in {ddr_path}')
+                    if script_id is None:
+                        return xml
+                    m = re.search(r'<Script\b[^>]*\bid="([^"]*)"', xml)
+                    if m and m.group(1) == str(script_id):
+                        return xml
+                cap = False  # a reference/trigger or the wrong id - keep looking
+    where = f'script "{script_name}"' + (f' with id {script_id}' if script_id else "")
+    raise ValueError(f'{where} not found in {ddr_path}')
 
 
 def _encode_text(m: re.Match) -> str:
@@ -91,6 +103,11 @@ def _sniff_class(snippet_xml: str) -> str:
 
 def set_clipboard_xmss(snippet_xml: str) -> None:
     """Place snippet XML on the macOS clipboard as the right FileMaker flavor."""
+    import sys
+    if sys.platform != "darwin":
+        raise RuntimeError(
+            "Writing the FileMaker clipboard requires macOS (osascript). "
+            "Use -o to write the snippet XML to a file instead.")
     cls = _sniff_class(snippet_xml)
     hexdata = snippet_xml.encode("utf-8").hex().upper()
     # the script can exceed argv limits; run osascript from a temp file
@@ -118,8 +135,8 @@ def clip_text_to_fm() -> int:
 
 
 def snippet(ddr_path: str, script_name: str, out_path: str | None = None,
-            to_clipboard: bool = False) -> dict:
-    script_xml = extract_script_xml(ddr_path, script_name)
+            to_clipboard: bool = False, script_id: str | None = None) -> dict:
+    script_xml = extract_script_xml(ddr_path, script_name, script_id=script_id)
     xml, nsteps = ddr_steps_to_snippet(script_xml)
     if out_path:
         with open(out_path, "w", encoding="utf-8") as f:

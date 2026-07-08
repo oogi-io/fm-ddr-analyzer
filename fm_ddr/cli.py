@@ -113,11 +113,17 @@ def cmd_where(args):
 
 def cmd_search(args):
     conn = sqlite3.connect(args.db)
-    cols, rows = _rows(conn,
-        """SELECT ti.kind, ti.name, snippet(text_index, 4, '[', ']', '...', 12) AS match
-           FROM text_index ti
-           WHERE text_index MATCH ? ORDER BY rank LIMIT ?""",
-        (args.query, args.limit))
+    sql = ("""SELECT ti.kind, ti.name, snippet(text_index, 4, '[', ']', '...', 12) AS match
+              FROM text_index ti
+              WHERE text_index MATCH ? ORDER BY rank LIMIT ?""")
+    try:
+        cols, rows = _rows(conn, sql, (args.query, args.limit))
+    except sqlite3.OperationalError:
+        # The query used FTS5 operator syntax that didn't parse (unbalanced
+        # quotes/parens, a bare AND/NEAR, a colon). Fall back to treating the
+        # whole thing as a literal phrase so a plain search never crashes.
+        literal = '"' + args.query.replace('"', '""') + '"'
+        cols, rows = _rows(conn, sql, (literal, args.limit))
     print(f"# Text search '{args.query}'  ({len(rows)} hits)\n")
     _print_table(cols, rows, limit=args.limit)
 
@@ -131,7 +137,7 @@ def cmd_sql(args):
 def cmd_snippet(args):
     from .snippet import snippet
     res = snippet(args.ddr, args.script, out_path=args.out,
-                  to_clipboard=args.clip)
+                  to_clipboard=args.clip, script_id=getattr(args, "id", None))
     print(f"{res['steps']} steps -> {res['bytes']} bytes of fmxmlsnippet")
     if res["out"]:
         print(f"written to {res['out']}")
@@ -178,6 +184,8 @@ def cmd_stats(args):
 
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fm_ddr", description="FileMaker DDR analyzer")
+    p.add_argument("--debug", action="store_true",
+                   help="show the full Python traceback on error")
     sub = p.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build",
@@ -212,6 +220,7 @@ def main(argv=None):
                         help="copy a script's steps as a FileMaker clipboard snippet")
     sn.add_argument("ddr", help="DDR XML file containing the script")
     sn.add_argument("script", help="script name (exact)")
+    sn.add_argument("--id", help="FileMaker script id, to disambiguate a duplicate name")
     sn.add_argument("-o", "--out", help="write fmxmlsnippet XML to this file")
     sn.add_argument("--clip", action="store_true",
                     help="place on the macOS clipboard (XMSS flavor) for direct paste")
@@ -235,7 +244,16 @@ def main(argv=None):
     st.set_defaults(func=cmd_stats)
 
     args = p.parse_args(argv)
-    args.func(args)
+    try:
+        args.func(args)
+    except (BrokenPipeError, KeyboardInterrupt):
+        raise
+    except Exception as e:
+        if args.debug:
+            raise
+        msg = str(e) or e.__class__.__name__
+        print(f"error: {msg}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
