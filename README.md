@@ -21,6 +21,21 @@ Two front-ends over the same logic:
 - **`fm_ddr/` (Python CLI)** — the scriptable / CI version: build a SQLite DB and
   query it from the shell or hand it to an AI.
 
+## Quick start
+
+1. Open **[fmsonar.com](https://fmsonar.com)** — nothing installs, nothing uploads.
+2. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
+3. **Drag the DDR folder onto the page.**
+
+Seconds later your whole solution is explorable: search every name and every
+line of code, see what references anything (and from where), read complete
+scripts, walk call chains visually, run the health report, share findings as
+tiny HTML files or CSV — and copy any script back into FileMaker as a
+pasteable snippet. Your schema never leaves your machine.
+
+Prefer the terminal / AI route? `python3 -m fm_ddr.cli build your_ddr.xml -o
+solution.db` and point your AI tool at the folder — **AGENTS.md** does the rest.
+
 ## Overview
 
 - **Input:** DDR XML files (FileMaker: *Tools → Database Design Report → XML*) —
