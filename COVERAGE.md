@@ -16,7 +16,8 @@ outputs as review lists, never as delete lists.
 | `value_list_field` | Field feeding a field-based value list | `PrimaryField`/`SecondaryField` inside `ValueList` |
 | `value_list_source` | Value list bound to a layout object | `ValueList` bindings outside the catalog |
 | `layout_object` | Field placed on a layout | `FieldObj > Name`, `FieldReference` under `Layout` |
-| `field_reference` | Field referenced by a script step (Set Field target, etc.) | `FieldReference` outside layouts |
+| `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
+| `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
 | `perform_script` | Script called by a script step | `Script` reference elements |
 | `trigger` | Script attached to a script trigger | `Script` inside `ScriptTriggers` |
 | `go_to_layout` | Layout targeted by a Go to Layout step/button | `Layout` reference elements |

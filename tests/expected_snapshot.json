@@ -313,7 +313,7 @@
   ],
   [
    "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
-   "field_reference",
+   "step_target",
    "field",
    "CTC::email",
    "field|email|base_table|CTC||0|0",

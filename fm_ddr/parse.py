@@ -169,8 +169,14 @@ class DDRHandler(xml.sax.ContentHandler):
             return
 
         if tag == "Step" and parent == "StepList":
+            owner = next((e for e in reversed(self.entity_stack)
+                          if e["kind"] == "script"), None)
+            ordinal = None
+            if owner is not None:
+                owner["_nsteps"] = owner.get("_nsteps", 0) + 1
+                ordinal = owner["_nsteps"]
             self.new_entity("script_step", a, step_type=a.get("name"),
-                            name=a.get("name"), seq=int(a["id"]) if a.get("id", "").isdigit() else None)
+                            name=a.get("name"), seq=ordinal)
             return
 
         if tag == "CustomFunction" and self.has_ancestor("CustomFunctionCatalog"):
@@ -246,9 +252,14 @@ class DDRHandler(xml.sax.ContentHandler):
         #   - inside a <Chunk type="FieldRef"> within a calculation
         #   - value-list field sources and sort orders (PrimaryField/SecondaryField)
         if tag == "Field" and parent in ("LeftField", "RightField", "Chunk",
-                                         "PrimaryField", "SecondaryField"):
+                                         "PrimaryField", "SecondaryField", "Step"):
             if parent == "Chunk":
                 ctx = "calc"
+            elif parent == "Step":
+                # the field a step acts on: Set Field's write target, Go to
+                # Field, Insert ... - combine with the step_type to tell
+                # writes from navigation
+                ctx = "step_target"
             elif parent in ("PrimaryField", "SecondaryField"):
                 ctx = "value_list_field" if self.has_ancestor("ValueList") else "sort"
             else:
