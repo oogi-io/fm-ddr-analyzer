@@ -101,6 +101,11 @@
    "Main"
   ],
   [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|3",
+   "",
+   "Main"
+  ],
+  [
    "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
    "",
    "Main"
@@ -111,6 +116,11 @@
    "Main"
   ],
   [
+   "script_step|Show Custom Dialog|script|Loose Script||0|0",
+   "",
+   ""
+  ],
+  [
    "script_step|Show Custom Dialog|script|Orphan Script|script_group|Main||0|0|0",
    "",
    "Main"
@@ -119,6 +129,11 @@
    "script|Helper Script|script_group|Main||0|0",
    "",
    "Main"
+  ],
+  [
+   "script|Loose Script||0",
+   "",
+   ""
   ],
   [
    "script|Main Script|script_group|Main||0|0",
@@ -309,6 +324,14 @@
    "script",
    "Remote Helper",
    "",
+   0
+  ],
+  [
+   "script_step|Perform Script|script|Main Script|script_group|Main||0|0|3",
+   "perform_script",
+   "script",
+   "Loose Script",
+   "script|Loose Script||0",
    0
   ],
   [

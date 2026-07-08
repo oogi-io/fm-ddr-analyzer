@@ -171,6 +171,10 @@ beta</Text>
 						</FileReference>
 						<Script id="2" name="Remote Helper"></Script>
 					</Step>
+					<Step enable="True" id="1" name="Perform Script">
+						<StepText>Perform Script [ "Loose Script" ]</StepText>
+						<Script id="5" name="Loose Script"></Script>
+					</Step>
 				</StepList>
 			</Script>
 			<Script includeInMenu="True" id="2" name="Helper Script">
@@ -193,6 +197,13 @@ beta</Text>
 				</StepList>
 			</Script>
 		</Group>
+		<Script includeInMenu="True" id="5" name="Loose Script">
+			<StepList>
+				<Step enable="True" id="90" name="Show Custom Dialog">
+					<StepText>Show Custom Dialog [ "loose - a script kept outside any folder, still called" ]</StepText>
+				</Step>
+			</StepList>
+		</Script>
 	</ScriptCatalog>
 	<CustomFunctionCatalog>
 		<CustomFunction id="1" functionArity="1" visible="True" parameters="input" name="MakeTitle">
