@@ -106,8 +106,11 @@ honesty guardrails. **[QUERIES.md](QUERIES.md)** has the canonical SQL recipes.
 
 ## Data model
 
-One database can hold several files (a multi-file solution) and several DDR
-snapshots (for future diffing).
+One database holds a whole solution — all files of a multi-file solution share
+one entity space, so cross-file references resolve. The schema is also
+snapshot-aware (`ddr_run`) so a future diff feature can store several DDR
+exports side by side; today `build` always writes a fresh single-snapshot DB
+(diffing is on the roadmap).
 
 | Table | What it holds |
 |-------|---------------|
