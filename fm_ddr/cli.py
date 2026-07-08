@@ -42,7 +42,7 @@ def cmd_build(args):
     from .parse import build
     out = args.out or os.path.splitext(args.ddr[0])[0] + ".db"
     print(f"Parsing {len(args.ddr)} file(s) -> {out} ...", file=sys.stderr)
-    summary = build(args.ddr, out, label=args.label)
+    summary = build(args.ddr, out, label=args.label, force=getattr(args, "force", False))
     print(f"Done: {out}")
     for k, v in sorted(summary.items(), key=lambda kv: (-kv[1], kv[0])):
         print(f"  {k:24s} {v}")
@@ -186,6 +186,8 @@ def main(argv=None):
                    help="one or more *_fmp12.xml files, or a single Summary.xml")
     b.add_argument("-o", "--out")
     b.add_argument("--label")
+    b.add_argument("--force", action="store_true",
+                   help="overwrite the -o file even if it is not an FMSonar database")
     b.set_defaults(func=cmd_build)
 
     w = sub.add_parser("where", help="where is a field/script/layout/TO/CF used")

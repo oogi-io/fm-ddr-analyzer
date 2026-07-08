@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import os
 import sqlite3
+import tempfile
 import xml.sax
 from datetime import datetime, timezone
 
@@ -153,7 +154,11 @@ class DDRHandler(xml.sax.ContentHandler):
             self.new_entity("layout_group", a)
             return
 
-        if tag == "Script" and parent == "Group" and self.has_ancestor("ScriptCatalog"):
+        # A script definition sits directly under ScriptCatalog or a script Group
+        # (mirrors the Layout rule above). A <Script> anywhere else — inside a
+        # Step, Trigger or button — is a reference, handled below. Scripts kept
+        # outside any folder (parent == ScriptCatalog) were previously missed.
+        if tag == "Script" and parent in ("Group", "ScriptCatalog") and self.has_ancestor("ScriptCatalog"):
             self.new_entity("script", a)
             return
 
@@ -279,7 +284,7 @@ class DDRHandler(xml.sax.ContentHandler):
             return
 
         # script reference (Perform Script, triggers) — NOT a definition
-        if tag == "Script" and parent != "Group":
+        if tag == "Script" and parent not in ("Group", "ScriptCatalog"):
             fmid, nm = a.get("id"), a.get("name")
             if fmid not in (None, "0") or (nm or ""):
                 ctx = "trigger" if self.has_ancestor("ScriptTriggers") or parent == "Trigger" else "perform_script"
@@ -434,12 +439,64 @@ def expand_summary(path: str) -> list[str] | None:
         full = f.read()
     base = os.path.dirname(os.path.abspath(path))
     links = re.findall(r'<File\s+link="([^"]+)"', full)
-    return [os.path.normpath(os.path.join(base, l.lstrip("./"))) for l in links]
+    out = []
+    for l in links:
+        # Resolve relative to the manifest and confine to its directory tree.
+        # A real Summary.xml only ever links sibling DDR files; anything that
+        # escapes (absolute paths, embedded ../) is a crafted manifest and is
+        # skipped so it can't pull arbitrary files into the shared database.
+        resolved = os.path.normpath(os.path.join(base, l))
+        if os.path.commonpath([base, resolved]) != base:
+            continue
+        out.append(resolved)
+    return out
 
 
-def build(ddr_paths, db_path: str, label: str | None = None) -> dict:
+def _reject_dtd(path: str) -> None:
+    """Refuse a DDR that declares a DTD internal subset. Real FileMaker DDRs
+    have none; an internal subset with <!ENTITY declarations is the entity-
+    expansion ("billion laughs") attack, which older expat (<2.6) won't stop.
+    The subset always sits in the head, before the root element."""
+    import re
+    with open(path, "rb") as f:
+        head = f.read(8192)
+    enc = "utf-16-le" if head[:2] == b"\xff\xfe" else "utf-8"
+    text = head.decode(enc, "replace")
+    if re.search(r"<!DOCTYPE[^>]*\[", text) or "<!ENTITY" in text:
+        raise ValueError(
+            f"{path} declares an XML DTD/entity subset; refusing to parse it "
+            "(a FileMaker DDR never contains one).")
+
+
+def _is_fmsonar_db(path: str) -> bool:
+    """True if `path` looks like a database this tool produced — a SQLite file
+    with a ddr_run table. Used to avoid clobbering an unrelated file at -o."""
+    try:
+        with open(path, "rb") as f:
+            if f.read(16) != b"SQLite format 3\x00":
+                return False
+        conn = sqlite3.connect(path)
+        try:
+            return conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='ddr_run'"
+            ).fetchone() is not None
+        finally:
+            conn.close()
+    except (OSError, sqlite3.DatabaseError):
+        return False
+
+
+def build(ddr_paths, db_path: str, label: str | None = None,
+          force: bool = False) -> dict:
     """Parse one or more DDR files (or a Summary.xml manifest) into a fresh
-    SQLite DB. Returns a summary dict."""
+    SQLite DB. Returns a summary dict.
+
+    The DB is built into a temp file alongside the target and moved into place
+    only on success, so a malformed DDR (or a typo'd -o path) never destroys an
+    existing file, and two concurrent builds can't corrupt each other's output.
+    An existing file at db_path that is not itself an FMSonar DB is left intact
+    unless force=True.
+    """
     if isinstance(ddr_paths, str):
         ddr_paths = [ddr_paths]
     if len(ddr_paths) == 1:
@@ -447,52 +504,64 @@ def build(ddr_paths, db_path: str, label: str | None = None) -> dict:
         if linked:
             ddr_paths = linked
 
-    if os.path.exists(db_path):
-        os.remove(db_path)
-    conn = sqlite3.connect(db_path)
-    with open(SCHEMA_PATH) as f:
-        conn.executescript(f.read())
-    # Entities and refs are streamed interleaved and share a single id space
-    # assigned in-process, so referential integrity holds by construction.
-    # Disable FK enforcement during load (a ref may be flushed before its still-
-    # open source entity is inserted). Resolution happens afterwards in SQL.
-    conn.execute("PRAGMA foreign_keys=OFF")
-
-    ver, ctime = _peek_report_meta(ddr_paths[0])
-    cur = conn.execute(
-        "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,label)"
-        " VALUES (?,?,?,?,?)",
-        (";".join(os.path.abspath(p) for p in ddr_paths), ver, ctime,
-         datetime.now(timezone.utc).isoformat(),
-         label or os.path.basename(ddr_paths[0])))
-    run_id = cur.lastrowid
-
-    # One handler across all files: entity/ref ids stay a single space, and
-    # each <File> element opens a new row in `files`.
-    handler = DDRHandler(conn, run_id)
-    for p in ddr_paths:
-        parser = xml.sax.make_parser()
-        parser.setContentHandler(handler)
-        # expat honors the BOM / XML declaration, so binary mode handles UTF-16-LE.
-        with open(p, "rb") as f:
-            parser.parse(f)
-    handler.flush()
-    conn.commit()
-
-    if handler.file_id is None:
-        conn.close()
-        os.remove(db_path)
+    if os.path.exists(db_path) and not force and not _is_fmsonar_db(db_path):
         raise ValueError(
-            f"{ddr_paths[0]} is not a FileMaker DDR (no FMPReport/File found). "
-            "Generate one via Tools > Database Design Report > XML.")
+            f"{db_path} already exists and is not an FMSonar database — "
+            "refusing to overwrite it. Choose another -o path or pass --force.")
 
-    # resolve edges + build views
-    with open(os.path.join(os.path.dirname(__file__), "resolve.sql")) as f:
-        conn.executescript(f.read())
-    conn.commit()
+    target_dir = os.path.dirname(os.path.abspath(db_path)) or "."
+    fd, tmp_path = tempfile.mkstemp(suffix=".db", prefix=".fmsonar-build-",
+                                    dir=target_dir)
+    os.close(fd)
+    conn = sqlite3.connect(tmp_path)
+    try:
+        with open(SCHEMA_PATH) as f:
+            conn.executescript(f.read())
+        # Entities and refs are streamed interleaved and share a single id space
+        # assigned in-process, so referential integrity holds by construction.
+        # Disable FK enforcement during load (a ref may be flushed before its
+        # still-open source entity is inserted). Resolution happens after, in SQL.
+        conn.execute("PRAGMA foreign_keys=OFF")
 
-    summary = _summarize(conn)
+        ver, ctime = _peek_report_meta(ddr_paths[0])
+        cur = conn.execute(
+            "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,label)"
+            " VALUES (?,?,?,?,?)",
+            (";".join(os.path.abspath(p) for p in ddr_paths), ver, ctime,
+             datetime.now(timezone.utc).isoformat(),
+             label or os.path.basename(ddr_paths[0])))
+        run_id = cur.lastrowid
+
+        # One handler across all files: entity/ref ids stay a single space, and
+        # each <File> element opens a new row in `files`.
+        handler = DDRHandler(conn, run_id)
+        for p in ddr_paths:
+            _reject_dtd(p)
+            parser = xml.sax.make_parser()
+            parser.setContentHandler(handler)
+            # expat honors the BOM / XML declaration, so binary mode handles UTF-16-LE.
+            with open(p, "rb") as f:
+                parser.parse(f)
+        handler.flush()
+        conn.commit()
+
+        if handler.file_id is None:
+            raise ValueError(
+                f"{ddr_paths[0]} is not a FileMaker DDR (no FMPReport/File found). "
+                "Generate one via Tools > Database Design Report > XML.")
+
+        # resolve edges + build views
+        with open(os.path.join(os.path.dirname(__file__), "resolve.sql")) as f:
+            conn.executescript(f.read())
+        conn.commit()
+        summary = _summarize(conn)
+    except BaseException:
+        conn.close()
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+        raise
     conn.close()
+    os.replace(tmp_path, db_path)  # atomic; only reached on success
     return summary
 
 

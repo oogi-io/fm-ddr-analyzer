@@ -320,7 +320,7 @@ function onStart(tag,a){
   if(tag==='Relationship'){ newEntity('relationship',a,{name:null}); return; }
   if(tag==='Group' && anc('ScriptCatalog')){ newEntity('script_group',a); return; }
   if(tag==='Group' && anc('LayoutCatalog')){ newEntity('layout_group',a); return; }
-  if(tag==='Script' && parent==='Group' && anc('ScriptCatalog')){ newEntity('script',a); return; }
+  if(tag==='Script' && (parent==='Group'||parent==='ScriptCatalog') && anc('ScriptCatalog')){ newEntity('script',a); return; }
   if(tag==='Layout'){
     if((parent==='LayoutCatalog'||parent==='Group') && anc('LayoutCatalog')) newEntity('layout',a);
     else emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
@@ -369,7 +369,7 @@ function onStart(tag,a){
     emitRef('join_predicate','table_occurrence',{name:a.name,raw:a.name});
     for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){
       (H.estack[k]._ends=H.estack[k]._ends||[]).push(a.name); break; } return; }
-  if(tag==='Script' && parent!=='Group'){
+  if(tag==='Script' && parent!=='Group' && parent!=='ScriptCatalog'){
     const fm=a.id, nm=a.name;
     if((fm!=null&&fm!=='0')||nm){ const ctx=(anc('ScriptTriggers')||parent==='Trigger')?'trigger':'perform_script';
       if(nm||(fm&&fm!=='0')) emitRef(ctx,'script',{fm:fm,name:nm,raw:nm}); } return; }

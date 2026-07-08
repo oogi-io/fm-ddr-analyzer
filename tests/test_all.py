@@ -147,11 +147,26 @@ class TestParser(unittest.TestCase):
         # 2 layout DEFINITIONS; the go-to-layout button on the layout is a ref
         self.assertEqual(c["layout"], 2)
         self.assertEqual(c["layout_group"], 1)
-        self.assertEqual(c["script"], 3)
+        self.assertEqual(c["script"], 4)  # 3 in the Main folder + 1 loose (ungrouped)
         self.assertEqual(c["script_group"], 1)
-        self.assertEqual(c["script_step"], 7)
+        self.assertEqual(c["script_step"], 9)
         self.assertEqual(c["custom_function"], 1)
         self.assertEqual(c["value_list"], 2)
+
+    def test_top_level_script_captured_and_resolved(self):
+        # A script kept OUTSIDE any folder (directly under ScriptCatalog) must be
+        # captured as a definition, and an inbound Perform Script must resolve to
+        # it — the regression for the "ungrouped scripts vanish" bug.
+        row = self.conn.execute(
+            "SELECT entity_id, grp FROM entities WHERE kind='script' AND name='Loose Script'"
+        ).fetchone()
+        self.assertIsNotNone(row, "top-level script not captured as a definition")
+        loose_id, grp = row
+        self.assertIn(grp, (None, ""), "loose script should have no group")
+        resolved = self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context='perform_script' "
+            "AND target_entity_id=?", (loose_id,)).fetchone()[0]
+        self.assertEqual(resolved, 1, "call to the loose script did not resolve")
 
     def test_duplicate_field_name_resolves_through_TO(self):
         # CTC::zkp and ctc_INV::zkp are different fields (bt CTC vs INV)
@@ -208,7 +223,7 @@ class TestParser(unittest.TestCase):
             JOIN entities p ON p.entity_id=s.parent_entity_id
             WHERE s.kind='script_step' AND p.name='Main Script'
             ORDER BY s.entity_id''').fetchall()
-        self.assertEqual([r[0] for r in rows], [1, 2, 3, 4, 5])
+        self.assertEqual([r[0] for r in rows], [1, 2, 3, 4, 5, 6])
 
     def test_calc_field_refs_both_chunk_forms(self):
         # element form (<Field> in Chunk) and text form ("CTC::email")
@@ -300,6 +315,54 @@ class TestParser(unittest.TestCase):
         with self.assertRaises(ValueError):
             build(bogus, os.path.join(self.tmp, "bogus.db"))
 
+    def test_build_preserves_target_on_bad_input(self):
+        # A malformed DDR must not destroy whatever already sits at the -o path.
+        target = os.path.join(self.tmp, "precious.db")
+        with open(target, "wb") as f:
+            f.write(b"IRREPLACEABLE")
+        truncated = os.path.join(self.tmp, "trunc.xml")
+        with open(truncated, "w") as f:
+            f.write('<?xml version="1.0"?><FMPReport type="Report"><File name="X">')
+        with self.assertRaises(Exception):
+            build(truncated, target, force=True)
+        with open(target, "rb") as f:
+            self.assertEqual(f.read(), b"IRREPLACEABLE")  # untouched
+        # and no half-built temp files are left behind
+        leftovers = [n for n in os.listdir(self.tmp) if n.startswith(".fmsonar-build-")]
+        self.assertEqual(leftovers, [])
+
+    def test_build_refuses_to_clobber_non_fmsonar_file(self):
+        target = os.path.join(self.tmp, "notes.md")
+        with open(target, "w") as f:
+            f.write("# my notes\n")
+        with self.assertRaises(ValueError):
+            build(FIXTURE, target)                       # no --force
+        self.assertTrue(os.path.exists(target))
+        build(FIXTURE, target, force=True)               # --force overrides
+        from fm_ddr.parse import _is_fmsonar_db
+        self.assertTrue(_is_fmsonar_db(target))
+
+    def test_build_rejects_dtd_entity_bomb(self):
+        bomb = os.path.join(self.tmp, "bomb.xml")
+        with open(bomb, "w") as f:
+            f.write('<?xml version="1.0"?>\n<!DOCTYPE FMPReport [\n'
+                    '<!ENTITY a "AAAA"><!ENTITY b "&a;&a;&a;">\n]>\n'
+                    '<FMPReport type="Report"><File name="X">&b;</File></FMPReport>')
+        with self.assertRaises(ValueError):
+            build(bomb, os.path.join(self.tmp, "bomb.db"))
+
+    def test_summary_traversal_confined(self):
+        from fm_ddr.parse import expand_summary
+        d = os.path.join(self.tmp, "manifest")
+        os.makedirs(d, exist_ok=True)
+        with open(os.path.join(d, "Summary.xml"), "w") as f:
+            f.write('<?xml version="1.0"?><FMPReport type="Summary">'
+                    '<File link="Good_fmp12.xml"/>'
+                    '<File link="../../../../etc/passwd"/>'
+                    '<File link="/etc/hosts"/></FMPReport>')
+        linked = expand_summary(os.path.join(d, "Summary.xml"))
+        self.assertEqual(linked, [os.path.join(d, "Good_fmp12.xml")])
+
     def test_orphan_scripts(self):
         orphans = {r[0] for r in self.conn.execute("SELECT name FROM v_orphan_scripts")}
         self.assertIn("Orphan Script", orphans)
@@ -347,7 +410,7 @@ class TestSnippet(unittest.TestCase):
         from fm_ddr.snippet import extract_script_xml, ddr_steps_to_snippet
         xml = extract_script_xml(FIXTURE, "Main Script")
         snip, n = ddr_steps_to_snippet(xml)
-        self.assertEqual(n, 5)
+        self.assertEqual(n, 6)
         self.assertTrue(snip.startswith('<fmxmlsnippet type="FMObjectList">'))
         # DDR-only elements are stripped
         self.assertNotIn("StepText", snip)
