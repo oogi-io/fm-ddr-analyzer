@@ -17,6 +17,7 @@ DIST=$(mktemp -d)
 BUILD="$(git rev-parse --short HEAD) · $(date +%Y-%m-%d)"
 sed "s/__BUILD__/$BUILD/" fm_ddr/web/index.html > "$DIST/index.html"
 cp helpers/install.sh "$DIST/install.sh"
+cp fm_ddr/web/about.html "$DIST/about.html"
 
 npx wrangler pages deploy "$DIST" --project-name fmsonar --branch main
 rm -rf "$DIST"
