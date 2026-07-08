@@ -139,6 +139,12 @@ def cmd_snippet(args):
         print("on the clipboard (XMSS) - paste into FileMaker Script Workspace")
 
 
+def cmd_clip(args):
+    from .snippet import clip_text_to_fm
+    n = clip_text_to_fm()
+    print(f"{n} bytes -> FileMaker clipboard (XMSS); paste into Script Workspace")
+
+
 def cmd_report(args):
     from .report import report
     out = report(args.db, args.out)
@@ -197,6 +203,10 @@ def main(argv=None):
     sn.add_argument("--clip", action="store_true",
                     help="place on the macOS clipboard (XMSS flavor) for direct paste")
     sn.set_defaults(func=cmd_snippet)
+
+    cl = sub.add_parser("clip",
+                        help="convert snippet XML text on the clipboard to FileMaker objects (macOS)")
+    cl.set_defaults(func=cmd_clip)
 
     rp = sub.add_parser("report", help="generate a self-contained interactive HTML viewer")
     rp.add_argument("db")

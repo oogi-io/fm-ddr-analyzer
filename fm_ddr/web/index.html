@@ -846,7 +846,7 @@ function initViewer(DATA){
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
     h+='<div class="steps" id="stepsblock">'+
       (window.__DDR_SOURCE?'<button class="copybtn" id="copyfmsnip" style="right:110px" '+
-        'title="Copies fmxmlsnippet XML as text. Convert to clipboard objects (fm-ddr clip / FmClipTools) before pasting into FileMaker.">Copy FM snippet</button>':'')+
+        'title="Copies fmxmlsnippet XML as text. Convert once before pasting into FileMaker: our helper (offered after copy) or FmClipTools.">Copy FM snippet</button>':'')+
       '<button class="copybtn" id="copyscript">Copy script</button>';
     let ind=0; const plain=[]; currentLineTexts=[];
     const ICON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+
@@ -1446,6 +1446,25 @@ function initViewer(DATA){
     });
     return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
   }
+  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# One-time setup: chmod +x "fm-snippet-helper.command"\n# Then double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data XMSS%s\\302\\273\\n\' "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done — paste into FileMaker Script Workspace."\n';
+  const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData(\'Mac-XMSS\', $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host \'Done - paste into FileMaker Script Workspace.\'\n';
+  function showSnippetHint(){
+    let h=document.getElementById('sniphint');
+    if(h) return;
+    h=document.createElement('div'); h.id='sniphint'; h.className='caveat';
+    h.innerHTML='Copied as XML <b>text</b>. FileMaker only pastes its own clipboard '+
+      'format, so convert once before pasting \u2014 either with our one-time helper: '+
+      '<button class="csv" id="dlhelpmac">macOS helper</button> '+
+      '<button class="csv" id="dlhelpwin">Windows helper</button> '+
+      '<span class="via">(download once; macOS: <code>chmod +x</code> then double-click after each copy '+
+      '\u00b7 or <code>fm-ddr clip</code>)</span> \u2014 or with '+
+      '<a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a> '+
+      'if you already use it.';
+    const blk=document.getElementById('stepsblock');
+    if(blk) blk.parentNode.insertBefore(h, blk);
+    document.getElementById('dlhelpmac').onclick=()=>downloadText('fm-snippet-helper.command',HELPER_MAC,'text/plain');
+    document.getElementById('dlhelpwin').onclick=()=>downloadText('fm-snippet-helper.ps1',HELPER_WIN,'text/plain');
+  }
   async function copyFMSnippet(e,btn){
     btn.textContent='Extracting\u2026';
     try{
@@ -1453,6 +1472,7 @@ function initViewer(DATA){
       const res=ddrStepsToSnippet(raw);
       await navigator.clipboard.writeText(res.xml);
       btn.textContent='Copied ('+res.steps+' steps)';
+      showSnippetHint();
     }catch(err){ btn.textContent='Failed: '+(err.message||err); }
     setTimeout(()=>{btn.textContent='Copy FM snippet';},2200);
   }
