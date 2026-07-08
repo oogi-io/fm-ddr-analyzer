@@ -102,7 +102,11 @@
 						</DDRInfo>
 					</FieldObj>
 				</Object>
-				<Object type="Button" key="11" LabelKey="0" flags="0" rotation="0">
+				<Object type="Button" key="11" LabelKey="0" name="btnGo" flags="0" rotation="0">
+					<HideCondition findMode="True">
+						<Calculation><![CDATA[Global::HideMe_g]]></Calculation>
+						<DisplayCalculation><Chunk type="FieldRef"><Field table="Global" id="9" name="HideMe_g"></Field></Chunk></DisplayCalculation>
+					</HideCondition>
 					<Bounds top="40" left="10" bottom="70" right="120"/>
 					<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
 						<Step enable="True" id="6" name="Go to Layout">

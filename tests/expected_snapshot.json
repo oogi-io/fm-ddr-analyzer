@@ -56,6 +56,16 @@
    ""
   ],
   [
+   "layout_object|btnGo|layout|Contacts|layout_group|Interfaces||0|0|0",
+   "",
+   "Interfaces"
+  ],
+  [
+   "layout_object||layout|Contacts|layout_group|Interfaces||0|0|0",
+   "",
+   "Interfaces"
+  ],
+  [
    "layout|Contacts|layout_group|Interfaces||0|0",
    "",
    "Interfaces"
@@ -223,7 +233,15 @@
    0
   ],
   [
-   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_object|btnGo|layout|Contacts|layout_group|Interfaces||0|0|0",
+   "calc",
+   "field",
+   "Global::HideMe_g",
+   "",
+   0
+  ],
+  [
+   "layout_object|btnGo|layout|Contacts|layout_group|Interfaces||0|0|0",
    "go_to_layout",
    "layout",
    "Invoices",
@@ -231,7 +249,7 @@
    0
   ],
   [
-   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_object||layout|Contacts|layout_group|Interfaces||0|0|0",
    "layout_object",
    "field",
    "CTC::email",
@@ -239,7 +257,7 @@
    0
   ],
   [
-   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_object||layout|Contacts|layout_group|Interfaces||0|0|0",
    "trigger",
    "script",
    "Helper Script",
@@ -247,7 +265,7 @@
    0
   ],
   [
-   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_object||layout|Contacts|layout_group|Interfaces||0|0|0",
    "value_list_source",
    "value_list",
    "VL Custom",

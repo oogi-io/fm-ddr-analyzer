@@ -261,7 +261,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 // tokenizes incrementally, and builds entities + reference edges.
 
 const SOURCE_KINDS = new Set(["field","custom_function","script_step","relationship",
-  "layout","value_list","privilege_set","custom_menu"]);
+  "layout","layout_object","value_list","privilege_set","custom_menu"]);
 const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name"]);
 
 function dec(s){
@@ -335,6 +335,7 @@ function onStart(tag,a){
     let ordinal=null;
     if(owner){ owner._nsteps=(owner._nsteps||0)+1; ordinal=owner._nsteps; }
     newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal; return; }
+  if(tag==='Object' && anc('Layout')){ newEntity('layout_object',a,{name:a.name||null}); return; }
   if(tag==='CustomFunction' && anc('CustomFunctionCatalog')){ newEntity('custom_function',a); return; }
   if(tag==='ValueList'){
     if(parent==='ValueListCatalog') newEntity('value_list',a);

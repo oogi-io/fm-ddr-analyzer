@@ -212,8 +212,31 @@ class TestParser(unittest.TestCase):
             WHERE context='go_to_layout' AND target_name='Invoices'
         """).fetchall()
         self.assertEqual(len(rows), 2)
-        self.assertEqual({r[0] for r in rows}, {"script_step", "layout"})
+        # the on-layout button ref attributes to the button OBJECT (v1.3.0)
+        self.assertEqual({r[0] for r in rows}, {"script_step", "layout_object"})
         self.assertTrue(all(r[1] for r in rows))
+
+    def test_layout_objects_captured(self):
+        # the named button object exists, parented under its layout
+        row = self.conn.execute("""
+            SELECT o.entity_id, json_extract(o.extra_json,'$.object_type'),
+                   json_extract(o.extra_json,'$.hide_calc'),
+                   json_extract(o.extra_json,'$.step_text'), l.name
+            FROM entities o JOIN entities l ON l.entity_id = o.parent_entity_id
+            WHERE o.kind='layout_object' AND o.name='btnGo'""").fetchone()
+        self.assertIsNotNone(row)
+        _, otype, hide, step_text, layout_name = row
+        self.assertEqual(otype, "Button")
+        self.assertIn("HideMe_g", hide)
+        self.assertIn("Go to Layout", step_text)
+        self.assertEqual(layout_name, "Contacts")
+        # object name + hide calc are searchable at BOTH levels: object row
+        # and the aggregated layout body (the "read a full layout body" recipe)
+        body = self.conn.execute("""
+            SELECT body FROM text_index WHERE kind='layout' AND name='Contacts'
+        """).fetchone()[0]
+        self.assertIn("btnGo", body)
+        self.assertIn("HideMe_g", body)
 
     def test_step_target_captured(self):
         # Set Field's write target is a direct <Field> child of <Step> in real

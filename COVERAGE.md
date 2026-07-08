@@ -15,6 +15,7 @@ outputs as review lists, never as delete lists.
 | `sort` | Field used in a sort order (relationship sort lists and similar) | `PrimaryField`/`SecondaryField` outside value lists |
 | `value_list_field` | Field feeding a field-based value list | `PrimaryField`/`SecondaryField` inside `ValueList` |
 | `value_list_source` | Value list bound to a layout object | `ValueList` bindings outside the catalog |
+| `layout_object` entities (v1.3.0) | Every layout object as an entity: name, type, key, bounds, button launch step+params (`extra_json.step_text`), hide condition (`extra_json.hide_calc`), tooltip calc | `Object` elements inside `Layout`, nested |
 | `layout_object` | Field placed on a layout | `FieldObj > Name`, `FieldReference` under `Layout` |
 | `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
 | `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
