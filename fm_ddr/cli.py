@@ -139,6 +139,17 @@ def cmd_snippet(args):
         print("on the clipboard (XMSS) - paste into FileMaker Script Workspace")
 
 
+def cmd_install_skill(args):
+    import shutil
+    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill", "SKILL.md")
+    dest_dir = os.path.expanduser("~/.claude/skills/fmsonar")
+    os.makedirs(dest_dir, exist_ok=True)
+    shutil.copy(src, os.path.join(dest_dir, "SKILL.md"))
+    print(f"Installed the 'fmsonar' skill -> {dest_dir}")
+    print("Claude Code can now analyze FileMaker DDRs from ANY directory -")
+    print("just mention a DDR or ask a where-used question.")
+
+
 def cmd_clip(args):
     from .snippet import clip_text_to_fm
     n = clip_text_to_fm()
@@ -203,6 +214,10 @@ def main(argv=None):
     sn.add_argument("--clip", action="store_true",
                     help="place on the macOS clipboard (XMSS flavor) for direct paste")
     sn.set_defaults(func=cmd_snippet)
+
+    ins = sub.add_parser("install-skill",
+                         help="install the Claude Code skill globally (~/.claude/skills)")
+    ins.set_defaults(func=cmd_install_skill)
 
     cl = sub.add_parser("clip",
                         help="convert snippet XML text on the clipboard to FileMaker objects (macOS)")

@@ -33,8 +33,18 @@ scripts, walk call chains visually, run the health report, share findings as
 tiny HTML files or CSV — and copy any script back into FileMaker as a
 pasteable snippet. Your schema never leaves your machine.
 
-Prefer the terminal / AI route? `python3 -m fm_ddr.cli build your_ddr.xml -o
-solution.db` and point your AI tool at the folder — **AGENTS.md** does the rest.
+**Want your AI assistant to answer questions about your solution?** Install
+once, works from any directory, in any project — no cd-ing around:
+
+```bash
+pipx install git+https://github.com/oogi-io/fm-ddr-analyzer   # the fm-ddr CLI
+fm-ddr install-skill                                          # Claude Code skill (global)
+```
+
+Then, wherever you're working: *"analyze the DDR in ~/Desktop/MyDDR — which
+scripts write to CTC::email?"* Claude Code builds the index into a central
+cache (`~/.fmsonar/dbs/`) and answers with SQL-backed evidence. Cursor/other
+tools: point them at **AGENTS.md** next to a built database.
 
 ## Overview
 
