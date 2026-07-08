@@ -13,9 +13,8 @@ interfaces:
   assistants query directly, with [AGENTS.md](AGENTS.md) and a Claude Code skill
   teaching them how.
 
-Spiritual successor to the FileMaker accessibility patcher: same idea (stream the
-huge FileMaker XML with SAX), but instead of patching layouts it builds a queryable
-index of the whole solution.
+Both parsers stream the huge FileMaker XML with SAX, so even a 400+ MB DDR is
+handled without loading it all into memory.
 
 Two front-ends over the same logic:
 
