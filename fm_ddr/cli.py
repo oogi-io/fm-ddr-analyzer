@@ -128,6 +128,17 @@ def cmd_sql(args):
     _print_table(cols, rows, limit=args.limit)
 
 
+def cmd_snippet(args):
+    from .snippet import snippet
+    res = snippet(args.ddr, args.script, out_path=args.out,
+                  to_clipboard=args.clip)
+    print(f"{res['steps']} steps -> {res['bytes']} bytes of fmxmlsnippet")
+    if res["out"]:
+        print(f"written to {res['out']}")
+    if res["clipboard"]:
+        print("on the clipboard (XMSS) - paste into FileMaker Script Workspace")
+
+
 def cmd_report(args):
     from .report import report
     out = report(args.db, args.out)
@@ -177,6 +188,15 @@ def main(argv=None):
     q.add_argument("query")
     q.add_argument("--limit", type=int, default=200)
     q.set_defaults(func=cmd_sql)
+
+    sn = sub.add_parser("snippet",
+                        help="copy a script's steps as a FileMaker clipboard snippet")
+    sn.add_argument("ddr", help="DDR XML file containing the script")
+    sn.add_argument("script", help="script name (exact)")
+    sn.add_argument("-o", "--out", help="write fmxmlsnippet XML to this file")
+    sn.add_argument("--clip", action="store_true",
+                    help="place on the macOS clipboard (XMSS flavor) for direct paste")
+    sn.set_defaults(func=cmd_snippet)
 
     rp = sub.add_parser("report", help="generate a self-contained interactive HTML viewer")
     rp.add_argument("db")
