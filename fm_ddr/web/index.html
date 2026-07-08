@@ -319,9 +319,13 @@ function onStart(tag,a){
   if(tag==='Relationship'){ newEntity('relationship',a,{name:null}); return; }
   if(tag==='Group' && anc('ScriptCatalog')){ newEntity('script_group',a); return; }
   if(tag==='Group' && anc('LayoutCatalog')){ newEntity('layout_group',a); return; }
-  if(tag==='Script' && (parent==='Group'||parent==='ScriptCatalog') && anc('ScriptCatalog')){ newEntity('script',a); return; }
+  if(tag==='Script' && (parent==='Group'||parent==='ScriptCatalog') && anc('ScriptCatalog')){
+    if((a.name||'').trim()!=='-') newEntity('script',a);  // "-" = script-menu separator, not a script
+    return; }
   if(tag==='Layout'){
-    if((parent==='LayoutCatalog'||parent==='Group') && anc('LayoutCatalog')) newEntity('layout',a);
+    if((parent==='LayoutCatalog'||parent==='Group') && anc('LayoutCatalog')){
+      if((a.name||'').trim()!=='-') newEntity('layout',a);  // "-" = layout-menu separator
+    }
     else emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
     return; }
   if(tag==='Step' && parent==='StepList'){

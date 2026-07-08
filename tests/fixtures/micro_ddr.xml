@@ -119,6 +119,8 @@
 			</Layout>
 			<Layout width="640" quickFind="True" includeInMenu="True" id="2" name="Invoices">
 			</Layout>
+			<Layout width="640" quickFind="False" includeInMenu="False" id="3" name="-">
+			</Layout>
 		</Group>
 	</LayoutCatalog>
 	<ValueListCatalog>
@@ -195,6 +197,9 @@ beta</Text>
 						<StepText>Show Custom Dialog [ "hi" ]</StepText>
 					</Step>
 				</StepList>
+			</Script>
+			<Script includeInMenu="True" id="4" name="-">
+				<StepList/>
 			</Script>
 		</Group>
 		<Script includeInMenu="True" id="5" name="Loose Script">

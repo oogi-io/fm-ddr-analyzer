@@ -159,7 +159,10 @@ class DDRHandler(xml.sax.ContentHandler):
         # Step, Trigger or button — is a reference, handled below. Scripts kept
         # outside any folder (parent == ScriptCatalog) were previously missed.
         if tag == "Script" and parent in ("Group", "ScriptCatalog") and self.has_ancestor("ScriptCatalog"):
-            self.new_entity("script", a)
+            # A script named "-" is a FileMaker script-menu separator (empty
+            # StepList), not a script — skip it (never fall through to the ref).
+            if (a.get("name") or "").strip() != "-":
+                self.new_entity("script", a)
             return
 
         if tag == "Layout":
@@ -167,7 +170,8 @@ class DDRHandler(xml.sax.ContentHandler):
             # A <Layout id name/> anywhere else (incl. a Go-to-Layout button that
             # happens to live on a layout) is a reference.
             if parent in ("LayoutCatalog", "Group") and self.has_ancestor("LayoutCatalog"):
-                self.new_entity("layout", a)
+                if (a.get("name") or "").strip() != "-":   # "-" = layout-menu separator
+                    self.new_entity("layout", a)
             else:
                 self.emit_ref("go_to_layout", "layout", fm_id=a.get("id"),
                               name=a.get("name"), raw=a.get("name"))
