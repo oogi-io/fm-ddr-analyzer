@@ -231,8 +231,8 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   </div>
   <div id="progress"><div id="bar"><div></div></div><div id="pmsg"></div></div>
   <div class="err" id="err"></div>
-  <div class="credit">Made by <a href="https://oogi.io" target="_blank" rel="noopener">OOGI BV</a>
-    — Thomas De Smet · <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a> ·
+  <div class="credit"><a href="https://oogi.io" target="_blank" rel="noopener">OOGI</a>
+    - Thomas De Smet · <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a> ·
     <a href="https://github.com/oogi-io/fm-ddr-analyzer" target="_blank" rel="noopener">Source (MIT)</a></div>
 </div>
 
@@ -1162,7 +1162,7 @@ function initViewer(DATA){
       '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
       renderRefs(outs,targetDisplay)+'</div></div></div>';
     const credit='<div class="credit" style="border-top:1px solid var(--border);margin-top:20px">'+
-      'Generated with FM DDR Analyzer \u00b7 <a href="https://oogi.io">OOGI BV</a> \u2014 Thomas De Smet '+
+      'FM DDR Analyzer \u00b7 <a href="https://oogi.io">OOGI</a> - Thomas De Smet '+
       '\u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a></div>';
     const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1">'+
@@ -1473,38 +1473,39 @@ function initViewer(DATA){
     });
     return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
   }
-  const HELPER_MAC='#!/bin/bash\n# FM Snippet Helper (macOS) — part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n# OOGI BV - Thomas De Smet <tdesmet@oogi.io> - MIT\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),\n# so they paste straight into Script Workspace.\n#\n# Install once: unzip, then on first run right-click -> Open (Gatekeeper).\n# After that, double-click it (or bind it to a hotkey) after copying snippet XML.\n\nset -e\nTEXT=$(pbpaste)\n\ncase "$TEXT" in\n  \'<fmxmlsnippet\'*) ;;\n  *) echo "Clipboard does not contain fmxmlsnippet XML — copy a snippet first."; exit 1 ;;\nesac\n\n# pick the clipboard class from the first object inside the snippet\ncase "$TEXT" in\n  *\'<Step \'*)            CLASS=XMSS ;;   # script steps\n  *\'<Script \'*)          CLASS=XMSC ;;   # whole scripts\n  *\'<CustomFunction \'*)  CLASS=XMFN ;;   # custom functions\n  *\'<BaseTable \'*)       CLASS=XMTB ;;   # tables\n  *\'<Layout\'*)           CLASS=XML2 ;;   # layout objects (checked before Field: they contain field objects)\n  *\'<Field \'*)           CLASS=XMFD ;;   # field definitions\n  *) echo "Unrecognized snippet content."; exit 1 ;;\nesac\n\nHEX=$(printf \'%s\' "$TEXT" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n\n# via a temp file: large scripts can exceed the argv size limit\nTMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)\nprintf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\nosascript "$TMP"\nrm -f "$TMP"\n\necho "Done ($CLASS) — paste into FileMaker."\n\n# close this Terminal window on success (errors above leave it open)\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
+  const HELPER_WATCHER='#!/bin/bash\n# FM Snippet Watcher (macOS)\n# OOGI - Thomas De Smet <tdesmet@oogi.io> - MIT\n# https://github.com/oogi-io/fm-ddr-analyzer\n#\n# Watches the clipboard; whenever fmxmlsnippet XML text is copied (e.g. from\n# the FM DDR Analyzer web app), it adds the matching FileMaker clipboard\n# flavor so it pastes straight into FileMaker (replacing the text flavor -\n# copy again in the app if you need the XML text back).\n# Installed as a LaunchAgent by install.command; removed by uninstall.command.\n\n# LaunchAgents start with a bare C locale, under which pbpaste mangles\n# non-ASCII characters - force UTF-8\nexport LANG=en_US.UTF-8\nexport LC_ALL=en_US.UTF-8\n\nLAST=""\nwhile true; do\n  T=$(pbpaste 2>/dev/null)\n  if [ "$T" != "$LAST" ]; then\n    LAST="$T"\n    case "$T" in\n      \'<fmxmlsnippet\'*)\n        case "$T" in\n          *\'<Step \'*)            CLASS=XMSS ;;\n          *\'<Script \'*)          CLASS=XMSC ;;\n          *\'<CustomFunction \'*)  CLASS=XMFN ;;\n          *\'<BaseTable \'*)       CLASS=XMTB ;;\n          *\'<Layout\'*)           CLASS=XML2 ;;\n          *\'<Field \'*)           CLASS=XMFD ;;\n          *)                     CLASS="" ;;\n        esac\n        if [ -n "$CLASS" ]; then\n          # convert to the FileMaker flavor (UTF-8, byte-exact). The text\n          # flavor is consumed - copy again in the app if you need the XML\n          # text back. Keeping both flavors is possible but encoding-fragile.\n          HEX=$(printf \'%s\' "$T" | xxd -p | tr -d \'\\n\' | tr \'a-f\' \'A-F\')\n          TMP=$(mktemp /tmp/fm-snip-watch.XXXXXX.applescript)\n          printf \'set the clipboard to \\302\\253data %s%s\\302\\273\\n\' "$CLASS" "$HEX" > "$TMP"\n          osascript "$TMP" >/dev/null 2>&1\n          rm -f "$TMP"\n        fi\n        ;;\n    esac\n  fi\n  sleep 1\ndone\n';
+const HELPER_INSTALL='#!/bin/bash\n# FM Snippet Helper - install (macOS)\n# OOGI - Thomas De Smet <tdesmet@oogi.io> - MIT\n#\n# Installs a tiny background watcher: from now on, every fmxmlsnippet XML\n# you copy becomes instantly paste-ready in FileMaker. Nothing to run again.\n# Remove any time with uninstall.command.\n\nset -e\nDIR="$HOME/Library/Application Support/FM Snippet Helper"\nAGENT="$HOME/Library/LaunchAgents/io.oogi.fm-snippet-helper.plist"\nSRC="$(cd "$(dirname "$0")" && pwd)"\n\nmkdir -p "$DIR" "$HOME/Library/LaunchAgents"\ncp "$SRC/fm-snippet-watcher.sh" "$DIR/fm-snippet-watcher.sh"\nchmod +x "$DIR/fm-snippet-watcher.sh"\n\ncat > "$AGENT" <<PLIST\n<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict>\n  <key>Label</key><string>io.oogi.fm-snippet-helper</string>\n  <key>ProgramArguments</key><array><string>$DIR/fm-snippet-watcher.sh</string></array>\n  <key>RunAtLoad</key><true/>\n  <key>KeepAlive</key><true/>\n</dict></plist>\nPLIST\n\nlaunchctl unload "$AGENT" 2>/dev/null || true\nlaunchctl load "$AGENT"\n\necho "Installed. Copied FM snippets are now paste-ready automatically."\necho "(Remove any time by running uninstall.command.)"\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  sleep 2\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
+const HELPER_UNINSTALL='#!/bin/bash\n# FM Snippet Helper - uninstall (macOS)\n# OOGI - Thomas De Smet <tdesmet@oogi.io>\n\nAGENT="$HOME/Library/LaunchAgents/io.oogi.fm-snippet-helper.plist"\nDIR="$HOME/Library/Application Support/FM Snippet Helper"\nlaunchctl unload "$AGENT" 2>/dev/null || true\nrm -f "$AGENT"\nrm -rf "$DIR"\necho "FM Snippet Helper removed."\nif [ "$TERM_PROGRAM" = "Apple_Terminal" ]; then\n  sleep 2\n  osascript -e \'tell application "Terminal" to close front window\' >/dev/null 2>&1 &\nfi\n';
   const HELPER_WIN='# FM Snippet Helper (Windows) - part of FM DDR Analyzer\n# https://github.com/oogi-io/fm-ddr-analyzer\n# OOGI BV - Thomas De Smet <tdesmet@oogi.io> - MIT\n#\n# Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app\'s\n# "Copy FM snippet" button) into FileMaker clipboard objects (the registered\n# "Mac-XMSS" clipboard format), so they paste into Script Workspace.\n#\n# Usage: right-click this file -> "Run with PowerShell" after copying snippet\n# XML. (Or bind it to a hotkey with AutoHotkey etc.)\n#\n# NOTE: follows the community-documented format (UTF-8 bytes prefixed with a\n# 4-byte little-endian length, as used by FileMaker on Windows). Tested\n# pattern; report issues at the repo.\n\nAdd-Type -AssemblyName System.Windows.Forms\n\n$text = Get-Clipboard -Raw\nif (-not $text -or -not $text.StartsWith(\'<fmxmlsnippet\')) {\n    Write-Host \'Clipboard does not contain fmxmlsnippet XML - copy a snippet first.\'\n    exit 1\n}\n\n# pick the clipboard format from the first object inside the snippet\n$class = \'Mac-XMSS\'\nif     ($text -match \'<CustomFunction \') { $class = \'Mac-XMFN\' }\nelseif ($text -match \'<BaseTable \')      { $class = \'Mac-XMTB\' }\nelseif ($text -match \'<Step \')           { $class = \'Mac-XMSS\' }\nelseif ($text -match \'<Script \')         { $class = \'Mac-XMSC\' }\nelseif ($text -match \'<Layout\')          { $class = \'Mac-XML2\' }\nelseif ($text -match \'<Field \')          { $class = \'Mac-XMFD\' }\n\n$bytes = [System.Text.Encoding]::UTF8.GetBytes($text)\n$len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)\n\n$ms = New-Object System.IO.MemoryStream\n$ms.Write($len, 0, 4)\n$ms.Write($bytes, 0, $bytes.Length)\n$ms.Position = 0\n\n$data = New-Object System.Windows.Forms.DataObject\n$data.SetData($class, $ms)\n[System.Windows.Forms.Clipboard]::SetDataObject($data, $true)\n\nWrite-Host "Done ($class) - paste into FileMaker."\n';
-  // minimal STORE zip (no compression) with the unix exec bit preserved,
-  // so the downloaded macOS helper runs without any chmod
-  function makeExecZip(name,content){
-    const data=new TextEncoder().encode(content);
-    let c=~0; const T=[];
-    for(let n=0;n<256;n++){let x=n;for(let k=0;k<8;k++)x=x&1?0xEDB88320^(x>>>1):x>>>1;T[n]=x;}
-    for(let i=0;i<data.length;i++)c=T[(c^data[i])&0xFF]^(c>>>8);
-    const crc=(~c)>>>0;
-    const nameB=new TextEncoder().encode(name);
-    const lfh=30+nameB.length, cdSize=46+nameB.length;
-    const buf=new ArrayBuffer(lfh+data.length+cdSize+22);
-    const v=new DataView(buf); const u=new Uint8Array(buf);
-    let o=0;
-    v.setUint32(o,0x04034b50,true); v.setUint16(o+4,20,true); v.setUint16(o+6,0,true);
-    v.setUint16(o+8,0,true); v.setUint32(o+10,0,true);
-    v.setUint32(o+14,crc,true); v.setUint32(o+18,data.length,true); v.setUint32(o+22,data.length,true);
-    v.setUint16(o+26,nameB.length,true); v.setUint16(o+28,0,true);
-    u.set(nameB,o+30); u.set(data,lfh); o=lfh+data.length;
+  // minimal STORE zip (no compression) with unix exec bits preserved,
+  // so downloaded helpers run without any chmod
+  function makeExecZip(zipname,entries){
+    const enc=new TextEncoder();
+    const T=[]; for(let n=0;n<256;n++){let x=n;for(let k=0;k<8;k++)x=x&1?0xEDB88320^(x>>>1):x>>>1;T[n]=x;}
+    const crc32=d=>{let c=~0;for(let i=0;i<d.length;i++)c=T[(c^d[i])&0xFF]^(c>>>8);return (~c)>>>0;};
+    const parts=entries.map(e=>{const nb=enc.encode(e.name),db=enc.encode(e.content);
+      return {nb:nb,db:db,crc:crc32(db),exec:e.exec};});
+    let total=22; parts.forEach(p=>{ total+=30+p.nb.length+p.db.length+46+p.nb.length; });
+    const buf=new ArrayBuffer(total), v=new DataView(buf), u=new Uint8Array(buf);
+    let o=0; const offs=[];
+    parts.forEach(p=>{ offs.push(o);
+      v.setUint32(o,0x04034b50,true); v.setUint16(o+4,20,true);
+      v.setUint32(o+14,p.crc,true); v.setUint32(o+18,p.db.length,true); v.setUint32(o+22,p.db.length,true);
+      v.setUint16(o+26,p.nb.length,true);
+      u.set(p.nb,o+30); u.set(p.db,o+30+p.nb.length);
+      o+=30+p.nb.length+p.db.length; });
     const cdOff=o;
-    v.setUint32(o,0x02014b50,true); v.setUint16(o+4,(3<<8)|30,true); v.setUint16(o+6,20,true);
-    v.setUint16(o+8,0,true); v.setUint16(o+10,0,true); v.setUint32(o+12,0,true);
-    v.setUint32(o+16,crc,true); v.setUint32(o+20,data.length,true); v.setUint32(o+24,data.length,true);
-    v.setUint16(o+28,nameB.length,true);
-    v.setUint32(o+38,0o100755<<16,true); v.setUint32(o+42,0,true);
-    u.set(nameB,o+46); o+=cdSize;
-    v.setUint32(o,0x06054b50,true); v.setUint16(o+8,1,true); v.setUint16(o+10,1,true);
-    v.setUint32(o+12,cdSize,true); v.setUint32(o+16,cdOff,true); v.setUint16(o+20,0,true);
+    parts.forEach((p,i)=>{
+      v.setUint32(o,0x02014b50,true); v.setUint16(o+4,(3<<8)|30,true); v.setUint16(o+6,20,true);
+      v.setUint32(o+16,p.crc,true); v.setUint32(o+20,p.db.length,true); v.setUint32(o+24,p.db.length,true);
+      v.setUint16(o+28,p.nb.length,true);
+      v.setUint32(o+38,(p.exec?0o100755:0o100644)<<16,true); v.setUint32(o+42,offs[i],true);
+      u.set(p.nb,o+46); o+=46+p.nb.length; });
+    v.setUint32(o,0x06054b50,true); v.setUint16(o+8,parts.length,true); v.setUint16(o+10,parts.length,true);
+    v.setUint32(o+12,o-cdOff,true); v.setUint32(o+16,cdOff,true);
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([buf],{type:'application/zip'}));
-    a.download=name.replace(/\.command$/,'')+'.zip'; a.click(); URL.revokeObjectURL(a.href);
+    a.download=zipname; a.click(); URL.revokeObjectURL(a.href);
   }
   function toggleSnipInfo(force){
     let p=document.getElementById('infopop');
@@ -1512,17 +1513,20 @@ function initViewer(DATA){
     p=document.createElement('div'); p.id='infopop'; p.className='infopop';
     p.onclick=ev=>ev.stopPropagation();
     p.innerHTML='<b>Pasting into FileMaker</b>'+
-      'This copies snippet XML as text; FileMaker pastes only its own clipboard format. '+
-      'A tiny helper converts it \u2014 install once:'+
-      '<ol><li>Download: <button class="csv" id="dlhelpmac">macOS</button>'+
-      '<button class="csv" id="dlhelpwin">Windows</button></li>'+
-      '<li>macOS: unzip; first run only: right-click \u2192 Open</li>'+
-      '<li>From then on: copy here \u2192 run helper \u2192 paste in FileMaker</li></ol>'+
-      '<span class="via">Already use <a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a>? '+
-      'Its \u201cXML to FM Objects\u201d does the same job. CLI: <code>fm-ddr clip</code>.</span>';
+      'This copies snippet XML as text; FileMaker needs its own clipboard format.'+
+      '<ol><li><button class="csv" id="dlhelpmac">Install auto-converter (macOS)</button>'+
+      ' \u2014 unzip, run <code>install.command</code> (first run: right-click \u2192 Open)</li>'+
+      '<li>Done \u2014 from now on every snippet you copy is instantly paste-ready. '+
+      'Uninstaller included.</li></ol>'+
+      '<span class="via">Windows: <button class="csv" id="dlhelpwin">one-shot helper</button> (run after each copy) \u00b7 '+
+      '<a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a> works too \u00b7 '+
+      'CLI: <code>fm-ddr clip</code></span>';
     const blk=document.getElementById('stepsblock');
     if(blk) blk.appendChild(p);
-    document.getElementById('dlhelpmac').onclick=()=>makeExecZip('fm-snippet-helper.command',HELPER_MAC);
+    document.getElementById('dlhelpmac').onclick=()=>makeExecZip('fm-snippet-helper.zip',[
+      {name:'install.command',content:HELPER_INSTALL,exec:true},
+      {name:'uninstall.command',content:HELPER_UNINSTALL,exec:true},
+      {name:'fm-snippet-watcher.sh',content:HELPER_WATCHER,exec:true}]);
     document.getElementById('dlhelpwin').onclick=()=>downloadText('fm-snippet-helper.ps1',HELPER_WIN,'text/plain');
   }
   async function copyFMSnippet(e,btn){
@@ -1649,8 +1653,8 @@ function initViewer(DATA){
     const sb=$('list')&&$('list').parentElement;
     if(sb&&!document.getElementById('credit')){
       const c=document.createElement('div'); c.id='credit'; c.className='credit';
-      c.innerHTML='Made by <a href="https://oogi.io" target="_blank" rel="noopener">OOGI BV</a> '+
-        '\u2014 Thomas De Smet \u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a>';
+      c.innerHTML='<a href="https://oogi.io" target="_blank" rel="noopener">OOGI</a> '+
+        '- Thomas De Smet \u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a>';
       sb.appendChild(c);
     }
   })();
