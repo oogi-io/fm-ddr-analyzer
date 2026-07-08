@@ -153,6 +153,14 @@ class TestParser(unittest.TestCase):
         self.assertEqual(c["custom_function"], 1)
         self.assertEqual(c["value_list"], 2)
 
+    def test_menu_separators_are_not_entities(self):
+        # Scripts and layouts named "-" are FileMaker menu-divider lines, not
+        # real entities; they must not appear in the index or inflate counts.
+        n = self.conn.execute(
+            "SELECT COUNT(*) FROM entities WHERE kind IN ('script','layout') AND name='-'"
+        ).fetchone()[0]
+        self.assertEqual(n, 0)
+
     def test_top_level_script_captured_and_resolved(self):
         # A script kept OUTSIDE any folder (directly under ScriptCatalog) must be
         # captured as a definition, and an inbound Perform Script must resolve to
