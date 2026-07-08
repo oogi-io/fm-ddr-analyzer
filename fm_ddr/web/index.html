@@ -724,9 +724,27 @@ function initViewer(DATA){
   function outboundFor(id){const e=byId[id];let outs=(outbound[id]||[]).slice();
     if(e&&e.k==='script')(stepsByScript[id]||[]).forEach(sid=>{if(outbound[sid])outs=outs.concat(outbound[sid]);});
     return outs;}
-  function sourceDisplay(x){const e=byId[x.s];if(!e)return{label:'?',id:x.s,amb:x.a};
-    if(e.k==='script_step'){const p=byId[e.p];return{label:p?p.n:'script',via:e.st,id:p?p.id:x.s,amb:x.a};}
-    return{label:e.n,via:null,id:e.id,amb:x.a};}
+  const CATL={base_table:'Tables',field:'Fields',table_occurrence:'Table occurrences',
+    relationship:'Relationships',layout:'Layouts',script:'Scripts',script_step:'Scripts',
+    custom_function:'Custom functions',value_list:'Value lists',unknown:'Other'};
+  const catLabel=k=>CATL[k]||kl(k);
+  const CTXL={perform_script:'perform script',trigger:'trigger',calc:'in calculation',
+    field_reference:'set field / reference',go_to_layout:'go to layout',layout_object:'on layout',
+    value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
+    to_reference:'TO reference',value_list_field:'value list source',sort:'sort order'};
+  const ctxLabel=c=>CTXL[c]||c;
+  function sourceDisplay(x){
+    let e=byId[x.s];
+    if(e&&e.k==='script_step'){ const p=byId[e.p];
+      return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabel(x.c), amb:x.a}; }
+    if(!e) return {label:'?', id:x.s, cat:'unknown', via:ctxLabel(x.c), amb:x.a};
+    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabel(x.c), amb:x.a};
+  }
+  function targetDisplay(x){
+    if(x.t!=null){ const t=byId[x.t];
+      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabel(x.c), amb:x.a}; }
+    return {label:x.tr||('('+x.tk+')'), ext:true, cat:x.tk, via:ctxLabel(x.c)};
+  }
   function groupBy(a,k){const m={};a.forEach(x=>{(m[x[k]]=m[x[k]]||[]).push(x);});return m;}
   function filteredRows(){
     const q=$('q').value.trim().toLowerCase();
@@ -776,9 +794,7 @@ function initViewer(DATA){
     h+='<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
        renderRefs(ins,sourceDisplay)+'</div>';
     h+='<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
-       renderRefs(outs,x=>{const via=(byId[x.s]&&byId[x.s].k==='script_step')?byId[x.s].st:null;
-         return x.t!=null?{label:byId[x.t]?byId[x.t].n:'?',id:x.t,via:via,amb:x.a}
-                         :{label:x.tr||('('+x.tk+')'),ext:true};})+'</div>';
+       renderRefs(outs,targetDisplay)+'</div>';
     h+='</div>';
     const d=$('detail'); d.innerHTML=h;
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
@@ -1110,9 +1126,7 @@ function initViewer(DATA){
       '<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
       renderRefs(ins,sourceDisplay)+'</div>'+
       '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
-      renderRefs(outs,x=>{const via=(byId[x.s]&&byId[x.s].k==='script_step')?byId[x.s].st:null;
-        return x.t!=null?{label:byId[x.t]?byId[x.t].n:'?',id:x.t,via:via,amb:x.a}
-                        :{label:x.tr||('('+x.tk+')'),ext:true};})+'</div></div></div>';
+      renderRefs(outs,targetDisplay)+'</div></div></div>';
     const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1">'+
       '<title>'+esc(e.n||'entity')+' \u2014 FM DDR</title><style>'+style+
@@ -1397,16 +1411,25 @@ function initViewer(DATA){
   }
   function renderRefs(refs,resolveFn){
     if(!refs.length) return '<p class="empty">None</p>';
-    const g=groupBy(refs,'c'); let h='';
-    Object.keys(g).sort().forEach(ctx=>{
-      h+='<div class="grp"><div class="ctx">'+esc(ctx)+' ('+g[ctx].length+')</div>';
-      const seen={};
-      g[ctx].forEach(x=>{const r=resolveFn(x); const key=(r.id||r.label); if(seen[key])return; seen[key]=1;
+    const items=refs.map(resolveFn);
+    const g=groupBy(items,'cat');
+    const cats=Object.keys(g).sort((a,b)=>g[b].length-g[a].length);
+    let h='';
+    cats.forEach(cat=>{
+      const seen={}, rows=[];
+      g[cat].forEach(r=>{ const key=(r.id||r.label); if(seen[key])return; seen[key]=1; rows.push(r); });
+      const ctxs=[...new Set(rows.map(r=>r.via))]; const single=ctxs.length===1;
+      const hdr=catLabel(cat)+(single&&ctxs[0]?' \u00b7 '+ctxs[0]:'')+' ('+rows.length+')';
+      h+='<div class="grp"><div class="ctx">'+esc(hdr)+'</div>';
+      rows.forEach(r=>{
+        const via=single?'':r.via;
         const amb=r.amb?' <span class="via" title="several candidates matched this name">(ambiguous)</span>':'';
-        if(r.ext) h+='<div class="ref ext">'+esc(r.label)+'</div>';
+        if(r.ext) h+='<div class="ref ext">'+esc(r.label)+(via?' <span class="via">'+esc(via)+'</span>':'')+'</div>';
         else h+='<div class="ref" data-go="'+r.id+'">'+esc(r.label)+
-          (r.via?' <span class="via">('+esc(r.via)+')</span>':'')+amb+'</div>';});
-      h+='</div>';});
+          (via?' <span class="via">'+esc(via)+'</span>':'')+amb+'</div>';
+      });
+      h+='</div>';
+    });
     return h;
   }
   let codeResults=null;   // null = normal name-filter mode
