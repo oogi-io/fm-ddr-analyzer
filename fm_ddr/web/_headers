@@ -1,0 +1,10 @@
+# Cloudflare Pages edge headers. Belt-and-suspenders over the per-page CSP
+# <meta> tags: both policies are enforced, so the effective policy is their
+# intersection. The app makes no network requests in normal use, so
+# connect-src 'none' breaks nothing and guarantees the "nothing leaves your
+# machine" promise even if a script injection ever slips past output escaping.
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: no-referrer
+  Content-Security-Policy: default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'

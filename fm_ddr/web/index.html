@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>FMSonar — FileMaker DDR explorer</title>
 <style>
 :root{
@@ -627,11 +629,15 @@ function walkEntry(entry,out){
   });
 }
 
-// test hook: index.html?src=foo.xml fetches a same-origin file through the same parser
+// test hook: index.html?src=foo.xml streams a SAME-ORIGIN file through the same
+// parser. Same-origin is enforced so a crafted ?src=//evil/x.xml link cannot make
+// the app fetch attacker content; the production CSP (connect-src 'none') blocks
+// the fetch outright, so this only runs when the app is served with a relaxed CSP.
 const params=new URLSearchParams(location.search);
 if(params.get('src')) window.addEventListener('load',()=>{
-  const urls=params.get('src').split(',').map(u=>new URL(u,location.href).href);
-  startParse(urls.length>1?{urls:urls}:{url:urls[0]});
+  const urls=params.get('src').split(',').map(u=>new URL(u,location.href))
+    .filter(u=>u.origin===location.origin).map(u=>u.href);
+  if(urls.length) startParse(urls.length>1?{urls:urls}:{url:urls[0]});
 });
 
 function fmtBytes(n){ return n>1e6?(n/1e6).toFixed(0)+' MB':(n/1e3).toFixed(0)+' KB'; }
@@ -683,6 +689,8 @@ $('export').onclick=()=>{
   const viewerSrc=document.getElementById('viewer-src').textContent;
   const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width, initial-scale=1">'+
+    '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\' blob:; worker-src blob:; img-src data: blob:; style-src \'unsafe-inline\'; base-uri \'none\'; form-action \'none\'; connect-src \'none\'">'+
+    '<meta name="referrer" content="no-referrer">'+
     '<title>DDR - '+esc0(DATA.meta.label)+'</title><style>'+style+'</style></head><body>'+
     '<header><h1>FMSonar</h1><span class="sub" id="meta"></span></header>'+
     '<div class="wrap" id="wrap" style="display:flex"><div class="sidebar"><div class="controls">'+
@@ -706,7 +714,7 @@ function initViewer(DATA){
   const $=id=>document.getElementById(id);
   const KIND_LABELS={base_table:'table',table_occurrence:'TO',custom_function:'CF',value_list:'VL'};
   const kl=k=>KIND_LABELS[k]||k.replace('_',' ');
-  const esc=s=>(s==null?'':''+s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+  const esc=s=>(s==null?'':''+s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const byId={},inbound={},outbound={},stepsByScript={};
   DATA.entities.forEach(e=>byId[e.id]=e);
   DATA.edges.forEach(x=>{(outbound[x.s]=outbound[x.s]||[]).push(x); if(x.t!=null)(inbound[x.t]=inbound[x.t]||[]).push(x);});
@@ -1013,18 +1021,18 @@ function initViewer(DATA){
       const p1=pos[ed.a],p2=pos[ed.b]; if(!p1||!p2) return;
       const x1=p1.x+p1.w,y1=p1.y+NH/2,x2=p2.x,y2=p2.y+NH/2,mx=(x1+x2)/2;
       const names={perform:'Perform Script',psos:'Perform Script on Server',trigger:'Script trigger',button:'Layout button'};
-      svg+='<path class="t-'+ed.t+'" data-a="'+ed.a+'" data-b="'+ed.b+'"'+
+      svg+='<path class="t-'+ed.t+'" data-a="'+esc(ed.a)+'" data-b="'+esc(ed.b)+'"'+
         (ed.c>1?' stroke-width="2"':'')+
         ' d="M'+x1+' '+y1+' C'+mx+' '+y1+' '+mx+' '+y2+' '+x2+' '+y2+'">'+
         '<title>'+names[ed.t]+(ed.c>1?' \u00d7'+ed.c:'')+'</title></path>';
-      if(ed.c>1) svg+='<text class="ecount" data-a="'+ed.a+'" data-b="'+ed.b+'" x="'+(mx-6)+'" y="'+((y1+y2)/2-3)+'">\u00d7'+ed.c+'</text>';
+      if(ed.c>1) svg+='<text class="ecount" data-a="'+esc(ed.a)+'" data-b="'+esc(ed.b)+'" x="'+(mx-6)+'" y="'+((y1+y2)/2-3)+'">\u00d7'+ed.c+'</text>';
     });
     Object.keys(pos).forEach(k=>{
       const p=pos[k], n=p.n, l=levels.find(L=>g.cols[L].includes(n));
       const isMatch=q&&n.label.toLowerCase().includes(q);
       const cls='cnode'+(n.sel?' sel':(n.more?' more':(l<0?' caller':' callee')))+
         (n.ext?' extn':'')+(isMatch?' match':'');
-      svg+='<g class="'+cls+'" data-key="'+k+'"'+(n.id!=null?' data-node="'+n.id+'"':'')+'>'+
+      svg+='<g class="'+cls+'" data-key="'+esc(k)+'"'+(n.id!=null?' data-node="'+n.id+'"':'')+'>'+
         '<title>'+esc(n.label)+(n.entry?' \u2014 entry point (no callers)':'')+(n.ext?' (external / unresolved)':'')+'</title>'+
         '<rect x="'+p.x+'" y="'+p.y+'" width="'+p.w+'" height="'+NH+'" rx="6"/>'+
         (n.entry?'<circle class="entrydot" cx="'+(p.x+9)+'" cy="'+(p.y+NH/2)+'" r="3"/>':'')+
@@ -1362,6 +1370,9 @@ function initViewer(DATA){
   }
   function toCSV(rows){
     return rows.map(r=>r.map(v=>{v=(v==null?'':''+v);
+      // Neutralize spreadsheet formula injection: a cell starting with = + - @
+      // (or a tab/CR that can shift the first token) executes on open in Excel/Sheets.
+      if(/^[=+\-@\t\r]/.test(v)) v="'"+v;
       return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}).join(',')).join('\n')+'\n';
   }
   function hTable(title,cols,rows,csvName){

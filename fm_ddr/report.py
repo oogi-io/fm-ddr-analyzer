@@ -95,6 +95,8 @@ def report(db_path, out_path=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
+<meta name="referrer" content="no-referrer">
 <title>DDR - {title}</title>
 <style>{style}</style>
 </head>
