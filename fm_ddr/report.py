@@ -101,7 +101,7 @@ def report(db_path, out_path=None):
 <style>{style}</style>
 </head>
 <body>
-<header><h1>FMSonar</h1><span class="sub" id="meta"></span></header>
+<header><h1>fmsonar</h1><span class="sub" id="meta"></span></header>
 <div class="wrap" id="wrap" style="display:flex">
   <div class="sidebar">
     <div class="controls">

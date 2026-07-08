@@ -1,8 +1,8 @@
-# FMSonar
+# fmsonar
 
 *FileMaker DDR explorer — live at **[fmsonar.com](https://fmsonar.com)** · repo/engine name: `fm-ddr-analyzer`*
 
-FMSonar answers *"where is this field / script / table occurrence / custom
+fmsonar answers *"where is this field / script / table occurrence / custom
 function actually used?"* for a whole FileMaker solution, starting from its
 **Database Design Report** (DDR, the `*_fmp12.xml` export). One engine, two
 interfaces:
@@ -288,6 +288,6 @@ fm-ddr-analyzer/
 
 [Thomas De Smet](https://oogi.io) · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
 
-*FileMaker and Claris are trademarks of Claris International Inc. FMSonar is an
+*FileMaker and Claris are trademarks of Claris International Inc. fmsonar is an
 independent tool, not affiliated with or endorsed by Claris. See
 [SECURITY.md](SECURITY.md) for the privacy and threat model.*

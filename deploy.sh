@@ -1,5 +1,5 @@
 #!/bin/bash
-# Deploy FMSonar (the web app) to fmsonar.com (Cloudflare Pages).
+# Deploy fmsonar (the web app) to fmsonar.com (Cloudflare Pages).
 #
 #   ./deploy.sh
 #

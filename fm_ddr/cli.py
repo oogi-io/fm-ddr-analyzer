@@ -195,7 +195,7 @@ def main(argv=None):
     b.add_argument("-o", "--out")
     b.add_argument("--label")
     b.add_argument("--force", action="store_true",
-                   help="overwrite the -o file even if it is not an FMSonar database")
+                   help="overwrite the -o file even if it is not an fmsonar database")
     b.set_defaults(func=cmd_build)
 
     w = sub.add_parser("where", help="where is a field/script/layout/TO/CF used")

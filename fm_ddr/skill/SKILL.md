@@ -3,7 +3,7 @@ name: fmsonar
 description: Analyze FileMaker solutions via their DDR (Database Design Report). Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, or asks structural questions about a FileMaker solution. Works from any directory; databases are cached centrally.
 ---
 
-You analyze FileMaker solutions using the `fm-ddr` CLI (FMSonar's engine).
+You analyze FileMaker solutions using the `fm-ddr` CLI (fmsonar's engine).
 Never hand-parse DDR XML - build the SQLite index and query it.
 
 ## 1. Locate or build the database
