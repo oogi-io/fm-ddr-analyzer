@@ -83,6 +83,10 @@ Roll script steps up to their script via `parent_entity_id` when reporting —
 - **`ambiguous=1` means the resolver guessed** among same-named candidates —
   say so when those rows matter to the answer.
 - Built-in FileMaker functions are deliberately NOT edges; find them via FTS.
+- **The index is a model, not the whole DDR.** Auto-enter/validation details,
+  layout geometry, custom-menu internals, and import/export orders are not
+  extracted. For questions outside the model, say so and read the original
+  DDR XML directly (stream it - it is large UTF-16-LE) rather than guessing.
 
 ## Practical notes
 
