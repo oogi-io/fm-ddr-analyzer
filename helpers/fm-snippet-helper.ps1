@@ -1,6 +1,6 @@
 # FM Snippet Helper (Windows) - part of FM DDR Analyzer
 # https://github.com/oogi-io/fm-ddr-analyzer
-# OOGI - Thomas De Smet <tdesmet@oogi.io> - MIT
+# Thomas De Smet <tdesmet@oogi.io> - MIT
 #
 # Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app's
 # "Copy FM snippet" button) into FileMaker clipboard objects (the registered

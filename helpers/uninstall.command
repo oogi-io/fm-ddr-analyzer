@@ -1,6 +1,6 @@
 #!/bin/bash
 # FM Snippet Helper - uninstall (macOS)
-# OOGI - Thomas De Smet <tdesmet@oogi.io>
+# Thomas De Smet <tdesmet@oogi.io>
 
 AGENT="$HOME/Library/LaunchAgents/io.oogi.fm-snippet-helper.plist"
 DIR="$HOME/Library/Application Support/FM Snippet Helper"

@@ -1,6 +1,6 @@
 #!/bin/bash
 # FM Snippet Helper - install (macOS)
-# OOGI - Thomas De Smet <tdesmet@oogi.io> - MIT
+# Thomas De Smet <tdesmet@oogi.io> - MIT
 #
 # Installs a tiny background watcher: from now on, every fmxmlsnippet XML
 # you copy becomes instantly paste-ready in FileMaker. Nothing to run again.
@@ -12,15 +12,16 @@ AGENT="$HOME/Library/LaunchAgents/io.oogi.fm-snippet-helper.plist"
 SRC="$(cd "$(dirname "$0")" && pwd)"
 
 mkdir -p "$DIR" "$HOME/Library/LaunchAgents"
-cp "$SRC/fm-snippet-watcher.sh" "$DIR/fm-snippet-watcher.sh"
-chmod +x "$DIR/fm-snippet-watcher.sh"
+# the installed name is what macOS shows in Login Items & Extensions
+cp "$SRC/fm-snippet-watcher.sh" "$DIR/FM Snippet Helper"
+chmod +x "$DIR/FM Snippet Helper"
 
 cat > "$AGENT" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
   <key>Label</key><string>io.oogi.fm-snippet-helper</string>
-  <key>ProgramArguments</key><array><string>$DIR/fm-snippet-watcher.sh</string></array>
+  <key>ProgramArguments</key><array><string>$DIR/FM Snippet Helper</string></array>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
 </dict></plist>
