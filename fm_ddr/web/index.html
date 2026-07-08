@@ -233,7 +233,8 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   <div class="err" id="err"></div>
   <div class="credit"><a href="https://oogi.io" target="_blank" rel="noopener">Thomas De Smet</a>
     · <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a> ·
-    <a href="https://github.com/oogi-io/fm-ddr-analyzer" target="_blank" rel="noopener">Source (MIT)</a></div>
+    <a href="https://github.com/oogi-io/fm-ddr-analyzer" target="_blank" rel="noopener">Source (MIT)</a>
+    · <span id="buildstamp"></span></div>
 </div>
 
 <div class="wrap" id="wrap">
@@ -575,7 +576,10 @@ onmessage=(ev)=>{ run(ev.data).catch(e=>postMessage({type:'error',message:String
 
 <!-- ================= MAIN THREAD ================= -->
 <script>
+const APP_BUILD='__BUILD__';
 const $=id=>document.getElementById(id);
+(function(){ const b=document.getElementById('buildstamp');
+  if(b) b.textContent=APP_BUILD.indexOf('__')===0?'dev':APP_BUILD; })();
 const workerSrc=$('worker-src').textContent;
 const workerURL=URL.createObjectURL(new Blob([workerSrc],{type:'text/javascript'}));
 
@@ -1697,7 +1701,8 @@ const HELPER_UNINSTALL='#!/bin/bash\n# FM Snippet Helper - uninstall (macOS)\n# 
     if(sb&&!document.getElementById('credit')){
       const c=document.createElement('div'); c.id='credit'; c.className='credit';
       c.innerHTML='<a href="https://oogi.io" target="_blank" rel="noopener">Thomas De Smet</a> '+
-        '\u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a>';
+        '\u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a>'+
+        (typeof APP_BUILD!=='undefined'&&APP_BUILD.indexOf('__')!==0?' \u00b7 '+APP_BUILD:'');
       sb.appendChild(c);
     }
   })();
