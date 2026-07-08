@@ -26,3 +26,6 @@ build/
 *.html
 !fm_ddr/web/index.html
 !fm_ddr/web/about.html
+
+# Local Claude Code tooling (personal skills, launch configs)
+.claude/
