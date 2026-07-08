@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>FM DDR Analyzer</title>
+<title>FMSonar — FileMaker DDR explorer</title>
 <style>
 :root{
   --bg:#fff; --panel:#f6f7f9; --border:#e2e5ea; --text:#1c1f24; --muted:#697280;
@@ -210,7 +210,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 </head>
 <body>
 <header>
-  <h1>FM DDR Analyzer</h1>
+  <h1>FMSonar</h1>
   <span class="sub" id="meta"></span>
   <span class="actions">
     <button class="btn" id="reset" style="display:none">Open another DDR</button>
@@ -680,7 +680,7 @@ $('export').onclick=()=>{
   const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
     '<meta name="viewport" content="width=device-width, initial-scale=1">'+
     '<title>DDR - '+esc0(DATA.meta.label)+'</title><style>'+style+'</style></head><body>'+
-    '<header><h1>FM DDR Analyzer</h1><span class="sub" id="meta"></span></header>'+
+    '<header><h1>FMSonar</h1><span class="sub" id="meta"></span></header>'+
     '<div class="wrap" id="wrap" style="display:flex"><div class="sidebar"><div class="controls">'+
     '<div class="filechips" id="filechips"></div><div class="kinds" id="kinds"></div>'+
     '<input id="q" placeholder="Search entities..." autocomplete="off"></div>'+
@@ -1144,7 +1144,7 @@ function initViewer(DATA){
     const style=document.querySelector('style').textContent;
     const path=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
-    let body='<header><h1>FM DDR Analyzer</h1><span class="sub">'+esc(DATA.meta.label)+
+    let body='<header><h1>FMSonar</h1><span class="sub">'+esc(DATA.meta.label)+
       (DATA.meta.ddr_version?' \u00b7 DDR '+DATA.meta.ddr_version:'')+' \u00b7 shared entity</span></header>'+
       '<div class="detail" style="overflow:visible">'+
       '<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
@@ -1166,7 +1166,7 @@ function initViewer(DATA){
       '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
       renderRefs(outs,targetDisplay)+'</div></div></div>';
     const credit='<div class="credit" style="border-top:1px solid var(--border);margin-top:20px">'+
-      'FM DDR Analyzer \u00b7 <a href="https://oogi.io">Thomas De Smet</a> '+
+      'FMSonar \u00b7 <a href="https://oogi.io">Thomas De Smet</a> '+
       '\u00b7 <a href="mailto:tdesmet@oogi.io">tdesmet@oogi.io</a></div>';
     const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1">'+
