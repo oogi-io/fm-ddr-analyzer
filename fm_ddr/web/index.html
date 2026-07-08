@@ -1431,14 +1431,21 @@ function initViewer(DATA){
     const needle='name="'+attrEscape(scriptName)+'"';
     const openRe=/<Script\b[^>]*[^/]>/g;
     let decoder=null, tail='', cap=false, depth=0, buf=[];
+    // trigger references use the same open+close form as definitions, so a
+    // candidate only counts if the captured block contains a StepList
     const feedLine=(line)=>{
       if(!cap){
-        if(line.indexOf('<Script')>-1 && line.indexOf(needle)>-1 && !/\/>\s*$/.test(line)) cap=true;
-        else return false;
+        if(line.indexOf('<Script')>-1 && line.indexOf(needle)>-1 && !/\/>\s*$/.test(line)){
+          cap=true; buf=[]; depth=0;
+        } else return false;
       }
       buf.push(line);
       depth+=(line.match(openRe)||[]).length-(line.match(/<\/Script>/g)||[]).length;
-      return cap && depth<=0;
+      if(depth<=0){
+        if(buf.join('\n').indexOf('<StepList')>-1) return true;
+        cap=false; // was a reference (e.g. a trigger) - keep looking
+      }
+      return false;
     };
     while(true){
       const {done,value}=await reader.read();
@@ -1452,7 +1459,6 @@ function initViewer(DATA){
       for(const l of lines){ if(feedLine(l)){ reader.cancel(); return buf.join('\n'); } }
     }
     if(tail&&feedLine(tail)) return buf.join('\n');
-    if(cap) return buf.join('\n');
     throw new Error('script not found in source file');
   }
   function ddrStepsToSnippet(scriptXml){
