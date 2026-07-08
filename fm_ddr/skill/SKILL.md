@@ -75,7 +75,13 @@ lookup), these are mandatory, one query each:
    latent bug and costs one round-trip to detect.
 4. **Report FileMaker `fm_id`, never the internal `entity_id`** - findings
    must be checkable inside FileMaker.
-5. **The DDR is schema, not data** - verify flag values / sort orders /
+5. **If the mechanism involves UI behavior, read the layout body like a
+   script body** - `SELECT body FROM text_index WHERE kind='layout' AND
+   name=...`. Button launch params, hide conditions, and session/global
+   gates live on layouts, not in script_step rows. A flag read on a layout
+   but set by no launch anywhere is a bug of the same family as the
+   write-only global.
+6. **The DDR is schema, not data** - verify flag values / sort orders /
    config rows against the live system, and label findings DDR-derived vs
    live-verified.
 
