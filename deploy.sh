@@ -3,8 +3,9 @@
 #
 #   ./deploy.sh
 #
-# Uses the tdesmet@oogi.io Cloudflare account (CLOUDFLARE_API_TOKEN_TDESMET /
-# CLOUDFLARE_ACCOUNT_ID_TDESMET from the workspace root .env.local).
+# Reads Cloudflare credentials from a local, untracked .env.local (variables
+# CLOUDFLARE_API_TOKEN_TDESMET / CLOUDFLARE_ACCOUNT_ID_TDESMET). Maintainer
+# script; a self-hoster would point it at their own token/account vars.
 
 set -e
 cd "$(dirname "$0")"
@@ -23,8 +24,8 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 # Export ONLY the two Cloudflare vars into wrangler's environment. Sourcing the
-# whole .env.local would hand every workspace secret (Jira, AWS, Supabase, ...)
-# to npx and any npm lifecycle script it runs.
+# whole .env.local would hand every unrelated secret it may hold to npx and any
+# npm lifecycle script it runs.
 ENV_FILE=../../.env.local
 get_var(){ grep -E "^$1=" "$ENV_FILE" | head -1 | cut -d= -f2- | sed 's/^"//;s/"$//'; }
 export CLOUDFLARE_API_TOKEN="$(get_var CLOUDFLARE_API_TOKEN_TDESMET)"
