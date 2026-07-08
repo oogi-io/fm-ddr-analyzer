@@ -793,13 +793,28 @@ function initViewer(DATA){
       (activeFile<0||e.f===activeFile)&&
       (!q||(e.n||'').toLowerCase().includes(q)||(e.bt||'').toLowerCase().includes(q)));
   }
+  // Case-insensitive, natural (field2 < field10), code-point text compare.
+  // Unlike localeCompare, it does NOT treat leading punctuation as ignorable,
+  // so FileMaker's underscore-prefixed names (_id, __UUID, ...) sort to the top
+  // the way FileMaker itself orders them — not folded in among the letters.
+  function cmpText(a,b){
+    a=(''+a).toLowerCase(); b=(''+b).toLowerCase();
+    if(a===b) return 0;
+    const ax=a.match(/\d+|\D+/g)||[], bx=b.match(/\d+|\D+/g)||[];
+    for(let i=0;i<Math.min(ax.length,bx.length);i++){
+      const x=ax[i],y=bx[i]; if(x===y) continue;
+      if(/^\d/.test(x)&&/^\d/.test(y)){ const d=(+x)-(+y); if(d) return d<0?-1:1; }
+      return x<y?-1:1;   // code-point order: '_' (95) precedes letters (97+)
+    }
+    return ax.length-bx.length;
+  }
   function render(){
     const opts=sortOptions();
     let so=opts.find(o=>o.k===listSort); if(!so){ listSort='name'; listDir=1; so=opts[0]; }
     const rows=filteredRows().sort((a,b)=>{
       const va=so.get(a),vb=so.get(b);
-      const r=so.num?((va||0)-(vb||0)):(''+va).localeCompare(''+vb,undefined,{numeric:true,sensitivity:'base'});
-      return (r*listDir)||((a.n||'').localeCompare(b.n||''));
+      const r=so.num?((va||0)-(vb||0)):cmpText(va,vb);
+      return (r*listDir)||cmpText(a.n||'',b.n||'');
     }).slice(0,600);
     const list=$('list'); list.innerHTML='';
     rows.forEach(e=>{const d=document.createElement('div');d.className='item'+(e.id===selId?' sel':'');
