@@ -156,12 +156,10 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
 - [x] **Search in code.** Enter-search scans every calculation and script
   step; results show highlighted snippets and clicking a step match opens
   the script scrolled to that exact line.
-- [x] **Sortable table view.** FMPerception-style flat view: the current
-  filtered entities in a sortable table (`#table`), columns adapting to the
-  kind (scripts get Steps / Comments / Calls / Complexity; fields get Table /
-  Type / Data; all get Referenced by). Click a header to sort asc/desc
-  (metrics default to descending), click a row to open. Respects the file,
-  kind, and search filters.
+- [x] **Sort the entity list.** A compact "Sort" popover on the list orders
+  by Name or Referenced-by (and, when scripts are soloed, Steps / Calls /
+  Complexity); sorting by a metric shows that number inline on each row.
+  Lighter than a full table — the list stays the single browse surface.
 - [x] **Solution health report.** Unused-field and orphan-script candidates,
   unresolved and ambiguous references, hotspots and biggest scripts — every
   list clickable, each downloadable as CSV, with the coverage caveats printed

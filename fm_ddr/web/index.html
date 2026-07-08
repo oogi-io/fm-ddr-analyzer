@@ -169,17 +169,20 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .htable .hrow span.num{flex:0 0 70px;text-align:right}
 .caveat{background:var(--out-bg);border:1px solid var(--out);border-radius:8px;
   padding:10px 14px;font-size:12px;margin:14px 0;color:var(--text)}
-.dtable{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
-.dtable th{position:sticky;top:0;background:var(--chip);color:var(--muted);text-align:left;
-  padding:6px 10px;cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--border);user-select:none}
-.dtable th.num{text-align:right}
-.dtable th:hover{color:var(--accent)}
-.dtable th .ar{font-size:9px;margin-left:3px}
-.dtable td{padding:5px 10px;border-bottom:1px solid var(--border);white-space:nowrap;
-  overflow:hidden;text-overflow:ellipsis;max-width:340px}
-.dtable td.num{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
-.dtable tbody tr{cursor:pointer}
-.dtable tbody tr:hover{background:var(--accent-bg)}
+.listbar{display:flex;gap:6px;margin-top:10px;position:relative}
+.minibtn{border:1px solid var(--border);background:var(--bg);color:var(--muted);
+  border-radius:7px;padding:5px 10px;font-size:12px;cursor:pointer}
+.minibtn:hover{border-color:var(--accent);color:var(--accent)}
+.sortpop{position:absolute;top:34px;left:0;z-index:20;background:var(--bg);
+  border:1px solid var(--border);border-radius:8px;padding:4px;min-width:180px;
+  box-shadow:0 8px 24px rgba(0,0,0,.28)}
+.sortpop button{display:flex;justify-content:space-between;gap:16px;width:100%;border:0;
+  background:transparent;color:var(--text);padding:6px 9px;font-size:12px;cursor:pointer;
+  border-radius:6px;text-align:left}
+.sortpop button:hover{background:var(--accent-bg)}
+.sortpop button.on{color:var(--accent)}
+.item .metric{float:right;color:var(--accent);font-variant-numeric:tabular-nums;
+  font-size:12px;font-weight:650;margin-left:8px}
 .item .snip{color:var(--muted);font-size:11px;font-family:"SF Mono",Menlo,monospace;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .item .snip mark{background:transparent;color:var(--accent);font-weight:600}
@@ -731,19 +734,26 @@ function initViewer(DATA){
       (!q||(e.n||'').toLowerCase().includes(q)||(e.bt||'').toLowerCase().includes(q)));
   }
   function render(){
-    const rows=filteredRows().slice(0,600);
+    const opts=sortOptions();
+    let so=opts.find(o=>o.k===listSort); if(!so){ listSort='name'; listDir=1; so=opts[0]; }
+    const rows=filteredRows().sort((a,b)=>{
+      const va=so.get(a),vb=so.get(b);
+      const r=so.num?((va||0)-(vb||0)):(''+va).localeCompare(''+vb,undefined,{numeric:true,sensitivity:'base'});
+      return (r*listDir)||((a.n||'').localeCompare(b.n||''));
+    }).slice(0,600);
     const list=$('list'); list.innerHTML='';
     rows.forEach(e=>{const d=document.createElement('div');d.className='item'+(e.id===selId?' sel':'');
       const sub=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
-      d.innerHTML='<div class="n"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(e.n||'(unnamed)')+'</div>'+
+      d.innerHTML='<div class="n"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(e.n||'(unnamed)')+
+        (so.num?'<span class="metric">'+so.get(e)+'</span>':'')+'</div>'+
         (sub?'<div class="m">'+esc(sub)+'</div>':'');
       d.onclick=()=>select(e.id); list.appendChild(d);});
     if(!rows.length) list.innerHTML='<div class="item m">No matches</div>';
-    if(tableMode) renderTable();
+    updateSortBtn();
   }
   function select(id,fromHash){
     const e=byId[id]; if(!e) return;
-    tableMode=false; selId=id; render();
+    selId=id; render();
     if(!fromHash && location.hash!=='#e'+id){
       try{ location.hash='e'+id; }catch(x){}
     }
@@ -799,7 +809,7 @@ function initViewer(DATA){
   }
   const IS_COMMENT_STEP=t=>t==='Comment'||t==='# (comment)';
   let currentScriptText=''; let currentLineTexts=[]; let scriptView='steps';
-  let tableMode=false, sortCol='name', sortDir=1;
+  let listSort='name', listDir=1;
   function renderScriptBody(e){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
@@ -1246,74 +1256,44 @@ function initViewer(DATA){
         styledChainSVG(wrap.querySelector('svg')),'image/svg+xml');
     };
   }
-  // ---- sortable entity table (FMPerception-style flat view) ----
+  // ---- list sorting ----
   const refBy=e=>(inbound[e.id]||[]).length;
   const stepCount=e=>(stepsSorted[e.id]||[]).length;
-  const commentCount=e=>(stepsSorted[e.id]||[]).filter(st=>IS_COMMENT_STEP(st.st)).length;
   const callCount=e=>outboundFor(e.id).filter(x=>x.c==='perform_script').length;
   const CX=/^(If|Else If|Loop)$/;
   const complexity=e=>1+(stepsSorted[e.id]||[]).filter(st=>CX.test(st.st||'')).length;
-  function tableColumns(kinds){
-    const multi=kinds.size!==1;
-    const only=multi?null:[...kinds][0];
-    const cols=[{k:'name',label:'Name',get:e=>e.n||'',num:false}];
-    if(multi) cols.push({k:'kind',label:'Kind',get:e=>kl(e.k),num:false});
-    if(files.length>1) cols.push({k:'file',label:'File',get:e=>(files[e.f]||'').replace(/\.fmp12$/,''),num:false});
-    if(only==='script'){
-      cols.push({k:'group',label:'Group',get:e=>e.g||'',num:false});
-      cols.push({k:'steps',label:'Steps',get:stepCount,num:true});
-      cols.push({k:'comments',label:'Comments',get:commentCount,num:true});
-      cols.push({k:'calls',label:'Calls',get:callCount,num:true});
-      cols.push({k:'cx',label:'Complexity',get:complexity,num:true});
-    } else if(only==='field'){
-      cols.push({k:'bt',label:'Table',get:e=>e.bt||'',num:false});
-      cols.push({k:'ft',label:'Type',get:e=>e.ft||'',num:false});
-      cols.push({k:'dt',label:'Data',get:e=>e.dt||'',num:false});
-    } else if(only==='table_occurrence'){
-      cols.push({k:'bt',label:'Base table',get:e=>e.bt||'',num:false});
-    } else if(only==='layout'){
-      cols.push({k:'group',label:'Group',get:e=>e.g||'',num:false});
+  function sortOptions(){
+    const kinds=new Set(filteredRows().map(e=>e.k));
+    const opts=[{k:'name',label:'Name',num:false,get:e=>e.n||''},
+                {k:'refby',label:'Referenced by',num:true,get:refBy}];
+    if(kinds.size===1 && [...kinds][0]==='script'){
+      opts.push({k:'steps',label:'Steps',num:true,get:stepCount});
+      opts.push({k:'calls',label:'Calls scripts',num:true,get:callCount});
+      opts.push({k:'cx',label:'Complexity',num:true,get:complexity});
     }
-    cols.push({k:'refby',label:'Referenced by',get:refBy,num:true});
-    return cols;
+    return opts;
   }
-  function renderTable(){
-    const rows=filteredRows();
-    const kinds=new Set(rows.map(e=>e.k));
-    const cols=tableColumns(kinds);
-    if(!cols.some(c=>c.k===sortCol)) sortCol='name';
-    const col=cols.find(c=>c.k===sortCol);
-    const sorted=rows.slice().sort((a,b)=>{
-      const va=col.get(a), vb=col.get(b);
-      const r=col.num?((va||0)-(vb||0)):(''+va).localeCompare(''+vb,undefined,{numeric:true,sensitivity:'base'});
-      return r*sortDir;
-    });
-    const CAP=3000, shown=sorted.slice(0,CAP);
-    let h='<h2>Entities <span class="count">'+rows.length+'</span></h2>'+
-      '<div class="path">Filtered by the sidebar chips + search \u00b7 click a header to sort \u00b7 click a row to open</div>';
-    if(!rows.length){ $('detail').innerHTML=h+'<p class="empty">No matches for the current filters.</p>'; return; }
-    h+='<table class="dtable"><thead><tr>';
-    cols.forEach(c=>{ const active=c.k===sortCol;
-      h+='<th class="'+(c.num?'num':'')+'" data-col="'+c.k+'">'+esc(c.label)+
-         (active?'<span class="ar">'+(sortDir>0?'\u25b2':'\u25bc')+'</span>':'')+'</th>'; });
-    h+='</tr></thead><tbody>';
-    shown.forEach(e=>{ h+='<tr data-go="'+e.id+'">';
-      cols.forEach(c=>{ const v=c.get(e);
-        h+='<td class="'+(c.num?'num':'')+'">'+esc(c.num?(''+v):(v||''))+'</td>'; });
-      h+='</tr>'; });
-    h+='</tbody></table>';
-    if(rows.length>CAP) h+='<p class="empty">Showing the first '+CAP+' of '+rows.length+' \u2014 narrow with the filters.</p>';
-    const d=$('detail'); const keep=d.scrollTop; d.innerHTML=h;
-    d.querySelectorAll('th[data-col]').forEach(th=>th.onclick=()=>{
-      const k=th.dataset.col;
-      if(sortCol===k) sortDir=-sortDir;
-      else { sortCol=k; const c=cols.find(x=>x.k===k); sortDir=(c&&c.num)?-1:1; }
-      renderTable();
-    });
-    d.querySelectorAll('tr[data-go]').forEach(tr=>tr.onclick=()=>select(+tr.dataset.go));
-    d.scrollTop=keep;
+  function updateSortBtn(){
+    const b=document.getElementById('sortbtn'); if(!b) return;
+    const o=sortOptions().find(x=>x.k===listSort)||sortOptions()[0];
+    b.textContent='Sort: '+o.label+' '+(listDir>0?'\u2191':'\u2193');
   }
-  // ---- solution health report ----
+  function toggleSortPop(){
+    let p=document.getElementById('sortpop');
+    if(p){ p.remove(); return; }
+    p=document.createElement('div'); p.id='sortpop'; p.className='sortpop';
+    p.onclick=e=>e.stopPropagation();
+    sortOptions().forEach(o=>{
+      const active=o.k===listSort;
+      const btn=document.createElement('button'); btn.className=active?'on':'';
+      btn.innerHTML='<span>'+esc(o.label)+'</span>'+(active?'<span>'+(listDir>0?'\u2191':'\u2193')+'</span>':'');
+      btn.onclick=()=>{ if(listSort===o.k) listDir=-listDir; else { listSort=o.k; listDir=o.num?-1:1; }
+        p.remove(); render(); };
+      p.appendChild(btn);
+    });
+    document.getElementById('listbar').appendChild(p);
+  }
+  // ---- solution health report ----  // ---- solution health report ----
   function downloadText(name,text,mime){
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([text],{type:mime||'text/plain'}));
@@ -1490,28 +1470,25 @@ function initViewer(DATA){
   $('q').placeholder='Search names \u00b7 Enter: search in code';
   (function(){
     const ctrl=$('q').parentElement;
-    let tb=document.getElementById('tablebtn');
-    if(!tb){ tb=document.createElement('button'); tb.id='tablebtn'; tb.className='healthbtn';
-      tb.textContent='Table view (sortable)'; ctrl.appendChild(tb); }
-    tb.onclick=()=>{ tableMode=true; selId=null; render();
-      try{ if(location.hash!=='#table') location.hash='table'; }catch(x){} };
-    let hb=document.getElementById('healthbtn');
-    if(!hb){ hb=document.createElement('button'); hb.id='healthbtn'; hb.className='healthbtn';
-      hb.textContent='Solution health report'; ctrl.appendChild(hb); }
-    hb.onclick=()=>{ tableMode=false; selId=null; render(); renderHealth();
+    let bar=document.getElementById('listbar');
+    if(!bar){ bar=document.createElement('div'); bar.id='listbar'; bar.className='listbar'; ctrl.appendChild(bar); }
+    bar.innerHTML='<button class="minibtn" id="sortbtn"></button>'+
+                  '<button class="minibtn" id="healthbtn">Health report</button>';
+    document.getElementById('sortbtn').onclick=(ev)=>{ ev.stopPropagation(); toggleSortPop(); };
+    document.getElementById('healthbtn').onclick=()=>{ selId=null; render(); renderHealth();
       try{ if(location.hash!=='#health') location.hash='health'; }catch(x){} };
+    document.addEventListener('click',()=>{ const p=document.getElementById('sortpop'); if(p) p.remove(); });
+    updateSortBtn();
   })();
   $('detail').innerHTML='<p class="empty">Select an entity, or search above.</p>';
   window.onhashchange=()=>{
-    if(location.hash==='#table'){ tableMode=true; selId=null; render(); return; }
-    if(location.hash==='#health'){ tableMode=false; selId=null; render(); renderHealth(); return; }
+    if(location.hash==='#health'){ selId=null; render(); renderHealth(); return; }
     const m=location.hash.match(/^#e(\d+)$/);
     if(m&&byId[+m[1]]&&selId!==+m[1]) select(+m[1],true);
   };
-  if(location.hash==='#table') tableMode=true;
   render();
   if(location.hash==='#health'){ renderHealth(); }
-  else if(!tableMode){ const m0=location.hash.match(/^#e(\d+)$/);
+  else { const m0=location.hash.match(/^#e(\d+)$/);
     if(m0&&byId[+m0[1]]) select(+m0[1],true); }
 }
 </script>
