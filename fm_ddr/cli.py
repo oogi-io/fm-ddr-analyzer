@@ -19,20 +19,21 @@ def _rows(conn, q, params=()):
     return cols, cur.fetchall()
 
 
-def _print_table(cols, rows, limit=200):
+def _print_table(cols, rows, limit=200, full=False):
     if not rows:
         print("(no rows)")
         return
+    cap = 10**9 if full else 80
     widths = [len(c) for c in cols]
     shown = rows[:limit]
     for r in shown:
         for i, v in enumerate(r):
-            widths[i] = min(max(widths[i], len(str(v)) if v is not None else 4), 80)
+            widths[i] = min(max(widths[i], len(str(v)) if v is not None else 4), cap)
     line = "  ".join(c.ljust(widths[i]) for i, c in enumerate(cols))
     print(line)
     print("  ".join("-" * widths[i] for i in range(len(cols))))
     for r in shown:
-        print("  ".join((str(v) if v is not None else "").ljust(widths[i])[:80]
+        print("  ".join((str(v) if v is not None else "").ljust(widths[i])[:cap]
                          for i, v in enumerate(r)))
     if len(rows) > limit:
         print(f"... {len(rows) - limit} more rows")
@@ -79,13 +80,34 @@ def _resolve_term(conn, term):
         ORDER BY kind, entity_id""", (term,)).fetchall()
 
 
+
+def _connect(db_path):
+    """Open an index and warn if it was built by an older parser than the one
+    running now — a stale index silently lacks newer reference types (learned
+    the hard way: an index built pre-step_target reported 98% healthy while
+    missing every Set Field write target)."""
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute("SELECT parser_version FROM ddr_run LIMIT 1").fetchone()
+        built_with = row[0] if row else None
+    except sqlite3.OperationalError:
+        built_with = None  # pre-1.2.0 schema: column doesn't exist
+    from fm_ddr import __version__
+    if built_with != __version__:
+        print(f"WARNING: index built with fm_ddr {built_with or '<1.2.0'}, "
+              f"running {__version__} — newer parsers capture more references. "
+              f"Rebuild: fm-ddr build <ddr.xml...> -o {db_path} --force",
+              file=sys.stderr)
+    return conn
+
+
 def cmd_where(args):
     """Where is a field / script / layout / TO / CF used?
 
     Resolves the term to concrete entities first, then reports references per
     entity — a bare field name that exists in several tables is reported per
     table, never lumped together."""
-    conn = sqlite3.connect(args.db)
+    conn = _connect(args.db)
     term = args.name
     targets = _resolve_term(conn, term)
     if not targets:
@@ -112,7 +134,7 @@ def cmd_where(args):
 
 
 def cmd_search(args):
-    conn = sqlite3.connect(args.db)
+    conn = _connect(args.db)
     sql = ("""SELECT ti.kind, ti.name, snippet(text_index, 4, '[', ']', '...', 12) AS match
               FROM text_index ti
               WHERE text_index MATCH ? ORDER BY rank LIMIT ?""")
@@ -129,9 +151,9 @@ def cmd_search(args):
 
 
 def cmd_sql(args):
-    conn = sqlite3.connect(args.db)
+    conn = _connect(args.db)
     cols, rows = _rows(conn, args.query)
-    _print_table(cols, rows, limit=args.limit)
+    _print_table(cols, rows, limit=args.limit, full=getattr(args, "full", False))
 
 
 def cmd_snippet(args):
@@ -169,7 +191,7 @@ def cmd_report(args):
 
 
 def cmd_stats(args):
-    conn = sqlite3.connect(args.db)
+    conn = _connect(args.db)
     print("# Entity counts")
     _, rows = _rows(conn, "SELECT kind, COUNT(*) n FROM entities GROUP BY kind ORDER BY n DESC")
     for kind, n in rows:
@@ -214,6 +236,8 @@ def main(argv=None):
     q.add_argument("db")
     q.add_argument("query")
     q.add_argument("--limit", type=int, default=200)
+    q.add_argument("--full", action="store_true",
+                   help="no cell truncation (default clips cells at 80 chars)")
     q.set_defaults(func=cmd_sql)
 
     sn = sub.add_parser("snippet",
