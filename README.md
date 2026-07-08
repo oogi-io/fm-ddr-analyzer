@@ -40,7 +40,8 @@ tiny HTML files or CSV — and copy any script back into FileMaker as a
 pasteable snippet. Your schema never leaves your machine.
 
 **Want your AI assistant to answer questions about your solution?** Install
-once, works from any directory, in any project — no cd-ing around:
+once, works from any directory, in any project — no cd-ing around. Needs
+Python 3.10+ and [pipx](https://pipx.pypa.io) (macOS: `brew install pipx`):
 
 ```bash
 pipx install git+https://github.com/oogi-io/fm-ddr-analyzer   # the fm-ddr CLI
