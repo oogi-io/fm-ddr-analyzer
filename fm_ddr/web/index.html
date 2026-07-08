@@ -607,6 +607,11 @@ if(params.get('src')) window.addEventListener('load',()=>{
 
 function fmtBytes(n){ return n>1e6?(n/1e6).toFixed(0)+' MB':(n/1e3).toFixed(0)+' KB'; }
 function startParse(input){
+  // keep the sources readable so the viewer can re-stream on demand
+  // (e.g. Copy FM snippet extracts one script's raw XML from the file)
+  if(input.files) window.__DDR_SOURCE=(i)=>Promise.resolve(input.files[i].stream());
+  else { const urls=input.urls||[input.url];
+    window.__DDR_SOURCE=(i)=>fetch(urls[i]||urls[0]).then(r=>r.body); }
   $('err').textContent=''; $('progress').style.display='block';
   const t0=performance.now();
   const w=new Worker(workerURL);
@@ -801,6 +806,8 @@ function initViewer(DATA){
     wireCopy();
     const sh=document.getElementById('shareent');
     if(sh) sh.onclick=()=>shareEntity(e);
+    const fs=document.getElementById('copyfmsnip');
+    if(fs) fs.onclick=()=>copyFMSnippet(e,fs);
     const cc=document.getElementById('copycalc');
     if(cc) cc.onclick=()=>{ navigator.clipboard.writeText(e.c||'').then(()=>{
       cc.textContent='Copied'; setTimeout(()=>{cc.textContent='Copy';},1200); }); };
@@ -837,7 +844,10 @@ function initViewer(DATA){
     let h='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span>'+
       '<span>Comments: <b>'+comments+'</b></span>'+
       '<span>Performs scripts: <b>'+calls+'</b></span></div>';
-    h+='<div class="steps" id="stepsblock"><button class="copybtn" id="copyscript">Copy script</button>';
+    h+='<div class="steps" id="stepsblock">'+
+      (window.__DDR_SOURCE?'<button class="copybtn" id="copyfmsnip" style="right:110px" '+
+        'title="Copies fmxmlsnippet XML as text. Convert to clipboard objects (fm-ddr clip / FmClipTools) before pasting into FileMaker.">Copy FM snippet</button>':'')+
+      '<button class="copybtn" id="copyscript">Copy script</button>';
     let ind=0; const plain=[]; currentLineTexts=[];
     const ICON='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">'+
       '<rect x="5" y="5" width="8" height="9" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2H4.5A1.5 1.5 0 0 0 3 3.5v8A1.5 1.5 0 0 0 4.5 13H5"/></svg>';
@@ -1383,6 +1393,68 @@ function initViewer(DATA){
       const b=d.querySelector('[data-csv="'+x.id+'"]');
       if(b) b.onclick=(ev)=>{ ev.stopPropagation(); downloadText(x.name,x.csv,'text/csv'); }; });
     d.scrollTop=0;
+  }
+  // ---- Copy FM snippet: DDR steps -> fmxmlsnippet XML (see SNIPPET_FORMAT.md) ----
+  function attrEscape(name){
+    return name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  }
+  async function extractScriptXML(fileIdx, scriptName){
+    const stream=await window.__DDR_SOURCE(fileIdx);
+    const reader=stream.getReader();
+    const needle='name="'+attrEscape(scriptName)+'"';
+    const openRe=/<Script\b[^>]*[^/]>/g;
+    let decoder=null, tail='', cap=false, depth=0, buf=[];
+    const feedLine=(line)=>{
+      if(!cap){
+        if(line.indexOf('<Script')>-1 && line.indexOf(needle)>-1 && !/\/>\s*$/.test(line)) cap=true;
+        else return false;
+      }
+      buf.push(line);
+      depth+=(line.match(openRe)||[]).length-(line.match(/<\/Script>/g)||[]).length;
+      return cap && depth<=0;
+    };
+    while(true){
+      const {done,value}=await reader.read();
+      if(done) break;
+      if(!decoder){
+        const enc=(value[0]===0xFF&&value[1]===0xFE)?'utf-16le':'utf-8';
+        decoder=new TextDecoder(enc);
+      }
+      tail+=decoder.decode(value,{stream:true});
+      const lines=tail.split('\n'); tail=lines.pop();
+      for(const l of lines){ if(feedLine(l)){ reader.cancel(); return buf.join('\n'); } }
+    }
+    if(tail&&feedLine(tail)) return buf.join('\n');
+    if(cap) return buf.join('\n');
+    throw new Error('script not found in source file');
+  }
+  function ddrStepsToSnippet(scriptXml){
+    const steps=scriptXml.match(/<Step\b[\s\S]*?<\/Step>/g)||[];
+    const out=steps.map(st=>{
+      // the DDR uses lone CR newlines inside CDATA; FileMaker's own snippets
+      // (and Python's universal-newline read) use LF - normalize first
+      let x=st.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+      x=x.replace(/>\s+</g,'><').trim();
+      x=x.replace(/<StepText>[\s\S]*?<\/StepText>/g,'').replace(/<StepText\s*\/>/g,'');
+      x=x.replace(/<DisplayCalculation>[\s\S]*?<\/DisplayCalculation>/g,'').replace(/<DisplayCalculation\s*\/>/g,'');
+      x=x.replace(/<Text>([\s\S]*?)<\/Text>/g,(m,b)=>'<Text>'+
+        b.replace(/\r\n/g,'&#13;').replace(/[\r\n]/g,'&#13;').replace(/\t/g,'&#09;')+'</Text>');
+      if(x.indexOf('name="# (comment)"')>-1 && x.indexOf('<Restore')===-1)
+        x=x.replace(/(<Step\b[^>]*>)/,'$1<Restore state="False"></Restore>');
+      x=x.replace(/<([A-Za-z0-9]+)((?:\s[^<>]*?)?)\s*\/>/g,'<$1$2></$1>');
+      return x;
+    });
+    return {xml:'<fmxmlsnippet type="FMObjectList">'+out.join('')+'</fmxmlsnippet>', steps:out.length};
+  }
+  async function copyFMSnippet(e,btn){
+    btn.textContent='Extracting\u2026';
+    try{
+      const raw=await extractScriptXML(e.f||0, e.n||'');
+      const res=ddrStepsToSnippet(raw);
+      await navigator.clipboard.writeText(res.xml);
+      btn.textContent='Copied ('+res.steps+' steps)';
+    }catch(err){ btn.textContent='Failed: '+(err.message||err); }
+    setTimeout(()=>{btn.textContent='Copy FM snippet';},2200);
   }
   function stepsSelection(){
     const sel=window.getSelection();

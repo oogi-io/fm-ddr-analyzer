@@ -189,6 +189,12 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
   Viewer-wide, not chain-only; pairs with the health report.
 - [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
   deploys (added/removed/modified fields, scripts, layouts).
+- [x] **Copy as FM snippet (web + CLI).** In the web app, every script has a
+  "Copy FM snippet" button that re-streams the source file, extracts that
+  script's raw steps, and copies fmxmlsnippet XML as text (byte-identical to
+  FileMaker's own clipboard copy). Browsers cannot write FileMaker's private
+  clipboard flavor, so paste needs a one-time bridge: `fm-ddr snippet --clip`
+  today, a downloadable helper planned (Phase 2), or FmClipTools.
 - [x] **Copy as FM snippet (CLI, macOS).** `fm-ddr snippet DDR.xml "Script
   Name" --clip` transforms a script's DDR steps into FileMaker's clipboard
   format and places it on the private XMSS pasteboard flavor — paste straight
