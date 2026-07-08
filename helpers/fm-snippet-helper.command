@@ -31,8 +31,10 @@ esac
 
 HEX=$(printf '%s' "$TEXT" | xxd -p | tr -d '\n' | tr 'a-f' 'A-F')
 
-# via a temp file: large scripts can exceed the argv size limit
-TMP=$(mktemp /tmp/fm-snippet.XXXXXX.applescript)
+# via a temp file: large scripts can exceed the argv size limit.
+# mktemp -t (per-user TMPDIR, trailing template) — BSD mktemp only substitutes
+# a trailing run of X's, so a ".applescript" suffix would become a literal name.
+TMP=$(mktemp -t fm-snippet)
 printf 'set the clipboard to \302\253data %s%s\302\273\n' "$CLASS" "$HEX" > "$TMP"
 osascript "$TMP"
 rm -f "$TMP"
