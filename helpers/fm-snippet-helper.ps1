@@ -26,6 +26,7 @@ if     ($text -match '<CustomFunction ') { $class = 'Mac-XMFN' }
 elseif ($text -match '<BaseTable ')      { $class = 'Mac-XMTB' }
 elseif ($text -match '<Step ')           { $class = 'Mac-XMSS' }
 elseif ($text -match '<Script ')         { $class = 'Mac-XMSC' }
+elseif ($text -match '<Layout')          { $class = 'Mac-XML2' }
 elseif ($text -match '<Field ')          { $class = 'Mac-XMFD' }
 
 $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
