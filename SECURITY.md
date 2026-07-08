@@ -1,6 +1,6 @@
 # Security
 
-FMSonar reads FileMaker DDR exports, which contain a client's entire schema.
+fmsonar reads FileMaker DDR exports, which contain a client's entire schema.
 Its guarantees and its limits:
 
 ## Where your data goes
@@ -17,7 +17,7 @@ Its guarantees and its limits:
 
 ## Threat model — treat DDRs as untrusted
 
-A DDR is XML from an outside party ("here's my solution, take a look"). FMSonar
+A DDR is XML from an outside party ("here's my solution, take a look"). fmsonar
 is built to parse a hostile DDR safely:
 
 - **Output escaping** — all DDR-derived strings are HTML-escaped before entering
@@ -36,7 +36,7 @@ is built to parse a hostile DDR safely:
 "Copy FM snippet" and `fm-ddr clip` reproduce script steps from the DDR as a
 FileMaker clipboard snippet. **Those steps are attacker-controlled if the DDR
 came from someone else** — review them in Script Workspace before running,
-exactly as you would any script a third party hands you. FMSonar copies them
+exactly as you would any script a third party hands you. fmsonar copies them
 faithfully; it does not vet them.
 
 ## Reporting a vulnerability

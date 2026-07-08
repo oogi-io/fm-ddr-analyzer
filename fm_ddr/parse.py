@@ -498,7 +498,7 @@ def build(ddr_paths, db_path: str, label: str | None = None,
     The DB is built into a temp file alongside the target and moved into place
     only on success, so a malformed DDR (or a typo'd -o path) never destroys an
     existing file, and two concurrent builds can't corrupt each other's output.
-    An existing file at db_path that is not itself an FMSonar DB is left intact
+    An existing file at db_path that is not itself an fmsonar DB is left intact
     unless force=True.
     """
     if isinstance(ddr_paths, str):
@@ -510,7 +510,7 @@ def build(ddr_paths, db_path: str, label: str | None = None,
 
     if os.path.exists(db_path) and not force and not _is_fmsonar_db(db_path):
         raise ValueError(
-            f"{db_path} already exists and is not an FMSonar database — "
+            f"{db_path} already exists and is not an fmsonar database — "
             "refusing to overwrite it. Choose another -o path or pass --force.")
 
     target_dir = os.path.dirname(os.path.abspath(db_path)) or "."
