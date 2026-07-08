@@ -1522,13 +1522,19 @@ const HELPER_UNINSTALL='#!/bin/bash\n# FM Snippet Helper - uninstall (macOS)\n# 
     if(p){ p.remove(); if(!force) return; }
     p=document.createElement('div'); p.id='infopop'; p.className='infopop';
     p.onclick=ev=>ev.stopPropagation();
+    const installURL=new URL('install.sh',location.href).href;
+    const installCmd='curl -fsSL '+installURL+' | bash';
     p.innerHTML='<b>Pasting into FileMaker</b>'+
       'This copies snippet XML as text; FileMaker needs its own clipboard format.'+
-      '<ol><li><button class="csv" id="dlhelpmac">Install auto-converter (macOS)</button>'+
-      ' \u2014 unzip, run <code>install.command</code> (first run: right-click \u2192 Open)</li>'+
-      '<li>Done \u2014 from now on every snippet you copy is instantly paste-ready. '+
-      'Uninstaller included.</li></ol>'+
-      '<span class="via">Windows: <button class="csv" id="dlhelpwin">one-shot helper</button> (run after each copy) \u00b7 '+
+      '<ol><li><b>macOS, install once</b> \u2014 paste in Terminal: '+
+      '<div style="display:flex;gap:6px;margin:4px 0"><code style="overflow:auto;white-space:nowrap;padding:3px 6px;'+
+      'background:var(--panel);border:1px solid var(--border);border-radius:5px">'+esc(installCmd)+'</code>'+
+      '<button class="csv" id="cpinstall">Copy</button></div></li>'+
+      '<li>Done \u2014 every snippet you copy is instantly paste-ready. '+
+      'Uninstall: same command + <code>--uninstall</code>.</li></ol>'+
+      '<span class="via">Prefer a download? <button class="csv" id="dlhelpmac">zip</button> '+
+      '(unsigned: macOS blocks first open \u2014 allow it under System Settings \u2192 Privacy &amp; Security \u2192 \u201cOpen Anyway\u201d) \u00b7 '+
+      'Windows: <button class="csv" id="dlhelpwin">one-shot helper</button> \u00b7 '+
       '<a href="https://github.com/DanShockley/FmClipTools" target="_blank" rel="noopener">FmClipTools</a> works too \u00b7 '+
       'CLI: <code>fm-ddr clip</code></span>';
     const icon=document.getElementById('snipinfobtn');
@@ -1536,6 +1542,9 @@ const HELPER_UNINSTALL='#!/bin/bash\n# FM Snippet Helper - uninstall (macOS)\n# 
       p.style.position='fixed'; p.style.top=(r.bottom+8)+'px';
       p.style.right=Math.max(10,(window.innerWidth-r.right-4))+'px'; }
     document.body.appendChild(p);
+    document.getElementById('cpinstall').onclick=(ev)=>{
+      navigator.clipboard.writeText(installCmd).then(()=>{
+        ev.target.textContent='Copied'; setTimeout(()=>{ev.target.textContent='Copy';},1200);});};
     document.getElementById('dlhelpmac').onclick=()=>makeExecZip('fm-snippet-helper.zip',[
       {name:'install.command',content:HELPER_INSTALL,exec:true},
       {name:'uninstall.command',content:HELPER_UNINSTALL,exec:true},
