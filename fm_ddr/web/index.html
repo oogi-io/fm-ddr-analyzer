@@ -234,7 +234,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
   <div id="progress"><div id="bar"><div></div></div><div id="pmsg"></div></div>
   <div class="err" id="err"></div>
   <div class="credit"><a href="about.html">About FMSonar</a> ·
-    <a href="https://oogi.io" target="_blank" rel="noopener">OOGI</a> ·
+    <a href="https://oogi.io/en/" target="_blank" rel="noopener">OOGI</a> ·
     <a href="https://github.com/oogi-io/fm-ddr-analyzer" target="_blank" rel="noopener">Source (MIT)</a>
     · <span id="buildstamp"></span></div>
 </div>
@@ -1177,7 +1177,7 @@ function initViewer(DATA){
       '<div class="col out"><h3>References <span class="count">'+outs.length+'</span></h3>'+
       renderRefs(outs,targetDisplay)+'</div></div></div>';
     const credit='<div class="credit" style="border-top:1px solid var(--border);margin-top:20px">'+
-      'FMSonar \u00b7 <a href="https://oogi.io">OOGI</a></div>';
+      'FMSonar \u00b7 <a href="https://oogi.io/en/">OOGI</a></div>';
     const html='<!doctype html><html lang="en"><head><meta charset="utf-8">'+
       '<meta name="viewport" content="width=device-width, initial-scale=1">'+
       '<title>'+esc(e.n||'entity')+' \u2014 FM DDR</title><style>'+style+
@@ -1717,7 +1717,7 @@ function initViewer(DATA){
     const sb=$('list')&&$('list').parentElement;
     if(sb&&!document.getElementById('credit')){
       const c=document.createElement('div'); c.id='credit'; c.className='credit';
-      c.innerHTML='<a href="https://oogi.io" target="_blank" rel="noopener">OOGI</a>'+
+      c.innerHTML='<a href="https://oogi.io/en/" target="_blank" rel="noopener">OOGI</a>'+
         (typeof APP_BUILD!=='undefined'&&APP_BUILD.indexOf('__')!==0?' \u00b7 '+APP_BUILD:'');
       sb.appendChild(c);
     }
