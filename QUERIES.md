@@ -21,6 +21,10 @@ SELECT context, source_kind, source_parent_name, source_name
 FROM v_usage
 WHERE target_kind = 'field' AND target_raw LIKE 'CONTACT::email';
 -- or match the leaf name only: WHERE target_kind='field' AND target_name='email'
+-- CAVEAT: the leaf-name form lumps together same-named fields from DIFFERENT
+-- tables (every table's `id`, `email`, ...). Qualify with the table occurrence
+-- (target_raw 'TO::field') or GROUP BY base_table unless you truly mean all of
+-- them. `Set Field` writes specifically: add AND context='step_target'.
 ```
 
 Who **calls a script** (and via triggers)?

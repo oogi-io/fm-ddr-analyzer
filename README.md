@@ -58,8 +58,8 @@ tools: point them at **AGENTS.md** next to a built database.
 - **Input:** DDR XML files (FileMaker: *Tools → Database Design Report → XML*) —
   a single file, several, or the `Summary.xml` manifest of a multi-file solution.
   Files are large (400+ MB) and UTF-16-LE; both parsers stream, so size doesn't
-  matter (measured: a 510 MB 9-file solution builds in ~26 s; the 416 MB main
-  file parses in-browser in ~7 s using ~80 MB of memory).
+  matter (measured on an M-series MacBook: a 510 MB 9-file solution builds in
+  ~26 s; the 416 MB main file parses in-browser in ~7 s using ~80 MB of memory).
 - **Output:** a single `.db` SQLite file — a unified `entities` table, a generic
   `refs` edge table (the heart of "where used"), and an FTS5 full-text index over
   every calculation and script step as a catch-all.
@@ -139,9 +139,10 @@ exports side by side; today `build` always writes a fresh single-snapshot DB
 `custom_function`, `value_list`, `privilege_set`, `account`, `extended_privilege`,
 `custom_menu`, `custom_menu_set`, `external_data_source`, `theme`.
 
-**Reference contexts** (`refs.context`): `calc`, `join_predicate`, `perform_script`,
-`go_to_layout`, `trigger`, `layout_object`, `value_list_source`, `to_reference`,
-`function_ref`.
+**Reference contexts** (`refs.context`): `calc`, `step_target` (the field a step
+writes to — e.g. Set Field), `join_predicate`, `perform_script`, `go_to_layout`,
+`trigger`, `layout_object`, `field_reference`, `value_list_source`,
+`value_list_field`, `sort`, `to_reference`, `function_ref`.
 
 ### How references resolve
 
@@ -287,3 +288,7 @@ fm-ddr-analyzer/
 ---
 
 [Thomas De Smet](https://oogi.io) · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
+
+*FileMaker and Claris are trademarks of Claris International Inc. FMSonar is an
+independent tool, not affiliated with or endorsed by Claris. See
+[SECURITY.md](SECURITY.md) for the privacy and threat model.*
