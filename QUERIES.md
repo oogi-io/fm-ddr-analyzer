@@ -123,6 +123,24 @@ truncates for display, but the DB does not). This is the recipe to reach for
 when you need to reason about a script's actual logic — reserve raw XML
 streaming for step attributes that fmsonar doesn't capture.
 
+## "Read a full layout body" (buttons, hide conditions, launch params)
+
+Layouts have readable bodies too — the FTS table stores each layout's searchable text
+(object calcs, hide conditions, tooltips, button script-parameters) as one blob:
+
+```sql
+SELECT body FROM text_index WHERE kind='layout' AND name = 'Admin - Task Options';
+```
+
+Read this like you'd read a script body whenever the mechanism involves UI behavior —
+what a button passes to its script, when something is hidden, how a picker is launched.
+Launch parameters and `Session.GetValue(...)` / `$$flag` gates live here, NOT in
+`script_step` rows, so querying step_text for them returns nothing. When the body shows a
+session/global flag gating visibility, immediately FTS that flag name solution-wide — a
+flag that is read on a layout but set by no launch anywhere is the layout-side twin of the
+write-only global bug. Known limits: object *names* are not in the blob, and precise object
+geometry isn't captured — fall back to the raw DDR XML for those.
+
 ## Variable hygiene ($$globals)
 
 Variables live inside step text, not in `refs`, so they need text queries.
