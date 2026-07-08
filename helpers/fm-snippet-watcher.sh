@@ -1,6 +1,6 @@
 #!/bin/bash
 # FM Snippet Watcher (macOS)
-# OOGI - Thomas De Smet <tdesmet@oogi.io> - MIT
+# Thomas De Smet <tdesmet@oogi.io> - MIT
 # https://github.com/oogi-io/fm-ddr-analyzer
 #
 # Watches the clipboard; whenever fmxmlsnippet XML text is copied (e.g. from

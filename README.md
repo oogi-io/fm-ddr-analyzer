@@ -237,4 +237,4 @@ fm-ddr-analyzer/
 
 ---
 
-[OOGI](https://oogi.io) - Thomas De Smet · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
+[Thomas De Smet](https://oogi.io) · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
