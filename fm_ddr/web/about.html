@@ -126,7 +126,7 @@ fm-ddr install-skill   # Claude Code: global skill</pre>
     <div class="card"><b>Deep links</b><p>Put a full report on a shared drive and link colleagues to the exact script: <code>report.html#e12345</code>.</p></div>
   </div>
 
-  <h2><span class="hash">#</span>Strengths &amp; limits — the honest version</h2>
+  <h2><span class="hash">#</span>Strengths &amp; limits</h2>
   <p><b>Why the index beats reading the raw XML:</b> parse once (~26&nbsp;s for a
   9-file solution), then every question answers in milliseconds. Aggregations
   become possible — hotspots, orphan candidates, blast radius by kind — which
@@ -138,8 +138,8 @@ fm-ddr install-skill   # Claude Code: global skill</pre>
   details, layout geometry, custom-menu internals, or import/export orders.
   Those answers are still in your DDR XML; for them, read it directly. And the
   index is a snapshot: change the solution, re-export, rebuild.</p>
-  <div class="honest"><b>Honesty, by design</b>
-    <p>Static analysis has blind spots — fields named inside ExecuteSQL strings, calculated names, activity outside the DDR (Data API, OData, users running scripts from menus). FMSonar documents exactly what it can and cannot see (<a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md">COVERAGE.md</a>), flags ambiguous matches, and its AI guardrails require a full-text blind-spot check before anything is called "unused". Review lists, never delete lists.</p>
+  <div class="honest"><b>Blind spots</b>
+    <p>Static analysis can't see everything: field names inside ExecuteSQL strings, calculated script and layout names, and anything that happens outside the DDR (Data API, OData, users running scripts from menus). The full matrix is in <a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md">COVERAGE.md</a>. Ambiguous matches are flagged, and the AI instructions require a full-text check before anything is called "unused" — treat those lists as candidates to review, never as delete lists.</p>
   </div>
 
   <h2><span class="hash">#</span>Get it</h2>
