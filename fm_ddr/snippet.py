@@ -73,12 +73,23 @@ def ddr_steps_to_snippet(script_xml: str) -> tuple[str, int]:
     return '<fmxmlsnippet type="FMObjectList">' + "".join(out) + "</fmxmlsnippet>", len(out)
 
 
+def _sniff_class(snippet_xml: str) -> str:
+    """Clipboard class from the first object type inside the snippet."""
+    for tag, cls in (("<Step ", "XMSS"), ("<CustomFunction ", "XMFN"),
+                     ("<BaseTable ", "XMTB"), ("<Script ", "XMSC"),
+                     ("<Field ", "XMFD"), ("<Layout", "XML2")):
+        if tag in snippet_xml:
+            return cls
+    return "XMSS"
+
+
 def set_clipboard_xmss(snippet_xml: str) -> None:
-    """Place snippet XML on the macOS clipboard as the FileMaker XMSS flavor."""
+    """Place snippet XML on the macOS clipboard as the right FileMaker flavor."""
+    cls = _sniff_class(snippet_xml)
     hexdata = snippet_xml.encode("utf-8").hex().upper()
     # the script can exceed argv limits; run osascript from a temp file
     with tempfile.NamedTemporaryFile("w", suffix=".applescript", delete=False) as f:
-        f.write("set the clipboard to «data XMSS%s»\n" % hexdata)
+        f.write("set the clipboard to «data %s%s»\n" % (cls, hexdata))
         path = f.name
     try:
         subprocess.run(["osascript", path], check=True, capture_output=True, text=True)

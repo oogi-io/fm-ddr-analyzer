@@ -20,6 +20,14 @@ if (-not $text -or -not $text.StartsWith('<fmxmlsnippet')) {
     exit 1
 }
 
+# pick the clipboard format from the first object inside the snippet
+$class = 'Mac-XMSS'
+if     ($text -match '<CustomFunction ') { $class = 'Mac-XMFN' }
+elseif ($text -match '<BaseTable ')      { $class = 'Mac-XMTB' }
+elseif ($text -match '<Step ')           { $class = 'Mac-XMSS' }
+elseif ($text -match '<Script ')         { $class = 'Mac-XMSC' }
+elseif ($text -match '<Field ')          { $class = 'Mac-XMFD' }
+
 $bytes = [System.Text.Encoding]::UTF8.GetBytes($text)
 $len   = [System.BitConverter]::GetBytes([UInt32]$bytes.Length)
 
@@ -29,7 +37,7 @@ $ms.Write($bytes, 0, $bytes.Length)
 $ms.Position = 0
 
 $data = New-Object System.Windows.Forms.DataObject
-$data.SetData('Mac-XMSS', $ms)
+$data.SetData($class, $ms)
 [System.Windows.Forms.Clipboard]::SetDataObject($data, $true)
 
-Write-Host 'Done - paste into FileMaker Script Workspace.'
+Write-Host "Done ($class) - paste into FileMaker."
