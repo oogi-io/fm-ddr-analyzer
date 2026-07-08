@@ -57,6 +57,28 @@ calls. Full recipes: QUERIES.md in the repo.
    `fm-ddr search <db> '"<name>"'` - ExecuteSQL strings and calculated names
    are structurally invisible.
 
+## 3b. Debugging protocol - the index must not narrow your vision
+
+A precise index invites tunnel vision: name-lookup jumps straight to the one
+artefact someone mentioned, and the surrounding mechanism never enters view.
+When the task is *analyze / debug / find the mechanism* (not a one-fact
+lookup), these are mandatory, one query each:
+
+1. **Survey before you dive** - list the script family
+   (`name LIKE '%<domain>%'`) so callers, siblings, and dispatch scripts are
+   on the table before deep-reading anything.
+2. **Never conclude from a single script - climb to its callers** (`v_usage`
+   with `target_kind='script'`) and read the controller's body too. The
+   mechanism usually lives one level up.
+3. **Sweep the `$$globals` the script writes** (QUERIES.md "Variable
+   hygiene"): a global that is written but never read anywhere is a classic
+   latent bug and costs one round-trip to detect.
+4. **Report FileMaker `fm_id`, never the internal `entity_id`** - findings
+   must be checkable inside FileMaker.
+5. **The DDR is schema, not data** - verify flag values / sort orders /
+   config rows against the live system, and label findings DDR-derived vs
+   live-verified.
+
 ## 4. Honesty guardrails (non-negotiable)
 
 - Never report "unused"/"safe to delete" from the views alone: ExecuteSQL

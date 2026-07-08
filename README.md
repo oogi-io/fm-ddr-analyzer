@@ -89,6 +89,17 @@ fm-ddr build /path/to/Solution_fmp12.xml -o solution.db
 python3 -m fm_ddr.cli build /path/to/Solution_fmp12.xml -o solution.db
 ```
 
+**Updating:** a pipx install is a snapshot — it does not auto-update when this repo changes.
+Pull the latest with:
+
+```bash
+pipx reinstall fm-ddr-analyzer   # always fetches the current main
+```
+
+(`pipx upgrade` also works from v1.1.0 onward, but only when the version number has been
+bumped since your install; `reinstall` is the reliable path. A git clone updates with
+`git pull` as usual.)
+
 ## Usage
 
 ```bash
