@@ -1,3 +1,8 @@
+# Client DDR exports live here — never publish. Directory-level ignore so a
+# stray .zip/.pdf/.png dropped in this folder can't be staged either (the *.xml
+# rule below would not catch those).
+content/
+
 # Parsed databases and DDR source files (large, generated / client data)
 *.db
 *.db-wal
@@ -10,6 +15,12 @@
 __pycache__/
 *.pyc
 .venv/
+build/
+*.egg-info/
+
+# Local tooling / OS cruft (never belongs in a public repo)
+.wrangler/
+.DS_Store
 
 # Generated HTML reports (embed client schema) — but keep the web app itself
 *.html
