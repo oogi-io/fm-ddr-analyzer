@@ -2,10 +2,16 @@
 
 *FileMaker DDR explorer — live at **[fmsonar.com](https://fmsonar.com)** · repo/engine name: `fm-ddr-analyzer`*
 
-Parse a FileMaker **Database Design Report** (DDR, the `*_fmp12.xml` files) into a
-normalized **SQLite** database you can query for cross-references — *"where is this
-field / script / table occurrence / custom function actually used?"* — and hand to
-an AI to answer schema questions.
+FMSonar answers *"where is this field / script / table occurrence / custom
+function actually used?"* for a whole FileMaker solution, starting from its
+**Database Design Report** (DDR, the `*_fmp12.xml` export). One engine, two
+interfaces:
+
+- **For you:** [fmsonar.com](https://fmsonar.com) — drop the DDR on the page and
+  explore it in the browser (nothing is uploaded).
+- **For your AI:** the `fm-ddr` CLI builds a normalized **SQLite** index that
+  assistants query directly, with [AGENTS.md](AGENTS.md) and a Claude Code skill
+  teaching them how.
 
 Spiritual successor to the FileMaker accessibility patcher: same idea (stream the
 huge FileMaker XML with SAX), but instead of patching layouts it builds a queryable
