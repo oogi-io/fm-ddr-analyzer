@@ -127,7 +127,9 @@ edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push
 - [x] **Phase 2 — Interactive HTML.** `report` command emits a self-contained
   page (data embedded, no server): searchable entity list with kind filters,
   click any field/script/TO to see inbound ("referenced by") and outbound
-  ("references") edges grouped by context, with click-through navigation.
+  ("references") edges grouped by the OTHER entity's kind (Scripts / Layouts /
+  Fields / Custom functions / Relationships / ...), with the usage context
+  folded into each group header, and click-through navigation.
 - [x] **Correctness hardening.** `where` resolves through the TO before
   filtering (no more leaf-name over-matching), ambiguous picks are flagged
   (`refs.ambiguous`, `v_ambiguous`), VL field sources and sort fields are
