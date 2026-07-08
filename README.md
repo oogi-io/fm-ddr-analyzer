@@ -1,6 +1,9 @@
 # fmsonar
 
-*FileMaker DDR explorer — live at **[fmsonar.com](https://fmsonar.com)** · repo/engine name: `fm-ddr-analyzer`*
+**Ping your FileMaker solution — every reference echoes back.**
+One engine, two interfaces: **an explorer for you**, **a queryable index for your AI**.
+
+*Live at **[fmsonar.com](https://fmsonar.com)** · repo/engine name: `fm-ddr-analyzer`*
 
 fmsonar answers *"where is this field / script / table occurrence / custom
 function actually used?"* for a whole FileMaker solution, starting from its
