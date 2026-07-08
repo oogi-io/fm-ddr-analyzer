@@ -8,7 +8,7 @@ version = "1.0.0"
 description = "Parse FileMaker Database Design Reports into a queryable SQLite cross-reference database, with a zero-install browser viewer"
 readme = "README.md"
 license = { text = "MIT" }
-authors = [{ name = "OOGI BV" }]
+authors = [{ name = "Thomas De Smet (OOGI BV)", email = "tdesmet@oogi.io" }]
 requires-python = ">=3.10"
 keywords = ["filemaker", "ddr", "database-design-report", "cross-reference", "sqlite"]
 classifiers = [

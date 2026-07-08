@@ -1,6 +1,7 @@
 #!/bin/bash
 # FM Snippet Helper (macOS) — part of FM DDR Analyzer
 # https://github.com/oogi-io/fm-ddr-analyzer
+# OOGI BV - Thomas De Smet <tdesmet@oogi.io> - MIT
 #
 # Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app's
 # "Copy FM snippet" button) into real FileMaker clipboard objects (XMSS),
