@@ -87,6 +87,7 @@ Then query it. Each command is copy-paste safe on its own:
 | `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
 | `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
 | `fmsonar stats solution.db` | entity counts + reference-resolution health |
+| `fmsonar list` | all cached databases: which solution, built when, by which parser, stale or not (multi-client overview; add a folder argument to scan elsewhere) |
 | `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
 
 Because the output is plain SQLite, anything can query it — `sqlite3`,

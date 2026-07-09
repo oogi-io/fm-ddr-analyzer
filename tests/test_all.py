@@ -238,6 +238,17 @@ class TestParser(unittest.TestCase):
         self.assertIn("btnGo", body)
         self.assertIn("HideMe_g", body)
 
+    def test_list_command(self):
+        import subprocess, sys as _sys
+        r = subprocess.run([_sys.executable, "-m", "fm_ddr.cli", "list",
+                            os.path.dirname(self.db)],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn(os.path.basename(self.db), r.stdout)
+        from fm_ddr import __version__
+        self.assertIn(__version__, r.stdout)   # fresh build shows current parser
+        self.assertIn("ok", r.stdout)
+
     def test_step_target_captured(self):
         # Set Field's write target is a direct <Field> child of <Step> in real
         # DDRs (the agent-discovered gap: it was missed entirely before)
