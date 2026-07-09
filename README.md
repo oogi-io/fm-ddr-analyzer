@@ -16,8 +16,12 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
    parser, an analysis needs dozens of questions, and the hard-won structure is
    thrown away afterwards. An index turns that repeated cost into one parse and
    millisecond queries — same answers, roughly a third of the time and tokens.
-3. **A DDR is a client's entire schema.** You can't paste it into a web service to
-   explore it. Whatever tool reads it has to keep it on your machine.
+3. **A DDR is a client's entire schema — table names, business logic, everything.**
+   Sending that to someone else's server is a confidentiality decision most client
+   work doesn't allow. fmsonar.com is a web *page*, not a web service: parsing runs
+   in your browser, and no DDR bytes are transmitted — verifiably (watch the network
+   tab, or go offline and it still works), not as a promise. Self-hosting the
+   single-file app removes even that dependency. See [SECURITY.md](SECURITY.md).
 
 One engine answers all three. It parses the DDR **once** into a normalized index
 (entities, reference edges, full-text) — then every question is instant.
