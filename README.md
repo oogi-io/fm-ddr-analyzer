@@ -46,7 +46,9 @@ once, works from any directory, in any project — no cd-ing around. Needs
 Python 3.10+ and [pipx](https://pipx.pypa.io) (macOS: `brew install pipx`):
 
 ```bash
-pipx install git+https://github.com/oogi-io/fm-ddr-analyzer   # the fm-ddr CLI
+pipx install fmsonar
+# or straight from the repo:
+# pipx install git+https://github.com/oogi-io/fm-ddr-analyzer   # the fm-ddr CLI
 fm-ddr install-skill                                          # Claude Code skill (global)
 ```
 
@@ -83,7 +85,9 @@ in a browser or serve it as a static page — it works identically.
 Pure standard library — no dependencies, Python 3.10+.
 
 ```bash
-pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
+pipx install fmsonar
+# or straight from the repo:
+# pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
 fm-ddr build /path/to/Solution_fmp12.xml -o solution.db
 # or from a clone, no install at all:
 python3 -m fm_ddr.cli build /path/to/Solution_fmp12.xml -o solution.db
@@ -93,12 +97,13 @@ python3 -m fm_ddr.cli build /path/to/Solution_fmp12.xml -o solution.db
 Pull the latest with:
 
 ```bash
-pipx reinstall fm-ddr-analyzer   # always fetches the current main
+pipx upgrade fmsonar             # PyPI install
+pipx reinstall fmsonar           # git-URL install: always fetches current main
 ```
 
-(`pipx upgrade` also works from v1.1.0 onward, but only when the version number has been
-bumped since your install; `reinstall` is the reliable path. A git clone updates with
-`git pull` as usual.)
+(Versions are bumped on every release, so `pipx upgrade` works from PyPI. A git clone
+updates with `git pull` as usual. After updating, refresh the Claude skill:
+`fm-ddr install-skill` — check drift anytime with `fm-ddr install-skill --check`.)
 
 ## Usage
 
