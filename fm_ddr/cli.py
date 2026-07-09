@@ -290,6 +290,77 @@ SKILL_RAW_URL = ("https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/"
                  "main/fm_ddr/skill/SKILL.md")
 
 
+
+def _human_size(n):
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024 or unit == "GB":
+            return f"{n:.0f} {unit}" if unit == "B" else f"{n/1:.0f} {unit}"
+        n /= 1024
+    return f"{n:.0f} GB"
+
+
+def cmd_list(args):
+    """List fmsonar databases in a folder — solution label, build time, parser
+    version, size, and staleness (older parser / source DDR changed since the
+    build). Default folder is the central cache the Claude skill uses."""
+    from fm_ddr import __version__
+    d = os.path.expanduser(args.dir or "~/.fmsonar/dbs")
+    if not os.path.isdir(d):
+        print(f"No such folder: {d}")
+        if not args.dir:
+            print("The central cache is created the first time a database is "
+                  "built there. Point at another folder: fm-ddr list <dir>")
+        sys.exit(1)
+    rows = []
+    for name in sorted(os.listdir(d)):
+        if not name.endswith(".db"):
+            continue
+        path = os.path.join(d, name)
+        size = _human_size(os.path.getsize(path))
+        try:
+            conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+            label, source_path, parsed_at = conn.execute(
+                "SELECT label, source_path, parsed_at FROM ddr_run LIMIT 1"
+            ).fetchone()
+            try:
+                built_with = conn.execute(
+                    "SELECT parser_version FROM ddr_run LIMIT 1").fetchone()[0]
+            except sqlite3.OperationalError:
+                built_with = None  # pre-1.2.0 index
+            nfiles = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
+            conn.close()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError, TypeError):
+            rows.append([name, "(not an fmsonar database)", "", "", size, ""])
+            continue
+        issues = []
+        if built_with != __version__:
+            issues.append(f"parser {built_with or '<1.2.0'} (now {__version__}) — rebuild")
+        # source DDR changed since the build?
+        try:
+            from datetime import datetime
+            built_ts = datetime.fromisoformat(parsed_at).timestamp()
+            sources = [q for q in (source_path or "").split(";") if q]
+            seen = False
+            for q in sources:
+                if os.path.exists(q):
+                    seen = True
+                    if os.path.getmtime(q) > built_ts:
+                        issues.append("DDR newer than index — rebuild")
+                        break
+            if sources and not seen:
+                issues.append("source DDR not found")
+        except (ValueError, OSError):
+            pass
+        built = (parsed_at or "")[:16].replace("T", " ")
+        rows.append([name, label or "", built, built_with or "<1.2.0",
+                     f"{size} · {nfiles}f", " · ".join(issues) or "ok"])
+    if not rows:
+        print(f"No databases in {d}")
+        return
+    print(f"# {d}\n")
+    _print_table(["db", "label", "built (UTC)", "parser", "size", "status"], rows)
+
+
 def cmd_install_skill(args):
     """Install the fmsonar skill for Claude Code, or check its freshness.
 
@@ -428,6 +499,13 @@ def main(argv=None):
     sn.add_argument("--clip", action="store_true",
                     help="place on the macOS clipboard (XMSS flavor) for direct paste")
     sn.set_defaults(func=cmd_snippet)
+
+    ls = sub.add_parser("list",
+                        help="list databases in a folder (default ~/.fmsonar/dbs) "
+                             "with label, build time, parser version, staleness")
+    ls.add_argument("dir", nargs="?", default=None,
+                    help="folder to scan (default: the central cache)")
+    ls.set_defaults(func=cmd_list)
 
     ins = sub.add_parser("install-skill",
                          help="install the Claude Code skill globally (~/.claude/skills)")

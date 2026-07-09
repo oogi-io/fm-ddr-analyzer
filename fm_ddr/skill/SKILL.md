@@ -9,7 +9,9 @@ Never hand-parse DDR XML - build the SQLite index and query it.
 ## 1. Locate or build the database
 
 Databases live in the central cache `~/.fmsonar/dbs/<solution>.db` - create the
-directory if needed. Reuse a cached DB if it is newer than its source DDR.
+directory if needed. `fm-ddr list` shows what is cached (label, build time,
+parser version, staleness) - run it first when unsure what exists. Reuse a
+cached DB if it is newer than its source DDR and not flagged stale.
 
 To build, you need the user's DDR export (FileMaker: Tools > Database Design
 Report > XML). If you don't know where it is, ask - don't scan the whole disk.
