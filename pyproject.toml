@@ -24,6 +24,7 @@ Repository = "https://github.com/oogi-io/fm-ddr-analyzer"
 
 [project.scripts]
 fm-ddr = "fm_ddr.cli:main"
+fmsonar = "fm_ddr.cli:main"
 
 [tool.setuptools]
 packages = ["fm_ddr"]
