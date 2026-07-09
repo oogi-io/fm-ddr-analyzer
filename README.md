@@ -5,134 +5,133 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
 
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
-fmsonar answers *"where is this field / script / table occurrence / custom
-function actually used?"* for a whole FileMaker solution, starting from its
-**Database Design Report** (DDR, the `*_fmp12.xml` export). One engine, two
-interfaces:
+## The problems this solves
 
-- **For you:** [fmsonar.com](https://fmsonar.com) — drop the DDR on the page and
-  explore it in the browser (nothing is uploaded).
-- **For your AI:** the `fm-ddr` CLI builds a normalized **SQLite** index that
-  assistants query directly, with [AGENTS.md](AGENTS.md) and a Claude Code skill
-  teaching them how.
+1. **"Where is this actually used?"** A FileMaker solution's only complete map is
+   its Database Design Report — a huge (often 400+ MB) UTF-16 XML export. Answering
+   one cross-reference question by hand means text-searching that file and hoping
+   you didn't miss a calculated name, a trigger, or a button parameter.
+2. **Your AI assistant can't work with a 400 MB XML file.** Assistants analyzing a
+   ticket need dozens of cross-reference answers; streaming the raw DDR per question
+   is slow, error-prone, and burns tokens. They need a queryable index.
+3. **A DDR is a client's entire schema.** You can't paste it into a web service to
+   explore it. Whatever tool reads it has to keep it on your machine.
 
-Both parsers stream the huge FileMaker XML with SAX, so even a 400+ MB DDR is
-handled without loading it all into memory.
+One engine answers all three. It parses the DDR **once** into a normalized index
+(entities, reference edges, full-text) — then every question is instant.
 
-Two front-ends over the same logic:
+## Which tool for which problem
 
-- **`fm_ddr/web/index.html`** — a zero-install, client-side web app. Open it, drop in a
-  DDR, and it parses **entirely in your browser** (nothing is uploaded — important,
-  since a DDR contains a client's whole schema). Best for sharing / non-technical
-  reach. The parser is a JS port of `parse.py`, validated to produce an identical
-  graph.
-- **`fm_ddr/` (Python CLI)** — the scriptable / CI version: build a SQLite DB and
-  query it from the shell or hand it to an AI.
+| You want to… | Use | You need |
+|---|---|---|
+| Explore a solution visually — search, call chains, health report | **[fmsonar.com](https://fmsonar.com)** (browser) | nothing — no install, no upload |
+| Query from the shell, script it, export reports | **`fmsonar` CLI** | Python 3.10+ and pipx |
+| Let your AI assistant answer cross-reference questions | **CLI + the Claude Code skill** | the CLI (above) + Claude Code |
 
-## Quick start
+The three build on each other in that order — start in the browser, install the
+CLI when you want it scriptable, add the skill when your AI should use it too.
 
-1. Open **[fmsonar.com](https://fmsonar.com)** — nothing installs, nothing uploads.
-2. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
-3. **Drag the DDR folder onto the page.**
+## Path 1 — Explore in the browser (no install)
 
-Seconds later your whole solution is explorable: search every name and every
-line of code, see what references anything (and from where), read complete
-scripts, walk call chains visually, run the health report, share findings as
-tiny HTML files or CSV — and copy any script back into FileMaker as a
-pasteable snippet. Your schema never leaves your machine.
+1. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
+2. Open **[fmsonar.com](https://fmsonar.com)**.
+3. Drag the DDR folder onto the page.
 
-**Want your AI assistant to answer questions about your solution?** Install
-once, works from any directory, in any project — no cd-ing around. Needs
-Python 3.10+ and [pipx](https://pipx.pypa.io) (macOS: `brew install pipx`):
+Parsing runs entirely client-side in a Web Worker — **nothing is uploaded**.
+Seconds later the whole solution is explorable: every name and line of code
+searchable, references inbound and outbound, complete scripts readable, call
+chains as diagrams, a health report, shareable single-entity HTML exports, and
+copy-any-script-back-to-FileMaker as a pasteable snippet.
+
+Prefer to self-host? The whole app is one file — serve `fm_ddr/web/index.html`
+as a static page; it works identically.
+
+## Path 2 — The CLI
+
+Prerequisites: Python 3.10+ and [pipx](https://pipx.pypa.io). On macOS, pipx
+comes from Homebrew:
+
+```bash
+brew install pipx
+```
+
+Install fmsonar (pure standard library, no dependencies):
 
 ```bash
 pipx install fmsonar
-# or straight from the repo:
-# pipx install git+https://github.com/oogi-io/fm-ddr-analyzer   # the fm-ddr CLI
-fm-ddr install-skill                                          # Claude Code skill (global)
 ```
+
+Build the index once — point it at the `Summary.xml` manifest for a multi-file
+solution, or a single `*_fmp12.xml`:
+
+```bash
+fmsonar build /path/to/DDR/Summary.xml -o solution.db
+```
+
+Then query it. Each command is copy-paste safe on its own:
+
+| Command | Answers |
+|---|---|
+| `fmsonar where solution.db "CONTACT::email"` | where is this field / script / layout / TO / custom function used |
+| `fmsonar search solution.db "GetContainerAttribute"` | full-text across every calc, script step, and name |
+| `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
+| `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
+| `fmsonar stats solution.db` | entity counts + reference-resolution health |
+| `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
+
+Because the output is plain SQLite, anything can query it — `sqlite3`,
+Datasette, DB Browser, or an AI.
+
+From a clone, without installing: replace `fmsonar` with `python3 -m fm_ddr.cli`
+in any command above.
+
+## Path 3 — Your AI assistant
+
+Prerequisite: Path 2 (the CLI on your PATH). Then give Claude Code the skill —
+one command, works from any directory afterwards:
+
+```bash
+fmsonar install-skill
+```
+
+The skill teaches the assistant the schema, the query recipes, and — learned the
+hard way, see the eval story — the **investigation protocol**: survey before
+deep-reading, climb to callers, sweep the globals a script writes, read layout
+bodies for UI mechanisms, report real FileMaker ids.
 
 Then, wherever you're working: *"analyze the DDR in ~/Desktop/MyDDR — which
-scripts write to CTC::email?"* Claude Code builds the index into a central
-cache (`~/.fmsonar/dbs/`) and answers with SQL-backed evidence. Cursor/other
-tools: point them at **AGENTS.md** next to a built database.
+scripts write to CTC::email?"* Claude Code builds the index into a central cache
+(`~/.fmsonar/dbs/`) and answers with SQL-backed evidence. Other AI tools
+(Cursor, Copilot): they read [AGENTS.md](AGENTS.md) next to a built database.
 
-## Overview
+## Updating
 
-- **Input:** DDR XML files (FileMaker: *Tools → Database Design Report → XML*) —
-  a single file, several, or the `Summary.xml` manifest of a multi-file solution.
-  Files are large (400+ MB) and UTF-16-LE; both parsers stream, so size doesn't
-  matter (measured on an M-series MacBook: a 510 MB 9-file solution builds in
-  ~26 s; the 416 MB main file parses in-browser in ~7 s using ~80 MB of memory).
-- **Output:** a single `.db` SQLite file — a unified `entities` table, a generic
-  `refs` edge table (the heart of "where used"), and an FTS5 full-text index over
-  every calculation and script step as a catch-all.
-- **General-purpose:** no solution-specific assumptions. Validated against two
-  unrelated production solutions and a 9-file, 510 MB multi-file solution.
-
-## Web app (no install)
-
-Just use **[fmsonar.com](https://fmsonar.com)** — free, always the latest build.
-Drop a DDR onto it; parsing, resolution, and the interactive viewer all run
-client-side — no server, no upload. The **Download report** button exports a
-self-contained HTML of the current solution to share.
-
-Prefer to self-host? The whole app is one file: open `fm_ddr/web/index.html`
-in a browser or serve it as a static page — it works identically.
-
-## Install (Python CLI)
-
-Pure standard library — no dependencies, Python 3.10+.
+A pipx install doesn't auto-update. Versions are bumped on every release, so:
 
 ```bash
-pipx install fmsonar
-# or straight from the repo:
-# pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
-fm-ddr build /path/to/Solution_fmp12.xml -o solution.db
-# or from a clone, no install at all:
-python3 -m fm_ddr.cli build /path/to/Solution_fmp12.xml -o solution.db
+pipx upgrade fmsonar
+fmsonar install-skill
 ```
 
-**Updating:** a pipx install is a snapshot — it does not auto-update when this repo changes.
-Pull the latest with:
+The second command refreshes the Claude Code skill to match. Check for skill
+drift anytime with `fmsonar install-skill --check` (offline, against your
+installed version) or `--remote` (against GitHub main). Installed from the git
+URL instead of PyPI? Use `pipx reinstall fmsonar`. A git clone updates with
+`git pull`. Every index is stamped with the parser version that built it —
+querying through a stale index warns loudly instead of silently missing newer
+reference types.
 
-```bash
-pipx upgrade fmsonar             # PyPI install
-pipx reinstall fmsonar           # git-URL install: always fetches current main
-```
+## Performance and scope
 
-(Versions are bumped on every release, so `pipx upgrade` works from PyPI. A git clone
-updates with `git pull` as usual. After updating, refresh the Claude skill:
-`fm-ddr install-skill` — check drift anytime with `fm-ddr install-skill --check`.)
-
-## Usage
-
-```bash
-# Parse a DDR into SQLite (prints entity + reference counts)
-python3 -m fm_ddr.cli build Solution_fmp12.xml -o solution.db
-
-# Where is something used? (field / script / layout / TO / custom function)
-python3 -m fm_ddr.cli where solution.db "CONTACT::email"
-python3 -m fm_ddr.cli where solution.db "Navigate to Dashboard"
-
-# Full-text search across every calc / script step / name
-python3 -m fm_ddr.cli search solution.db "GetContainerAttribute"
-
-# Interactive HTML viewer (self-contained, opens in any browser, no server)
-python3 -m fm_ddr.cli report solution.db -o solution.html
-
-# Counts + reference-resolution health
-python3 -m fm_ddr.cli stats solution.db
-
-# Any SQL (this is the real power — see QUERIES.md)
-python3 -m fm_ddr.cli sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"
-```
-
-Because the output is plain SQLite, an AI (or `sqlite3`, Datasette, DB Browser,
-etc.) can query it directly. **[AGENTS.md](AGENTS.md)** teaches AI coding tools
-(Claude Code, Cursor, Copilot — they read it automatically) how to work these
-databases: the schema, the views-as-API, the investigation loop, and the
-honesty guardrails. **[QUERIES.md](QUERIES.md)** has the canonical SQL recipes.
+- **Input:** DDR XML — one file, several, or a `Summary.xml` manifest. Both
+  parsers (Python CLI and the browser's JS twin, parity-tested edge by edge)
+  stream with SAX, so file size doesn't matter. Measured: a 510 MB 9-file
+  production solution builds in ~26 s; the 416 MB main file parses in-browser
+  in ~7 s using ~80 MB of memory.
+- **Output:** one `.db` SQLite file — `entities`, a generic `refs` edge table
+  (the heart of "where used"), and an FTS5 full-text index as a catch-all.
+- **General-purpose:** no solution-specific assumptions; validated against
+  multiple unrelated production solutions.
 
 ## Data model
 
