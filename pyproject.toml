@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "fm-ddr-analyzer"
+name = "fmsonar"
 dynamic = ["version"]
 description = "Parse FileMaker Database Design Reports into a queryable SQLite cross-reference database, with a zero-install browser viewer"
 readme = "README.md"

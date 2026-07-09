@@ -29,3 +29,4 @@ build/
 
 # Local Claude Code tooling (personal skills, launch configs)
 .claude/
+dist/

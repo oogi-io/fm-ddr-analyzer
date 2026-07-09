@@ -324,7 +324,7 @@ def cmd_install_skill(args):
                 print(f"Could not fetch {SKILL_RAW_URL}: {e}")
                 sys.exit(2)
             ref_label = "GitHub main"
-            hint = ("update your install first (pipx reinstall fm-ddr-analyzer, "
+            hint = ("update your install first (pipx upgrade fmsonar / pipx reinstall fmsonar, "
                     "or git pull in a clone), then: fm-ddr install-skill")
         else:
             ref = open(src, "rb").read()
