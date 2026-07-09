@@ -11,9 +11,11 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
    its Database Design Report — a huge (often 400+ MB) UTF-16 XML export. Answering
    one cross-reference question by hand means text-searching that file and hoping
    you didn't miss a calculated name, a trigger, or a button parameter.
-2. **Your AI assistant can't work with a 400 MB XML file.** Assistants analyzing a
-   ticket need dozens of cross-reference answers; streaming the raw DDR per question
-   is slow, error-prone, and burns tokens. They need a queryable index.
+2. **Your AI assistant *can* work with the raw XML — expensively.** It works;
+   we measured it. But every question costs a fresh pass and a hand-written
+   parser, an analysis needs dozens of questions, and the hard-won structure is
+   thrown away afterwards. An index turns that repeated cost into one parse and
+   millisecond queries — same answers, roughly a third of the time and tokens.
 3. **A DDR is a client's entire schema.** You can't paste it into a web service to
    explore it. Whatever tool reads it has to keep it on your machine.
 
