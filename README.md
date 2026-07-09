@@ -5,38 +5,30 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
 
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
-## Why I built this
+## The problems this solves
 
-I'm a FileMaker developer. When I need to know "where is this field actually
-used?" or "who calls this script?", the only complete source is the Database
-Design Report — for the solutions I work on, a 400+ MB UTF-16 XML file. For
-years the answer was throwaway scripts streaming that file, one pass per
-question.
+1. **"Where is this actually used?"** A FileMaker solution's only complete map is
+   its Database Design Report — a huge (often 400+ MB) UTF-16 XML export. Answering
+   one cross-reference question by hand means text-searching that file and hoping
+   you didn't miss a calculated name, a trigger, or a button parameter.
+2. **Your AI assistant *can* work with the raw XML — expensively.** It works;
+   we measured it. But every question costs a fresh pass and a hand-written
+   parser, an analysis needs dozens of questions, and the hard-won structure is
+   thrown away afterwards. An index turns that repeated cost into one parse and
+   millisecond queries, at roughly a third of the time and tokens. It's a
+   projection, not the whole DDR: ~98% of references resolve as typed edges,
+   text-only usage (ExecuteSQL, calculated names) is caught by full-text search,
+   and [COVERAGE.md](COVERAGE.md) states exactly what isn't captured — for those
+   cases the raw XML is still there, and the AI skill says when to go back to it.
+3. **A DDR is a client's entire schema — table names, business logic, everything.**
+   Sending that to someone else's server is a confidentiality decision most client
+   work doesn't allow. fmsonar.com is a web *page*, not a web service: parsing runs
+   in your browser, and no DDR bytes are transmitted — verifiably (watch the network
+   tab, or go offline and it still works), not as a promise. Self-hosting the
+   single-file app removes even that dependency. See [SECURITY.md](SECURITY.md).
 
-Then I started using AI assistants for ticket analysis, and watched them do the
-same thing: a fresh pass over the whole file, a hand-written parser, dozens of
-times per ticket. It works — I measured it — it's just slow and wasteful. So I
-wrote a parser that reads the DDR once into SQLite: every named thing, every
-"X uses Y" edge, full-text over all the code. After that, any question is a
-millisecond query, and the index is still there for the next ticket.
-
-Two constraints shaped everything:
-
-- **A DDR is a client's entire schema**, so nothing may leave the machine. The
-  browser version parses locally in a Web Worker — you can watch the network
-  tab, or go offline and it still works — and the CLI never touches the network.
-  See [SECURITY.md](SECURITY.md).
-- **The index is a projection, not the whole DDR.** About 98% of references
-  resolve as typed edges; text-only usage (ExecuteSQL, calculated names) is
-  caught by full-text search; [COVERAGE.md](COVERAGE.md) lists exactly what
-  isn't captured, and for those cases the raw XML is still there — the AI skill
-  knows when to go back to it.
-
-I also didn't want to just *believe* it helps an AI, so I A/B-tested it against
-raw-XML streaming on real production tickets. It lost the first two rounds —
-each loss became a feature or a documented protocol — and won the rematches on
-both models I tested, at about a third of the time and tokens. The open items
-in the roadmap are simply whatever those tests catch next.
+One engine answers all three. It parses the DDR **once** into a normalized index
+(entities, reference edges, full-text) — then every question is instant.
 
 ## Which tool for which problem
 
@@ -46,8 +38,8 @@ in the roadmap are simply whatever those tests catch next.
 | Query from the shell, script it, export reports | **`fmsonar` CLI** | Python 3.10+ and pipx |
 | Let your AI assistant answer cross-reference questions | **CLI + the Claude Code skill** | the CLI (above) + Claude Code |
 
-They build on each other in that order: start in the browser; install the CLI
-when you want it scriptable; add the skill if your AI assistant should use it.
+The three build on each other in that order — start in the browser, install the
+CLI when you want it scriptable, add the skill when your AI should use it too.
 
 ## Path 1 — Explore in the browser (no install)
 
@@ -55,10 +47,11 @@ when you want it scriptable; add the skill if your AI assistant should use it.
 2. Open **[fmsonar.com](https://fmsonar.com)**.
 3. Drag the DDR folder onto the page.
 
-Parsing runs client-side in a Web Worker; nothing is uploaded. You get search
-over every name and line of code, inbound/outbound references, readable
-scripts, call-chain diagrams, a health report, small single-entity HTML exports
-for sharing, and copy-script-back-to-FileMaker as a pasteable snippet.
+Parsing runs entirely client-side in a Web Worker — **nothing is uploaded**.
+Seconds later the whole solution is explorable: every name and line of code
+searchable, references inbound and outbound, complete scripts readable, call
+chains as diagrams, a health report, shareable single-entity HTML exports, and
+copy-any-script-back-to-FileMaker as a pasteable snippet.
 
 Prefer to self-host? The whole app is one file — serve `fm_ddr/web/index.html`
 as a static page; it works identically.
@@ -94,7 +87,7 @@ Then query it. Each command is copy-paste safe on its own:
 | `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
 | `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
 | `fmsonar stats solution.db` | entity counts + reference-resolution health |
-| `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | any SQL — [QUERIES.md](QUERIES.md) has the recipes |
+| `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
 
 Because the output is plain SQLite, anything can query it — `sqlite3`,
 Datasette, DB Browser, or an AI.
@@ -111,11 +104,10 @@ one command, works from any directory afterwards:
 fmsonar install-skill
 ```
 
-The skill teaches the assistant the schema, the query recipes, and the
-investigation protocol (survey before deep-reading, climb to callers, sweep the
-globals a script writes, read layout bodies for UI mechanisms, report real
-FileMaker ids). Every line of that protocol exists because a test failed
-without it.
+The skill teaches the assistant the schema, the query recipes, and — learned the
+hard way, see the eval story — the **investigation protocol**: survey before
+deep-reading, climb to callers, sweep the globals a script writes, read layout
+bodies for UI mechanisms, report real FileMaker ids.
 
 Then, wherever you're working: *"analyze the DDR in ~/Desktop/MyDDR — which
 scripts write to CTC::email?"* Claude Code builds the index into a central cache
