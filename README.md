@@ -15,7 +15,11 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
    we measured it. But every question costs a fresh pass and a hand-written
    parser, an analysis needs dozens of questions, and the hard-won structure is
    thrown away afterwards. An index turns that repeated cost into one parse and
-   millisecond queries — same answers, roughly a third of the time and tokens.
+   millisecond queries, at roughly a third of the time and tokens. It's a
+   projection, not the whole DDR: ~98% of references resolve as typed edges,
+   text-only usage (ExecuteSQL, calculated names) is caught by full-text search,
+   and [COVERAGE.md](COVERAGE.md) states exactly what isn't captured — for those
+   cases the raw XML is still there, and the AI skill says when to go back to it.
 3. **A DDR is a client's entire schema — table names, business logic, everything.**
    Sending that to someone else's server is a confidentiality decision most client
    work doesn't allow. fmsonar.com is a web *page*, not a web service: parsing runs
