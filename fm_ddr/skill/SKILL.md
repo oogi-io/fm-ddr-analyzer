@@ -91,7 +91,11 @@ lookup), these are mandatory, one query each:
 
 Shortcut: `fm-ddr investigate <db> "<script>"` runs steps 2-4 (plus layout
 launch sites with their params, record operations, and the full body) in ONE
-command - reach for it first when a script is the entry point.
+command - reach for it first when a script is the entry point. It also always
+prints a recursive CHAIN rollup (every script reachable from this one, with
+its deleters tiered and creators counted); add `--chain` for the full
+per-site census. For "what does this scheduled job / controller touch",
+that rollup IS the data census - don't hand-roll step-type counts.
 
 6b. **Field-writer sweeps miss record operations** (creating/deleting a
 record writes no field). `fm-ddr mutations <db> [--like text]` inventories

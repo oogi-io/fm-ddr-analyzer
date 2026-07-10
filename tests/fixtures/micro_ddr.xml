@@ -213,6 +213,14 @@ beta</Text>
 				</Step>
 			</StepList>
 		</Script>
+		<Script id="98" name="Chain Root" includeInMenu="False" SiriShortcutVisible="False">
+			<StepList>
+				<Step enable="True" id="1" name="Perform Script">
+					<StepText>Perform Script [ &#8220;Record Ops Torture&#8221; ]</StepText>
+					<Script id="99" name="Record Ops Torture"></Script>
+				</Step>
+			</StepList>
+		</Script>
 		<Script id="99" name="Record Ops Torture" includeInMenu="False" SiriShortcutVisible="False">
 			<StepList>
 				<Step enable="True" id="6" name="Go to Layout">

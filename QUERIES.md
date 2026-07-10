@@ -233,7 +233,10 @@ Tiers: `confident` (Truncate with a named table — the DDR states it) · `likel
 in-script Go to Layout context, browse mode) · `check` (context set by caller /
 conditional / portal row / import mapping — the note says what to verify). Find-mode
 record ops are find REQUESTS, not mutations: shown and tagged, never dropped; same for
-disabled (`//`) steps. `investigate <script>` includes the same analysis per script.
+disabled (`//`) steps. `investigate <script>` includes the same analysis per script — and
+(v1.6.0+) ALWAYS prints a compact recursive **chain rollup** (N scripts, deleters listed with
+tiers, creator counts) when the script has callees; `investigate ... --chain` expands it to
+the full per-site census. "What does this nightly job touch?" is one command.
 
 Layout context and browse/find mode are runtime state a script can inherit from its
 caller — treat `likely` as a strong hint, not a guarantee.

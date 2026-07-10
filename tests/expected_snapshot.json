@@ -151,6 +151,11 @@
    ""
   ],
   [
+   "script_step|Perform Script|script|Chain Root||0|0",
+   "",
+   ""
+  ],
+  [
    "script_step|Perform Script|script|Main Script|script_group|Main||0|0|0",
    "",
    "Main"
@@ -197,6 +202,11 @@
   ],
   [
    "script_step|Truncate Table|script|Record Ops Torture||0|1",
+   "",
+   ""
+  ],
+  [
+   "script|Chain Root||0",
    "",
    ""
   ],
@@ -388,6 +398,14 @@
    "layout",
    "Invoices",
    "layout|Invoices|layout_group|Interfaces||0|0",
+   0
+  ],
+  [
+   "script_step|Perform Script|script|Chain Root||0|0",
+   "perform_script",
+   "script",
+   "Record Ops Torture",
+   "script|Record Ops Torture||0",
    0
   ],
   [
