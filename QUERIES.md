@@ -216,6 +216,28 @@ by design): a var whose only hits are its own `Set Variable` writes is
 real solution: this pair of queries surfaces a write-only global bug in one
 round-trip that a per-question grep hunt took an entire session to find.
 
+## Record operations (v1.5.0+): what creates or deletes records
+
+Record-op steps (New Record, Delete Record, Delete All, Delete Portal Row, Duplicate,
+Import, Truncate) carry NO table in the DDR — they act on the runtime layout context.
+Field-writer sweeps are structurally blind to them (deleting a record writes no field).
+fmsonar therefore SURFACES them with a context clue and a confidence tier, never a
+resolved claim:
+
+```bash
+fm-ddr mutations solution.db                 # complete inventory, tiered
+fm-ddr mutations solution.db --like adder    # loose filter: script name OR context clue
+```
+
+Tiers: `confident` (Truncate with a named table — the DDR states it) · `likely` (clean
+in-script Go to Layout context, browse mode) · `check` (context set by caller /
+conditional / portal row / import mapping — the note says what to verify). Find-mode
+record ops are find REQUESTS, not mutations: shown and tagged, never dropped; same for
+disabled (`//`) steps. `investigate <script>` includes the same analysis per script.
+
+Layout context and browse/find mode are runtime state a script can inherit from its
+caller — treat `likely` as a strong hint, not a guarantee.
+
 ## Health / tech-debt hints
 
 Candidate **dead fields** (never referenced anywhere — read COVERAGE.md first;

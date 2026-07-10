@@ -147,9 +147,9 @@ class TestParser(unittest.TestCase):
         # 2 layout DEFINITIONS; the go-to-layout button on the layout is a ref
         self.assertEqual(c["layout"], 2)
         self.assertEqual(c["layout_group"], 1)
-        self.assertEqual(c["script"], 4)  # 3 in the Main folder + 1 loose (ungrouped)
+        self.assertEqual(c["script"], 5)  # 3 in the Main folder + 1 loose + Record Ops Torture
         self.assertEqual(c["script_group"], 1)
-        self.assertEqual(c["script_step"], 9)
+        self.assertEqual(c["script_step"], 22)  # 9 + 13 in Record Ops Torture
         self.assertEqual(c["custom_function"], 1)
         self.assertEqual(c["value_list"], 2)
 
@@ -248,6 +248,30 @@ class TestParser(unittest.TestCase):
         from fm_ddr import __version__
         self.assertIn(__version__, r.stdout)   # fresh build shows current parser
         self.assertIn("ok", r.stdout)
+
+    def test_mutations_command(self):
+        import subprocess, sys as _sys
+        r = subprocess.run([_sys.executable, "-m", "fm_ddr.cli", "mutations",
+                            self.db, "--like", "Torture"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = r.stdout
+        # 1) browse-mode New Record on clean context -> likely CONTACT
+        self.assertRegex(out, r"likely\s+\[99\] Record Ops Torture\s+New Record/Request\s+CONTACT")
+        # 2) find-mode New Record shown, tagged, not counted as creator
+        self.assertIn("find request (not a mutation)", out)
+        self.assertIn("## CREATORS (1)", out)
+        # 3) disabled delete shown, tagged
+        self.assertIn("disabled", out)
+        # 4) conditional Go to Layout demotes to check
+        self.assertIn("conditional context", out)
+        # 5) portal row never gets a layout-based likely
+        self.assertIn("portal row: layout context is NOT the target table", out)
+        # 6) truncate with named table is the only confident
+        self.assertRegex(out, r"confident\s+\[99\] Record Ops Torture\s+Truncate Table\s+CONTACT")
+        # 7) truncate WITHOUT a table is not confident (1 confident ROW only)
+        import re as _re
+        self.assertEqual(len(_re.findall(r"^confident\b", out, _re.M)), 1)
 
     def test_step_target_captured(self):
         # Set Field's write target is a direct <Field> child of <Step> in real

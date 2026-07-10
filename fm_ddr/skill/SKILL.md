@@ -90,8 +90,16 @@ lookup), these are mandatory, one query each:
    live-verified.
 
 Shortcut: `fm-ddr investigate <db> "<script>"` runs steps 2-4 (plus layout
-launch sites with their params, and the full body) in ONE command - reach
-for it first when a script is the entry point.
+launch sites with their params, record operations, and the full body) in ONE
+command - reach for it first when a script is the entry point.
+
+6b. **Field-writer sweeps miss record operations** (creating/deleting a
+record writes no field). `fm-ddr mutations <db> [--like text]` inventories
+every record-op step with a context clue and confidence tier (confident /
+likely / check). The clue is the nearest Go to Layout - runtime state a
+script can inherit from its caller - so treat 'likely' as a strong hint and
+'check' rows as the to-verify list. Find-mode record ops are find requests,
+not mutations (tagged, never dropped).
 
 ## 4. Honesty guardrails (non-negotiable)
 

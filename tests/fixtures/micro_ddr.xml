@@ -213,6 +213,51 @@ beta</Text>
 				</Step>
 			</StepList>
 		</Script>
+		<Script id="99" name="Record Ops Torture" includeInMenu="False" SiriShortcutVisible="False">
+			<StepList>
+				<Step enable="True" id="6" name="Go to Layout">
+					<StepText>Go to Layout [ &#8220;Contacts&#8221; (CONTACT) ]</StepText>
+				</Step>
+				<Step enable="True" id="7" name="New Record/Request">
+					<StepText>New Record/Request</StepText>
+				</Step>
+				<Step enable="True" id="22" name="Enter Find Mode">
+					<StepText>Enter Find Mode [  ]</StepText>
+				</Step>
+				<Step enable="True" id="7" name="New Record/Request">
+					<StepText>New Record/Request</StepText>
+				</Step>
+				<Step enable="True" id="28" name="Perform Find">
+					<StepText>Perform Find [  ]</StepText>
+				</Step>
+				<Step enable="False" id="179" name="Delete Record/Request">
+					<StepText>//  Delete Record/Request
+[ No dialog ]</StepText>
+				</Step>
+				<Step enable="True" id="68" name="If">
+					<StepText>If [ 1 ]</StepText>
+				</Step>
+				<Step enable="True" id="6" name="Go to Layout">
+					<StepText>Go to Layout [ &#8220;Invoices&#8221; (INVOICE) ]</StepText>
+				</Step>
+				<Step enable="True" id="70" name="End If">
+					<StepText>End If</StepText>
+				</Step>
+				<Step enable="True" id="60" name="Delete All Records">
+					<StepText>Delete All Records
+[ No dialog ]</StepText>
+				</Step>
+				<Step enable="True" id="182" name="Delete Portal Row">
+					<StepText>Delete Portal Row</StepText>
+				</Step>
+				<Step enable="True" id="209" name="Truncate Table">
+					<StepText>Truncate Table [ No dialog; Table: &#8220;CONTACT&#8221; ]</StepText>
+				</Step>
+				<Step enable="True" id="209" name="Truncate Table">
+					<StepText>Truncate Table [ No dialog ]</StepText>
+				</Step>
+			</StepList>
+		</Script>
 	</ScriptCatalog>
 	<CustomFunctionCatalog>
 		<CustomFunction id="1" functionArity="1" visible="True" parameters="input" name="MakeTitle">

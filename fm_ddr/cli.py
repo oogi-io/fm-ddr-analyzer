@@ -9,6 +9,7 @@
 
 import argparse
 import os
+import re
 import sqlite3
 import sys
 
@@ -276,6 +277,21 @@ def cmd_investigate(args):
             flag = "  <-- WRITE-ONLY in steps? confirm with: fm-ddr search <db> '\"%s\"'" % var.lstrip("$") if om == 0 else ""
             print(f"  {var:48} step-mentions elsewhere: {om}{flag}")
 
+    # ---- record operations (same engine as cmd_mutations) ----
+    steps_rows = conn.execute(
+        "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text') "
+        "FROM entities s WHERE s.parent_entity_id=? AND s.kind='script_step' "
+        "ORDER BY s.entity_id", (eid,)).fetchall()
+    rec_ops = _scan_record_ops(steps_rows)
+    if rec_ops:
+        print(f"\n## Record operations ({len(rec_ops)}) — context clues, not resolved claims")
+        for op in rec_ops:
+            tag = op["tier"] if op["state"] == "live" else op["state"]
+            line = f"  {tag:9} {op['step_type']:24} ctx: {op['context'] or '-'}"
+            if op["note"]:
+                line += f"   ({op['note']})"
+            print(line)
+
     # ---- body ----
     if not args.no_body:
         print(f"\n## Body ({nsteps} steps)")
@@ -359,6 +375,152 @@ def cmd_list(args):
         return
     print(f"# {d}\n")
     _print_table(["db", "label", "built (UTC)", "parser", "size", "status"], rows)
+
+
+
+# ---- record operations (mutations) ------------------------------------
+# Record-op steps carry no table: they act on the runtime layout context.
+# fmsonar therefore SURFACES them with a context clue and a confidence tier,
+# and never resolves or drops a row. Ambiguity rounds down to 'check'.
+
+RECORD_CREATE = {"New Record/Request", "Duplicate Record/Request", "Import Records"}
+RECORD_DELETE = {"Delete Record/Request", "Delete All Records",
+                 "Delete Portal Row", "Truncate Table"}
+_FIND_ON = {"Enter Find Mode", "Modify Last Find"}
+_FIND_OFF = {"Perform Find", "Enter Browse Mode", "Constrain Found Set",
+             "Extend Found Set", "Show All Records"}
+_BLOCK_OPEN = {"If", "Loop"}
+_BLOCK_CLOSE = {"End If", "End Loop"}
+_BRANCH_ALT = {"Else", "Else If"}
+
+_TO_RE = re.compile(r"\(([A-Za-z0-9_ .\u2022-]+)\)\s*\]\s*$")
+_TRUNC_RE = re.compile(r"Table:\s*[\u201c\"]([^\u201d\"]+)[\u201d\"]")
+
+
+def _parse_layout_to(txt):
+    m = _TO_RE.search((txt or "").strip())
+    return m.group(1) if m else None
+
+
+def _scan_record_ops(steps):
+    """steps: ordered (seq, step_type, step_text) in document order.
+    Returns op dicts: kind, step_type, seq, tier, context, note, state.
+    state: live | find (find-mode request, not a mutation) | disabled."""
+    ops = []
+    ctx = None          # (to_name, set_depth, conditional, via_gtrr)
+    depth = 0
+    find = False
+    for seq, st, txt in steps:
+        txt = txt or ""
+        disabled = txt.lstrip().startswith("//")
+        if not disabled:
+            if st in _BLOCK_OPEN:
+                depth += 1
+            elif st in _BLOCK_CLOSE:
+                depth = max(0, depth - 1)
+                if ctx and ctx[1] > depth:
+                    ctx = (ctx[0], ctx[1], True, ctx[3])   # its block closed
+            elif st in _BRANCH_ALT:
+                if ctx and ctx[1] >= depth:
+                    ctx = (ctx[0], ctx[1], True, ctx[3])   # other branch runs instead
+            elif st == "Go to Layout":
+                to = _parse_layout_to(txt)
+                ctx = (to, depth, False, False) if to else None
+            elif st.startswith("Go to Related"):
+                to = _parse_layout_to(txt)
+                ctx = (to, depth, True, True) if to else None  # GTRR can no-match
+            elif st in _FIND_ON:
+                find = True
+            elif st in _FIND_OFF:
+                find = False
+        if st not in RECORD_CREATE and st not in RECORD_DELETE:
+            continue
+        kind = "create" if st in RECORD_CREATE else "delete"
+        state = "disabled" if disabled else ("find" if find else "live")
+        tier, context, note = _tier_record_op(st, txt, ctx)
+        ops.append(dict(kind=kind, step_type=st, seq=seq, tier=tier,
+                        context=context, note=note, state=state))
+    return ops
+
+
+def _tier_record_op(st, txt, ctx):
+    if st == "Truncate Table":
+        m = _TRUNC_RE.search(txt)
+        if m:
+            return "confident", m.group(1), "table named in the step"
+        # no table named: acts on current context, falls through
+    if st == "Delete Portal Row":
+        clue = ctx[0] if ctx else None
+        return "check", clue, "portal row: layout context is NOT the target table"
+    if st == "Import Records":
+        clue = ctx[0] if ctx else None
+        return "check", clue, "import target set by its field mapping (not in DDR text)"
+    if ctx is None:
+        return "check", None, "context set by caller"
+    to, _d, cond, gtrr = ctx
+    if cond or gtrr:
+        return "check", to, "conditional context" + (" (via Go to Related Record)" if gtrr else "")
+    return "likely", to, None
+
+
+def _script_steps_ordered(conn, where_sql, params):
+    return conn.execute(
+        "SELECT scr.fm_id, scr.name, s.seq, s.step_type, "
+        "json_extract(s.extra_json,'$.step_text') "
+        "FROM entities s JOIN entities scr ON scr.entity_id = s.parent_entity_id "
+        "AND scr.kind='script' WHERE s.kind='script_step' " + where_sql +
+        " ORDER BY scr.entity_id, s.entity_id", params).fetchall()
+
+
+def cmd_mutations(args):
+    """Inventory of record operations (create/delete/duplicate/import/truncate)
+    with a context CLUE and a confidence tier - never a resolved claim.
+    Complete by construction: find-mode and disabled ops are shown and tagged,
+    not dropped."""
+    conn = _connect(args.db)
+    rows = _script_steps_ordered(conn, "", ())
+    from collections import defaultdict
+    per_script = defaultdict(list)
+    names = {}
+    for fmid, nm, seq, st, txt in rows:
+        per_script[fmid].append((seq, st, txt))
+        names[fmid] = nm
+    hits = []
+    like = (args.like or "").lower()
+    for fmid, steps in per_script.items():
+        for op in _scan_record_ops(steps):
+            hay = (names[fmid] + " " + (op["context"] or "")).lower()
+            if like and like not in hay:
+                continue
+            op["fmid"], op["name"] = fmid, names[fmid]
+            hits.append(op)
+    if not hits:
+        print("No record operations matched" + (f" '{args.like}'" if like else "") + ".")
+        return
+    tier_rank = {"confident": 0, "likely": 1, "check": 2}
+    header = ["tier", "script", "step", "context clue", "note"]
+    for kind, label in (("create", "CREATORS"), ("delete", "DELETERS")):
+        live = sorted([h for h in hits if h["kind"] == kind and h["state"] == "live"],
+                      key=lambda h: (tier_rank[h["tier"]], h["name"], h["seq"]))
+        print(f"\n## {label} ({len(live)})")
+        _print_table(header, [[h["tier"], f"[{h['fmid']}] {h['name']}",
+                               h["step_type"], h["context"] or "-",
+                               h["note"] or ""] for h in live],
+                     limit=getattr(args, "limit", 200))
+    tagged = [h for h in hits if h["state"] != "live"]
+    if tagged:
+        print(f"\n## Tagged, not counted above ({len(tagged)})")
+        _print_table(["tag", "script", "step", "context clue"],
+                     [[("find request (not a mutation)" if h["state"] == "find"
+                        else "disabled"),
+                       f"[{h['fmid']}] {h['name']}", h["step_type"],
+                       h["context"] or "-"] for h in tagged],
+                     limit=getattr(args, "limit", 200))
+    print("\nContext clue = nearest preceding Go to Layout. Layout context and "
+          "browse/find mode\nare runtime state a script can inherit from its "
+          "caller: treat 'likely' as a strong\nhint, not a guarantee; 'check' "
+          "rows tell you what to verify. Only 'confident'\n(Truncate with a "
+          "named table) is stated by the DDR itself.")
 
 
 def cmd_install_skill(args):
@@ -506,6 +668,16 @@ def main(argv=None):
     ls.add_argument("dir", nargs="?", default=None,
                     help="folder to scan (default: the central cache)")
     ls.set_defaults(func=cmd_list)
+
+    mu = sub.add_parser("mutations",
+                        help="record operations (create/delete/duplicate/import/"
+                             "truncate) with context clues and confidence tiers")
+    mu.add_argument("db")
+    mu.add_argument("--like", default=None,
+                    help="loose filter: substring of script name or context clue")
+    mu.add_argument("--limit", type=int, default=100000,
+                    help="row cap per section (default: effectively unlimited — an inventory must be complete)")
+    mu.set_defaults(func=cmd_mutations)
 
     ins = sub.add_parser("install-skill",
                          help="install the Claude Code skill globally (~/.claude/skills)")
