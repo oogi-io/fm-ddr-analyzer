@@ -91,9 +91,64 @@
    ""
   ],
   [
+   "script_step|Delete All Records|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Delete Portal Row|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Delete Record/Request|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|End If|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Enter Find Mode|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
    "script_step|Go to Layout|script|Main Script|script_group|Main||0|0|0",
    "",
    "Main"
+  ],
+  [
+   "script_step|Go to Layout|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Go to Layout|script|Record Ops Torture||0|1",
+   "",
+   ""
+  ],
+  [
+   "script_step|If|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|New Record/Request|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|New Record/Request|script|Record Ops Torture||0|1",
+   "",
+   ""
+  ],
+  [
+   "script_step|Perform Find|script|Record Ops Torture||0|0",
+   "",
+   ""
   ],
   [
    "script_step|Perform Script|script|Main Script|script_group|Main||0|0|0",
@@ -136,6 +191,16 @@
    "Main"
   ],
   [
+   "script_step|Truncate Table|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
+   "script_step|Truncate Table|script|Record Ops Torture||0|1",
+   "",
+   ""
+  ],
+  [
    "script|Helper Script|script_group|Main||0|0",
    "",
    "Main"
@@ -154,6 +219,11 @@
    "script|Orphan Script|script_group|Main||0|0",
    "",
    "Main"
+  ],
+  [
+   "script|Record Ops Torture||0",
+   "",
+   ""
   ],
   [
    "table_occurrence|CTC||0",
