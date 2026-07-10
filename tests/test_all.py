@@ -147,9 +147,9 @@ class TestParser(unittest.TestCase):
         # 2 layout DEFINITIONS; the go-to-layout button on the layout is a ref
         self.assertEqual(c["layout"], 2)
         self.assertEqual(c["layout_group"], 1)
-        self.assertEqual(c["script"], 5)  # 3 in the Main folder + 1 loose + Record Ops Torture
+        self.assertEqual(c["script"], 6)  # 3 Main + 1 loose + Chain Root + Record Ops Torture
         self.assertEqual(c["script_group"], 1)
-        self.assertEqual(c["script_step"], 22)  # 9 + 13 in Record Ops Torture
+        self.assertEqual(c["script_step"], 23)  # 9 + 13 torture + 1 Chain Root
         self.assertEqual(c["custom_function"], 1)
         self.assertEqual(c["value_list"], 2)
 
@@ -248,6 +248,26 @@ class TestParser(unittest.TestCase):
         from fm_ddr import __version__
         self.assertIn(__version__, r.stdout)   # fresh build shows current parser
         self.assertIn("ok", r.stdout)
+
+    def test_investigate_chain_rollup(self):
+        import subprocess, sys as _sys
+        r = subprocess.run([_sys.executable, "-m", "fm_ddr.cli", "investigate",
+                            self.db, "Chain Root", "--no-body"],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        out = r.stdout
+        # default-on: the compact rollup appears without any flag
+        self.assertIn("## Chain (recursive callees): 2 scripts (1 direct", out)
+        # torture script's ops aggregated: the named-table Truncate is confident
+        self.assertRegex(out, r"confident\s+\[99\] Record Ops Torture — Truncate Table → CONTACT")
+        # find-mode/disabled ops are tagged, not counted
+        self.assertIn("tagged (find-mode requests / disabled)", out)
+        # --chain expands to the full census
+        r2 = subprocess.run([_sys.executable, "-m", "fm_ddr.cli", "investigate",
+                             self.db, "Chain Root", "--no-body", "--chain"],
+                            capture_output=True, text=True)
+        self.assertIn("### CHAIN DELETERS", r2.stdout)
+        self.assertIn("portal row: layout context is NOT the target table", r2.stdout)
 
     def test_mutations_command(self):
         import subprocess, sys as _sys

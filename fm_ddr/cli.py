@@ -292,6 +292,52 @@ def cmd_investigate(args):
                 line += f"   ({op['note']})"
             print(line)
 
+    # ---- chain profile (default-on, compact; --chain expands) ----
+    # Round-5 lesson: a capability behind an unknown flag is undiscovered.
+    # The compact rollup is ALWAYS printed when the script has callees.
+    chain, n_direct, cycles = _chain_scripts(conn, eid)
+    if n_direct:
+        ops = _chain_record_ops(conn, chain)
+        live = [o for o in ops if o["state"] == "live"]
+        dels = [o for o in live if o["kind"] == "delete"]
+        crs = [o for o in live if o["kind"] == "create"]
+        tagged = len(ops) - len(live)
+        print(f"\n## Chain (recursive callees): {len(chain)} scripts "
+              f"({n_direct} direct{'; cycles marked' if cycles else ''})")
+        from collections import Counter
+        dc = Counter(o["step_type"] for o in dels)
+        dsum = ", ".join(f"{k} x{v}" for k, v in dc.most_common())
+        print(f"   deleters: {len(dels)} site(s) — {dsum or 'none'}")
+        for o in sorted(dels, key=lambda o: (o["step_type"], o["name"])):
+            extra = f" → {o['context']}" if o["step_type"] == "Truncate Table" and o["tier"] == "confident" else \
+                    (f"  ctx: {o['context']}" if o["context"] else "  ctx: caller-set")
+            print(f"     {o['tier']:9} [{o['fmid']}] {o['name'][:52]} — {o['step_type']}{extra}")
+        cc = Counter(o["step_type"] for o in crs)
+        csum = ", ".join(f"{k} x{v}" for k, v in cc.most_common())
+        nscripts = len({o["fmid"] for o in crs})
+        print(f"   creators: {len(crs)} site(s) in {nscripts} script(s) — {csum or 'none'}")
+        if tagged:
+            print(f"   tagged (find-mode requests / disabled), not counted above: {tagged}")
+        if not args.chain:
+            print("   (--chain for the full per-site census)")
+        else:
+            tier_rank = {"confident": 0, "likely": 1, "check": 2}
+            hdr = ["tier", "script", "step", "context clue", "note"]
+            for kind, label in (("create", "CHAIN CREATORS"), ("delete", "CHAIN DELETERS")):
+                rows_ = sorted([o for o in live if o["kind"] == kind],
+                               key=lambda o: (tier_rank[o["tier"]], o["name"], o["seq"]))
+                print(f"\n### {label} ({len(rows_)})")
+                _print_table(hdr, [[o["tier"], f"[{o['fmid']}] {o['name']}",
+                                    o["step_type"], o["context"] or "-",
+                                    o["note"] or ""] for o in rows_], limit=100000)
+            tg = [o for o in ops if o["state"] != "live"]
+            if tg:
+                print(f"\n### CHAIN TAGGED ({len(tg)})")
+                _print_table(["tag", "script", "step", "context clue"],
+                             [[("find request" if o["state"] == "find" else "disabled"),
+                               f"[{o['fmid']}] {o['name']}", o["step_type"],
+                               o["context"] or "-"] for o in tg], limit=100000)
+
     # ---- body ----
     if not args.no_body:
         print(f"\n## Body ({nsteps} steps)")
@@ -472,6 +518,56 @@ def _script_steps_ordered(conn, where_sql, params):
         " ORDER BY scr.entity_id, s.entity_id", params).fetchall()
 
 
+
+def _script_callees(conn, eid):
+    """Entity ids of scripts this script's steps perform (incl. trigger installs)."""
+    return [r[0] for r in conn.execute(
+        "SELECT DISTINCT tgt.entity_id FROM refs r "
+        "JOIN entities st ON st.entity_id = r.source_entity_id AND st.parent_entity_id = ? "
+        "JOIN entities tgt ON tgt.entity_id = r.target_entity_id AND tgt.kind='script' "
+        "WHERE r.context IN ('perform_script','trigger') "
+        "AND r.target_entity_id IS NOT NULL", (eid,)).fetchall()]
+
+
+def _chain_scripts(conn, root_eid, max_depth=None):
+    """Cycle-safe BFS over recursive callees. Returns (ordered entity ids incl.
+    root, direct-callee count, cycles_seen)."""
+    direct = _script_callees(conn, root_eid)
+    seen = {root_eid}
+    order = [root_eid]
+    cycles = False
+    frontier = list(direct)
+    depth = 1
+    while frontier and (max_depth is None or depth <= max_depth):
+        nxt = []
+        for eid in frontier:
+            if eid in seen:
+                cycles = True
+                continue
+            seen.add(eid)
+            order.append(eid)
+            nxt.extend(_script_callees(conn, eid))
+        frontier = nxt
+        depth += 1
+    return order, len(direct), cycles
+
+
+def _chain_record_ops(conn, eids):
+    """Run the record-op engine over every script in the chain."""
+    hits = []
+    for eid in eids:
+        fmid, name = conn.execute(
+            "SELECT fm_id, name FROM entities WHERE entity_id=?", (eid,)).fetchone()
+        steps = conn.execute(
+            "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text') "
+            "FROM entities s WHERE s.parent_entity_id=? AND s.kind='script_step' "
+            "ORDER BY s.entity_id", (eid,)).fetchall()
+        for op in _scan_record_ops(steps):
+            op["fmid"], op["name"] = fmid, name
+            hits.append(op)
+    return hits
+
+
 def cmd_mutations(args):
     """Inventory of record operations (create/delete/duplicate/import/truncate)
     with a context CLUE and a confidence tier - never a resolved claim.
@@ -650,6 +746,9 @@ def main(argv=None):
     inv.add_argument("script", help="script name (exact or partial) or fm_id")
     inv.add_argument("--no-body", action="store_true",
                      help="omit the full step body")
+    inv.add_argument("--chain", action="store_true",
+                     help="expand the (always-shown) chain rollup into the full "
+                          "per-site record-op census")
     inv.set_defaults(func=cmd_investigate)
 
     sn = sub.add_parser("snippet",
