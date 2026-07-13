@@ -1,4 +1,9 @@
-# fmsonar
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
+    <img src="docs/banner-light.png" alt="fmsonar" width="380">
+  </picture>
+</p>
 
 **Ping your FileMaker solution — every reference echoes back.**
 One engine, two interfaces: **an explorer for you**, **a queryable index for your AI**.
