@@ -200,6 +200,10 @@ layouts, value lists, custom functions). A committed micro-fixture plus a full
 test suite (structural counts, resolution semantics, UTF-16 round-trip,
 edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push.
 
+The tool is also A/B tested against raw text search on real production tickets,
+and the losses shape the roadmap. The full story:
+[The tests that shaped fmsonar](https://oogi.io/blog/the-tests-that-shaped-fmsonar/).
+
 ## Roadmap
 
 - [x] **Phase 1 — Cross-reference engine.** SAX parser → SQLite, generic edge
