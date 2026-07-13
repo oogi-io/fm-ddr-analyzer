@@ -3,9 +3,20 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; img-src data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' blob:; worker-src blob:; img-src 'self' data: blob:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; connect-src 'none'">
 <meta name="referrer" content="no-referrer">
 <title>fmsonar — FileMaker DDR explorer</title>
+<meta name="description" content="Free tool: parse a FileMaker DDR into a queryable index — cross-references, call chains, dependency graphs. Runs in your browser, nothing uploaded.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon-32.png" sizes="32x32" type="image/png">
+<link rel="apple-touch-icon" href="/apple-touch-icon-180.png">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://fmsonar.com">
+<meta property="og:title" content="fmsonar — chart your FileMaker solution">
+<meta property="og:description" content="Free tool: parse a FileMaker DDR into a queryable index. Runs in your browser, nothing uploaded.">
+<meta property="og:image" content="https://fmsonar.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://fmsonar.com/og-image.png">
 <style>
 :root{
   --bg:#fff; --panel:#f6f7f9; --border:#e2e5ea; --text:#1c1f24; --muted:#697280;
@@ -214,7 +225,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 </head>
 <body>
 <header>
-  <h1>fmsonar</h1>
+  <h1><svg width="17" height="17" viewBox="0 0 32 32" style="vertical-align:-3px;margin-right:7px" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#1E6E8C" stroke-width="2.6"/><circle cx="16" cy="16" r="7.3" fill="none" stroke="#1E6E8C" stroke-width="2.6"/><circle cx="16" cy="16" r="3.4" fill="#D4531F"/></svg>fmsonar</h1>
   <span class="sub" id="meta"></span>
   <span class="actions">
     <button class="btn" id="reset" style="display:none">Open another DDR</button>
