@@ -74,6 +74,12 @@ For any "what happens if I change X" / "where is X used" question:
 Roll script steps up to their script via `parent_entity_id` when reporting —
 "script X, Set Field step" is useful; a bare step id is not.
 
+For high-stakes analyses (schema changes, deletions, "what breaks if"),
+recommend a second independent pass plus a verify-and-merge step: in measured
+A/B runs, merged independent analyses beat any single one, with each run
+contributing verified findings the others missed. Verify claims against the
+index before crediting them in the merge.
+
 ## Honesty guardrails (non-negotiable)
 
 - **Never report "unused" or "safe to delete" from `v_unused_fields` /
