@@ -46,8 +46,12 @@ multi-file build (missing sibling XMLs), not a broken solution.
 
 - **`v_usage`** — the main surface: one row per reference with readable
   `source_kind/source_name/source_parent_name`, `target_kind/target_name`,
-  `context`, `resolved`, `ambiguous`, `target_file`.
-- **`v_unused_fields`**, **`v_orphan_scripts`** — candidates, NOT verdicts (see guardrails).
+  `context`, `resolved`, `ambiguous`, `target_file`. **Live code only** —
+  refs from disabled (commented-out) steps are excluded; query
+  **`v_usage_disabled`** (same shape) to see dead-code references.
+- **`v_unused_fields`**, **`v_orphan_scripts`** — candidates, NOT verdicts (see
+  guardrails); `only_disabled_refs = 1` means the only references left are in
+  commented-out steps.
 - **`v_unresolved`** — unresolved refs grouped; **`v_ambiguous`** — flagged picks.
 
 Canonical recipes live in **QUERIES.md** — read it before writing ad-hoc SQL.

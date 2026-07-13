@@ -238,6 +238,10 @@ beta</Text>
 				<Step enable="True" id="28" name="Perform Find">
 					<StepText>Perform Find [  ]</StepText>
 				</Step>
+				<Step enable="False" id="1" name="Perform Script">
+					<StepText>//  Perform Script [ &#8220;Helper Script&#8221; ]</StepText>
+					<Script id="2" name="Helper Script"></Script>
+				</Step>
 				<Step enable="False" id="179" name="Delete Record/Request">
 					<StepText>//  Delete Record/Request
 [ No dialog ]</StepText>

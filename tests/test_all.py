@@ -65,6 +65,7 @@ def normalize(entities, refs):
             r["target_raw"] or "",
             keys.get(r["target_id"]) or "" if r["target_id"] is not None else "",
             r["ambiguous"],
+            r.get("disabled", 0),
         ]
         for r in refs
     )
@@ -80,10 +81,10 @@ def read_sqlite(db_path):
     ]
     refs = [
         {"source_id": s, "context": c, "target_kind": tk, "target_raw": tr,
-         "target_id": t, "ambiguous": a or 0}
-        for s, c, tk, tr, t, a in conn.execute(
+         "target_id": t, "ambiguous": a or 0, "disabled": d or 0}
+        for s, c, tk, tr, t, a, d in conn.execute(
             "SELECT source_entity_id,context,target_kind,target_raw,target_entity_id,"
-            "ambiguous FROM refs")
+            "ambiguous,disabled FROM refs")
     ]
     conn.close()
     return entities, refs
@@ -97,7 +98,8 @@ def read_js(js_json):
     ]
     refs = [
         {"source_id": r["s"], "context": r["c"], "target_kind": r["tk"],
-         "target_raw": r["tr"], "target_id": r["t"], "ambiguous": r.get("a", 0)}
+         "target_raw": r["tr"], "target_id": r["t"], "ambiguous": r.get("a", 0),
+         "disabled": r.get("dis", 0)}
         for r in js_json["edges"]
     ]
     return entities, refs
@@ -149,7 +151,7 @@ class TestParser(unittest.TestCase):
         self.assertEqual(c["layout_group"], 1)
         self.assertEqual(c["script"], 6)  # 3 Main + 1 loose + Chain Root + Record Ops Torture
         self.assertEqual(c["script_group"], 1)
-        self.assertEqual(c["script_step"], 23)  # 9 + 13 torture + 1 Chain Root
+        self.assertEqual(c["script_step"], 24)  # 9 + 14 torture + 1 Chain Root
         self.assertEqual(c["custom_function"], 1)
         self.assertEqual(c["value_list"], 2)
 
@@ -268,6 +270,30 @@ class TestParser(unittest.TestCase):
                             capture_output=True, text=True)
         self.assertIn("### CHAIN DELETERS", r2.stdout)
         self.assertIn("portal row: layout context is NOT the target table", r2.stdout)
+
+    def test_disabled_steps_flagged(self):
+        # the disabled Perform Script emits a ref flagged disabled=1
+        row = self.conn.execute("""
+            SELECT r.disabled FROM refs r
+            JOIN entities st ON st.entity_id = r.source_entity_id
+            JOIN entities scr ON scr.entity_id = st.parent_entity_id
+            WHERE scr.name='Record Ops Torture' AND r.context='perform_script'
+              AND r.target_name='Helper Script'""").fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(row[0], 1)
+        # v_usage (live) excludes it; v_usage_disabled carries it
+        live = self.conn.execute("""SELECT COUNT(*) FROM v_usage
+            WHERE context='perform_script' AND target_name='Helper Script'
+              AND source_parent_name='Record Ops Torture'""").fetchone()[0]
+        dead = self.conn.execute("""SELECT COUNT(*) FROM v_usage_disabled
+            WHERE context='perform_script' AND target_name='Helper Script'
+              AND source_parent_name='Record Ops Torture'""").fetchone()[0]
+        self.assertEqual((live, dead), (0, 1))
+        # the step entity itself carries the flag
+        d = self.conn.execute("""SELECT json_extract(s.extra_json,'$.disabled')
+            FROM entities s JOIN entities scr ON scr.entity_id=s.parent_entity_id
+            WHERE scr.name='Record Ops Torture' AND s.step_type='Perform Script'""").fetchone()[0]
+        self.assertEqual(d, 1)
 
     def test_mutations_command(self):
         import subprocess, sys as _sys
