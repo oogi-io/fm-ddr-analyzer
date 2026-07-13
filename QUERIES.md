@@ -36,6 +36,14 @@ readable source/target names) and the **`text_index`** FTS5 table (catch-all
 search). `refs.target_entity_id` is NULL for unresolved (external/calculated)
 targets.
 
+**`v_usage` is live code only.** References emitted from disabled
+(commented-out, `//`-prefixed) script steps are excluded — dead code would
+inflate usage counts. To see them, query **`v_usage_disabled`** (same
+columns). The health views (`v_unused_fields`, `v_orphan_scripts`) are also
+live-based and carry an `only_disabled_refs` marker: 1 means the entity's only
+remaining references sit in commented-out steps — a strong dead-code signal,
+but check `v_usage_disabled` before recommending deletion.
+
 ## "Where is X used?"
 
 Where is a **field** used (calcs, scripts, layouts, relationships)?

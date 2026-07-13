@@ -65,7 +65,8 @@ CREATE TABLE IF NOT EXISTS refs (
     target_raw       TEXT,              -- original raw string as seen (e.g. "TO::Field")
     target_file      TEXT,              -- external target: FileMaker file named by a FileReference marker
     target_entity_id INTEGER REFERENCES entities(entity_id),  -- filled by resolve step
-    ambiguous        INTEGER DEFAULT 0  -- 1 = several candidates matched; pick is deterministic but uncertain
+    ambiguous        INTEGER DEFAULT 0, -- 1 = several candidates matched; pick is deterministic but uncertain
+    disabled         INTEGER DEFAULT 0  -- 1 = emitted from a disabled (enable="False") script step: dead code
 );
 
 CREATE INDEX IF NOT EXISTS ix_entities_lookup ON entities(file_id, kind, name);

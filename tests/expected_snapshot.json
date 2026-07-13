@@ -176,6 +176,11 @@
    "Main"
   ],
   [
+   "script_step|Perform Script|script|Record Ops Torture||0|0",
+   "",
+   ""
+  ],
+  [
    "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
    "",
    "Main"
@@ -278,6 +283,7 @@
    "field",
    "CTC::email",
    "field|email|base_table|CTC||0|0",
+   0,
    0
   ],
   [
@@ -286,6 +292,7 @@
    "field",
    "CTC::zkp",
    "field|zkp|base_table|CTC||0|0",
+   0,
    0
   ],
   [
@@ -294,6 +301,7 @@
    "field",
    "ext_LOG::message",
    "",
+   0,
    0
   ],
   [
@@ -302,7 +310,8 @@
    "field",
    "zkp",
    "field|zkp|base_table|CTC||0|0",
-   1
+   1,
+   0
   ],
   [
    "field|Segment|base_table|CTC||0|0",
@@ -310,6 +319,7 @@
    "custom_function",
    "MakeTitle",
    "custom_function|MakeTitle||0",
+   0,
    0
   ],
   [
@@ -318,6 +328,7 @@
    "field",
    "Global::HideMe_g",
    "",
+   0,
    0
   ],
   [
@@ -326,6 +337,7 @@
    "layout",
    "Invoices",
    "layout|Invoices|layout_group|Interfaces||0|0",
+   0,
    0
   ],
   [
@@ -334,6 +346,7 @@
    "field",
    "CTC::email",
    "field|email|base_table|CTC||0|0",
+   0,
    0
   ],
   [
@@ -342,6 +355,7 @@
    "script",
    "Helper Script",
    "script|Helper Script|script_group|Main||0|0",
+   0,
    0
   ],
   [
@@ -350,6 +364,7 @@
    "value_list",
    "VL Custom",
    "value_list|VL Custom||0",
+   0,
    0
   ],
   [
@@ -358,6 +373,7 @@
    "field",
    "CTC::zkp",
    "field|zkp|base_table|CTC||0|0",
+   0,
    0
   ],
   [
@@ -366,6 +382,7 @@
    "field",
    "ctc_INV::zkp",
    "field|zkp|base_table|INV||0|0",
+   0,
    0
   ],
   [
@@ -374,6 +391,7 @@
    "table_occurrence",
    "CTC",
    "table_occurrence|CTC||0",
+   0,
    0
   ],
   [
@@ -382,6 +400,7 @@
    "table_occurrence",
    "ctc_INV",
    "table_occurrence|ctc_INV||0",
+   0,
    0
   ],
   [
@@ -390,6 +409,7 @@
    "field",
    "ctc_INV::amount",
    "field|amount|base_table|INV||0|0",
+   0,
    0
   ],
   [
@@ -398,6 +418,7 @@
    "layout",
    "Invoices",
    "layout|Invoices|layout_group|Interfaces||0|0",
+   0,
    0
   ],
   [
@@ -406,6 +427,7 @@
    "script",
    "Record Ops Torture",
    "script|Record Ops Torture||0",
+   0,
    0
   ],
   [
@@ -414,6 +436,7 @@
    "script",
    "Helper Script",
    "script|Helper Script|script_group|Main||0|0",
+   0,
    0
   ],
   [
@@ -422,6 +445,7 @@
    "script",
    "Ghost Script",
    "",
+   0,
    0
   ],
   [
@@ -430,6 +454,7 @@
    "script",
    "Remote Helper",
    "",
+   0,
    0
   ],
   [
@@ -438,7 +463,17 @@
    "script",
    "Loose Script",
    "script|Loose Script||0",
+   0,
    0
+  ],
+  [
+   "script_step|Perform Script|script|Record Ops Torture||0|0",
+   "perform_script",
+   "script",
+   "Helper Script",
+   "script|Helper Script|script_group|Main||0|0",
+   0,
+   1
   ],
   [
    "script_step|Set Field|script|Main Script|script_group|Main||0|0|0",
@@ -446,6 +481,7 @@
    "field",
    "CTC::email",
    "field|email|base_table|CTC||0|0",
+   0,
    0
   ],
   [
@@ -454,6 +490,7 @@
    "custom_function",
    "MakeTitle",
    "custom_function|MakeTitle||0",
+   0,
    0
   ],
   [
@@ -462,6 +499,7 @@
    "field",
    "ctc_INV::amount",
    "field|amount|base_table|INV||0|0",
+   0,
    0
   ]
  ]

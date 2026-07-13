@@ -113,6 +113,7 @@ class DDRHandler(xml.sax.ContentHandler):
             src["entity_id"] if src else None,
             src["kind"] if src else None,
             context, target_kind, fm_id, name, to_name, raw, target_file, None,
+            1 if (src and src.get("_disabled")) else 0,
         ))
         if len(self.ref_rows) >= BATCH:
             self.flush()
@@ -189,8 +190,10 @@ class DDRHandler(xml.sax.ContentHandler):
             if owner is not None:
                 owner["_nsteps"] = owner.get("_nsteps", 0) + 1
                 ordinal = owner["_nsteps"]
-            self.new_entity("script_step", a, step_type=a.get("name"),
-                            name=a.get("name"), seq=ordinal)
+            ent = self.new_entity("script_step", a, step_type=a.get("name"),
+                                  name=a.get("name"), seq=ordinal)
+            if a.get("enable") == "False":
+                ent["_disabled"] = True   # dead code: refs from it get flagged
             return
 
         # A layout object: button, field, tab/slide panel, portal, group, ...
@@ -393,6 +396,10 @@ class DDRHandler(xml.sax.ContentHandler):
         if ent["kind"] == "relationship" and ent.get("_ends"):
             ent["name"] = " :: ".join(ent["_ends"])
         extra = ent.get("extra_json")
+        if ent.get("_disabled"):
+            d0 = _j.loads(extra) if extra else {}
+            d0["disabled"] = True
+            extra = _json(d0)
         hide, tip, bounds = (ent.get("_hide_calc"), ent.get("_tooltip_calc"),
                              ent.get("_bounds"))
         if ent["kind"] == "layout_object" and (hide or tip or bounds):
@@ -448,8 +455,8 @@ class DDRHandler(xml.sax.ContentHandler):
             self.conn.executemany(
                 "INSERT INTO refs(ref_id,file_id,source_entity_id,source_kind,context,"
                 "target_kind,target_fm_id,target_name,target_to_name,target_raw,"
-                "target_file,target_entity_id)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?)", self.ref_rows)
+                "target_file,target_entity_id,disabled)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", self.ref_rows)
             self.ref_rows.clear()
         if self.fts_rows:
             self.conn.executemany(

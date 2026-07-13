@@ -30,6 +30,14 @@ scripts in other files, calculated layout destinations, unbound globals.
 Ambiguous picks (several same-named candidates, no qualifier) are flagged
 `ambiguous = 1` (see `v_ambiguous`); the pick is deterministic but uncertain.
 
+**Disabled steps (v1.6.1):** the DDR includes commented-out (`enable="False"`,
+`//`-prefixed) script steps, and their references used to count as live usage.
+Edges from disabled steps are now flagged `refs.disabled = 1` and excluded
+from `v_usage` and the health views; `v_usage_disabled` exposes them, and
+`v_unused_fields` / `v_orphan_scripts` mark entities whose only references are
+dead code with `only_disabled_refs = 1`. Steps themselves carry
+`extra_json.disabled`.
+
 ## NOT captured (blind spots — use FTS `search` as the fallback)
 
 | Usage pattern | Why | Fallback |

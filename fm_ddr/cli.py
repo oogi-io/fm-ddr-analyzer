@@ -279,7 +279,8 @@ def cmd_investigate(args):
 
     # ---- record operations (same engine as cmd_mutations) ----
     steps_rows = conn.execute(
-        "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text') "
+        "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text'), "
+        "COALESCE(json_extract(s.extra_json,'$.disabled'),0) "
         "FROM entities s WHERE s.parent_entity_id=? AND s.kind='script_step' "
         "ORDER BY s.entity_id", (eid,)).fetchall()
     rec_ops = _scan_record_ops(steps_rows)
@@ -456,9 +457,11 @@ def _scan_record_ops(steps):
     ctx = None          # (to_name, set_depth, conditional, via_gtrr)
     depth = 0
     find = False
-    for seq, st, txt in steps:
+    for row in steps:
+        seq, st, txt = row[0], row[1], row[2]
+        flag = row[3] if len(row) > 3 else 0
         txt = txt or ""
-        disabled = txt.lstrip().startswith("//")
+        disabled = bool(flag) or txt.lstrip().startswith("//")
         if not disabled:
             if st in _BLOCK_OPEN:
                 depth += 1
@@ -512,7 +515,8 @@ def _tier_record_op(st, txt, ctx):
 def _script_steps_ordered(conn, where_sql, params):
     return conn.execute(
         "SELECT scr.fm_id, scr.name, s.seq, s.step_type, "
-        "json_extract(s.extra_json,'$.step_text') "
+        "json_extract(s.extra_json,'$.step_text'), "
+        "COALESCE(json_extract(s.extra_json,'$.disabled'),0) "
         "FROM entities s JOIN entities scr ON scr.entity_id = s.parent_entity_id "
         "AND scr.kind='script' WHERE s.kind='script_step' " + where_sql +
         " ORDER BY scr.entity_id, s.entity_id", params).fetchall()
@@ -526,6 +530,7 @@ def _script_callees(conn, eid):
         "JOIN entities st ON st.entity_id = r.source_entity_id AND st.parent_entity_id = ? "
         "JOIN entities tgt ON tgt.entity_id = r.target_entity_id AND tgt.kind='script' "
         "WHERE r.context IN ('perform_script','trigger') "
+        "AND r.disabled = 0 "  # Dead code never calls
         "AND r.target_entity_id IS NOT NULL", (eid,)).fetchall()]
 
 
@@ -559,7 +564,8 @@ def _chain_record_ops(conn, eids):
         fmid, name = conn.execute(
             "SELECT fm_id, name FROM entities WHERE entity_id=?", (eid,)).fetchone()
         steps = conn.execute(
-            "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text') "
+            "SELECT s.seq, s.step_type, json_extract(s.extra_json,'$.step_text'), "
+            "COALESCE(json_extract(s.extra_json,'$.disabled'),0) "
             "FROM entities s WHERE s.parent_entity_id=? AND s.kind='script_step' "
             "ORDER BY s.entity_id", (eid,)).fetchall()
         for op in _scan_record_ops(steps):
@@ -578,8 +584,8 @@ def cmd_mutations(args):
     from collections import defaultdict
     per_script = defaultdict(list)
     names = {}
-    for fmid, nm, seq, st, txt in rows:
-        per_script[fmid].append((seq, st, txt))
+    for fmid, nm, seq, st, txt, dis in rows:
+        per_script[fmid].append((seq, st, txt, dis))
         names[fmid] = nm
     hits = []
     like = (args.like or "").lower()
@@ -696,17 +702,22 @@ def cmd_stats(args):
         print(f"  {kind:22s} {n}")
     tot = conn.execute("SELECT COUNT(*) FROM refs").fetchone()[0]
     res = conn.execute("SELECT COUNT(*) FROM refs WHERE target_entity_id IS NOT NULL").fetchone()[0]
+    dis = conn.execute("SELECT COUNT(*) FROM refs WHERE disabled = 1").fetchone()[0]
     print(f"\n# References: {tot} total, {res} resolved ({100*res//max(tot,1)}%)")
+    if dis:
+        print(f"  {dis} from disabled (commented-out) steps — excluded from v_usage, see v_usage_disabled")
     print("\n# Unresolved by kind/context (external / built-in / broken)")
     _, rows = _rows(conn, "SELECT * FROM v_unresolved")
     _print_table(["target_kind", "context", "n"], rows)
 
 
-def _banner():
+def _banner(stream=None):
     """One-line brand header: teal concentric-ring glyph + two-tone wordmark.
     Color only on a real terminal (and honor NO_COLOR); plain text otherwise."""
     from fm_ddr import __version__
-    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+    if stream is None:
+        stream = sys.stdout
+    if stream.isatty() and not os.environ.get("NO_COLOR"):
         t = "\033[38;5;38m"; b = "\033[1m"; d = "\033[38;5;244m"; r = "\033[0m"
         return f"{t}◎{r} {b}{t}fm{r}{b}sonar{r} {d}{__version__}{r}  FileMaker DDR explorer"
     return f"◎ fmsonar {__version__}  FileMaker DDR explorer"
@@ -813,6 +824,9 @@ def main(argv=None):
     st.set_defaults(func=cmd_stats)
 
     args = p.parse_args(argv)
+    # Brand line on every interactive run; stderr so piped/parsed stdout stays clean
+    if sys.stderr.isatty():
+        print(_banner(sys.stderr), file=sys.stderr)
     try:
         args.func(args)
     except (BrokenPipeError, KeyboardInterrupt):

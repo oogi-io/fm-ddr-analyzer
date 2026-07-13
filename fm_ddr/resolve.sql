@@ -155,26 +155,51 @@ SELECT
 FROM refs r
 LEFT JOIN entities se ON se.entity_id = r.source_entity_id
 LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
-LEFT JOIN entities te ON te.entity_id = r.target_entity_id;
+LEFT JOIN entities te ON te.entity_id = r.target_entity_id
+WHERE r.disabled = 0;
+
+-- References emitted from DISABLED (commented-out) script steps: dead code.
+-- Excluded from v_usage so counts and where-used reflect live behavior;
+-- kept queryable here because "referenced only by disabled code" is a finding.
+DROP VIEW IF EXISTS v_usage_disabled;
+CREATE VIEW v_usage_disabled AS
+SELECT
+    r.ref_id, r.context,
+    se.kind AS source_kind, se.name AS source_name, se.entity_id AS source_id,
+    sp.kind AS source_parent_kind, sp.name AS source_parent_name,
+    r.target_kind, COALESCE(te.name, r.target_raw) AS target_name,
+    r.target_raw, te.entity_id AS target_id,
+    (r.target_entity_id IS NOT NULL) AS resolved, r.ambiguous, r.target_file, r.file_id
+FROM refs r
+LEFT JOIN entities se ON se.entity_id = r.source_entity_id
+LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
+LEFT JOIN entities te ON te.entity_id = r.target_entity_id
+WHERE r.disabled = 1;
 
 -- Fields never referenced anywhere (candidate dead fields — see COVERAGE.md
 -- for the blind spots: ExecuteSQL strings and other text-only usage are NOT
 -- captured, so treat this as a review list, never a delete list).
 DROP VIEW IF EXISTS v_unused_fields;
 CREATE VIEW v_unused_fields AS
-SELECT f.entity_id, f.file_id, f.base_table, f.name, f.field_type
+SELECT f.entity_id, f.file_id, f.base_table, f.name, f.field_type,
+       EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = f.entity_id
+               AND r.disabled = 1) AS only_disabled_refs
 FROM entities f
 WHERE f.kind = 'field'
-  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = f.entity_id);
+  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = f.entity_id
+                  AND r.disabled = 0);
 
 -- Scripts never called by another script or trigger (candidate orphans;
 -- may still be run by user/menu/external, so treat as a hint).
 DROP VIEW IF EXISTS v_orphan_scripts;
 CREATE VIEW v_orphan_scripts AS
-SELECT s.entity_id, s.file_id, s.name, s.grp
+SELECT s.entity_id, s.file_id, s.name, s.grp,
+       EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = s.entity_id
+               AND r.disabled = 1) AS only_disabled_refs
 FROM entities s
 WHERE s.kind = 'script'
-  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = s.entity_id);
+  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = s.entity_id
+                  AND r.disabled = 0);
 
 -- Unresolved references (broken/external/built-in). Useful health signal.
 DROP VIEW IF EXISTS v_unresolved;

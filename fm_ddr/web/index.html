@@ -316,7 +316,8 @@ function emitRef(context,tk,o){
   const tf=(tk==='script'||tk==='layout')&&src&&src._extFile?src._extFile:null;
   H.edges.push({s:src?src.id:null, sk:src?src.k:null, f:H.fileIdx,
     c:context, tk:tk, fm:o.fm!=null?o.fm:null, name:o.name!=null?o.name:null,
-    to:o.to!=null?o.to:null, tr:o.raw!=null?o.raw:null, tf:tf, t:null});
+    to:o.to!=null?o.to:null, tr:o.raw!=null?o.raw:null, tf:tf, t:null,
+    dis:(src&&src._dis)?1:0});
 }
 
 function onStart(tag,a){
@@ -347,7 +348,8 @@ function onStart(tag,a){
     let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
     let ordinal=null;
     if(owner){ owner._nsteps=(owner._nsteps||0)+1; ordinal=owner._nsteps; }
-    newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal; return; }
+    newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal;
+    if(a.enable==='False') e._dis=true; return; }
   if(tag==='Object' && anc('Layout')){ newEntity('layout_object',a,{name:a.name||null}); return; }
   if(tag==='CustomFunction' && anc('CustomFunctionCatalog')){ newEntity('custom_function',a); return; }
   if(tag==='ValueList'){
@@ -427,7 +429,7 @@ function finalize(e){
   const calcCap=e.k==='custom_function'?65536:4000;
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
     st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null,
-    c:calc?calc.slice(0,calcCap):null, step:e._step||null});
+    c:calc?calc.slice(0,calcCap):null, step:e._step||null, d:e._dis?1:0});
 }
 
 // ---- incremental tokenizer ----
@@ -585,8 +587,8 @@ async function run(input){
   const counts={}; for(const e of H.entities) counts[e.k]=(counts[e.k]||0)+1;
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
-  const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null}));
+  const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,
@@ -794,17 +796,18 @@ function initViewer(DATA){
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
     to_reference:'TO reference',value_list_field:'value list source',sort:'sort order'};
   const ctxLabel=c=>CTXL[c]||c;
+  const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   function sourceDisplay(x){
     let e=byId[x.s];
     if(e&&e.k==='script_step'){ const p=byId[e.p];
-      return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabel(x.c), amb:x.a}; }
-    if(!e) return {label:'?', id:x.s, cat:'unknown', via:ctxLabel(x.c), amb:x.a};
-    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabel(x.c), amb:x.a};
+      return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabelFor(x), amb:x.a}; }
+    if(!e) return {label:'?', id:x.s, cat:'unknown', via:ctxLabelFor(x), amb:x.a};
+    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabelFor(x), amb:x.a};
   }
   function targetDisplay(x){
     if(x.t!=null){ const t=byId[x.t];
-      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabel(x.c), amb:x.a}; }
-    return {label:x.tr||('('+x.tk+')'), ext:true, cat:x.tk, via:ctxLabel(x.c)};
+      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabelFor(x), amb:x.a}; }
+    return {label:x.tr||('('+x.tk+')'), ext:true, cat:x.tk, via:ctxLabelFor(x)};
   }
   function groupBy(a,k){const m={};a.forEach(x=>{(m[x[k]]=m[x[k]]||[]).push(x);});return m;}
   function filteredRows(){
@@ -921,11 +924,16 @@ function initViewer(DATA){
     const steps=stepsSorted[e.id]||[];
     if(!steps.length) return '';
     const comments=steps.filter(st=>IS_COMMENT_STEP(st.st)).length;
-    const calls=(outbound[e.id]||[]).concat(...steps.map(st=>outbound[st.id]||[]))
-      .filter(x=>x.c==='perform_script').length;
+    const disabled=steps.filter(st=>st.d).length;
+    const callEdges=(outbound[e.id]||[]).concat(...steps.map(st=>outbound[st.id]||[]))
+      .filter(x=>x.c==='perform_script'&&!x.dis);
+    const liveTargets=new Set(), unknowns=callEdges.filter(x=>x.t==null).length;
+    callEdges.forEach(x=>{ if(x.t!=null) liveTargets.add(x.t); });
     let h='<div class="scriptmeta"><span>Steps: <b>'+steps.length+'</b></span>'+
+      (disabled?'<span>Disabled: <b>'+disabled+'</b></span>':'')+
       '<span>Comments: <b>'+comments+'</b></span>'+
-      '<span>Performs scripts: <b>'+calls+'</b></span></div>';
+      '<span>Calls scripts: <b>'+liveTargets.size+'</b>'+
+      (unknowns?' <span class="mut">(+'+unknowns+' unresolved)</span>':'')+'</span></div>';
     h+='<div class="steps" id="stepsblock"><div class="stepstoolbar">'+
       (window.__DDR_SOURCE?'<button class="snipinfo" id="snipinfobtn" title="How to paste into FileMaker">\u24d8</button>'+
         '<button class="copybtn" id="copyfmsnip" '+
@@ -940,7 +948,7 @@ function initViewer(DATA){
       // an empty comment step has no StepText; render a blank line, not the
       // step-type name ("# (comment)")
       let text=st.sx||(IS_COMMENT_STEP(t)?'':t);
-      const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#');
+      const isCmt=IS_COMMENT_STEP(t)||text.startsWith('#')||st.d;
       const line=text?fmtStepText(text,ind):'';
       plain.push(line); currentLineTexts.push(text);
       h+='<div class="stepline'+(isCmt?' cmt':'')+'">'+
@@ -966,6 +974,7 @@ function initViewer(DATA){
     const acc={};
     (inbound[id]||[]).forEach(x=>{
       if(x.c!=='perform_script'&&x.c!=='trigger') return;
+      if(x.dis) return; // dead code never calls
       let src=byId[x.s]; if(!src) return;
       const type=edgeType(x);
       if(src.k==='script_step'){ src=byId[src.p]; if(!src) return; }
@@ -980,6 +989,7 @@ function initViewer(DATA){
     const acc={};
     outboundFor(id).forEach(x=>{
       if(x.c!=='perform_script') return;
+      if(x.dis) return;
       const type=edgeType(x);
       const k=x.t!=null?'n'+x.t:'x:'+(x.tr||'?');
       if(!acc[k]){
@@ -1370,7 +1380,7 @@ function initViewer(DATA){
   // ---- list sorting ----
   const refBy=e=>(inbound[e.id]||[]).length;
   const stepCount=e=>(stepsSorted[e.id]||[]).length;
-  const callCount=e=>outboundFor(e.id).filter(x=>x.c==='perform_script').length;
+  const callCount=e=>outboundFor(e.id).filter(x=>x.c==='perform_script'&&!x.dis).length;
   const CX=/^(If|Else If|Loop)$/;
   const complexity=e=>1+(stepsSorted[e.id]||[]).filter(st=>CX.test(st.st||'')).length;
   function sortOptions(){
