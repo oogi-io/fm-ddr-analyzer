@@ -20,20 +20,22 @@
 <style>
 :root{
   --bg:#fff; --panel:#f6f7f9; --border:#e2e5ea; --text:#1c1f24; --muted:#697280;
-  --accent:#2563eb; --accent-bg:#eaf1ff; --chip:#eef0f3;
+  --accent:#2563eb; --accent-bg:#eaf1ff; --chip:#eef0f3; --ring:#1E6E8C;
   --in:#0a7d4d; --in-bg:#e6f5ec; --out:#9a4d00; --out-bg:#fbeede;
 }
 @media (prefers-color-scheme:dark){:root{
   --bg:#14161a; --panel:#1c1f26; --border:#2a2e37; --text:#e7e9ee; --muted:#8b93a1;
-  --accent:#6ea0ff; --accent-bg:#1e2a44; --chip:#242832;
+  --accent:#6ea0ff; --accent-bg:#1e2a44; --chip:#242832; --ring:#57B2CC;
   --in:#5fd39b; --in-bg:#12301f; --out:#e0a25f; --out-bg:#33220e;
 }}
 *{box-sizing:border-box}
 body{margin:0;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
   background:var(--bg);color:var(--text)}
-header{padding:12px 18px;border-bottom:1px solid var(--border);display:flex;
-  align-items:baseline;gap:14px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:5}
-header h1{font-size:15px;margin:0;font-weight:650}
+header{padding:11px 18px;border-bottom:1px solid var(--border);display:flex;
+  align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:0;background:var(--bg);z-index:5}
+header h1{font-size:19px;margin:0;font-weight:700;letter-spacing:-.02em;display:flex;align-items:center;gap:9px;line-height:1}
+header h1 .fm{color:var(--ring)}
+header h1 svg{display:block}
 header .sub{color:var(--muted);font-size:12px}
 header .actions{margin-left:auto;display:flex;gap:8px}
 button.btn{border:1px solid var(--border);background:var(--bg);color:var(--text);
@@ -225,7 +227,7 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 </head>
 <body>
 <header>
-  <h1><svg width="17" height="17" viewBox="0 0 32 32" style="vertical-align:-3px;margin-right:7px" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="#1E6E8C" stroke-width="2.6"/><circle cx="16" cy="16" r="7.3" fill="none" stroke="#1E6E8C" stroke-width="2.6"/><circle cx="16" cy="16" r="3.4" fill="#D4531F"/></svg>fmsonar</h1>
+  <h1><svg width="24" height="24" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="13" fill="none" stroke="var(--ring)" stroke-width="2.6"/><circle cx="16" cy="16" r="7.3" fill="none" stroke="var(--ring)" stroke-width="2.6"/><circle cx="16" cy="16" r="3.4" fill="#D4531F"/></svg><span><span class="fm">fm</span>sonar</span></h1>
   <span class="sub" id="meta"></span>
   <span class="actions">
     <button class="btn" id="reset" style="display:none">Open another DDR</button>
