@@ -702,8 +702,19 @@ def cmd_stats(args):
     _print_table(["target_kind", "context", "n"], rows)
 
 
+def _banner():
+    """One-line brand header: teal concentric-ring glyph + two-tone wordmark.
+    Color only on a real terminal (and honor NO_COLOR); plain text otherwise."""
+    from fm_ddr import __version__
+    if sys.stdout.isatty() and not os.environ.get("NO_COLOR"):
+        t = "\033[38;5;38m"; b = "\033[1m"; d = "\033[38;5;244m"; r = "\033[0m"
+        return f"{t}◎{r} {b}{t}fm{r}{b}sonar{r} {d}{__version__}{r}  FileMaker DDR explorer"
+    return f"◎ fmsonar {__version__}  FileMaker DDR explorer"
+
+
 def main(argv=None):
-    p = argparse.ArgumentParser(prog="fm_ddr", description="FileMaker DDR analyzer")
+    p = argparse.ArgumentParser(prog="fmsonar", description=_banner(),
+                                formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--debug", action="store_true",
                    help="show the full Python traceback on error")
     sub = p.add_subparsers(dest="cmd", required=True)
