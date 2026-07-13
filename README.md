@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/banner-dark.png">
-    <img src="docs/banner-light.png" alt="fmsonar" width="380">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/banner-dark.png">
+    <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/banner-light.png" alt="fmsonar" width="380">
   </picture>
 </p>
 
