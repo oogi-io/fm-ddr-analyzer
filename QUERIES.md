@@ -30,6 +30,13 @@ order — each is one query:
 5. **The DDR is schema, not data.** Flag values, sort orders, and config rows are record
    data — verify data-dependent hypotheses against the live system, and say which findings
    are DDR-derived vs. live-verified.
+6. **For high-stakes work, run a second independent analysis and merge.** In measured A/B
+   runs, two independent analyses plus a verify-and-merge pass beat any single analysis:
+   each run contributed verified findings the others missed (a snapshot-field family, a
+   commented-out write site, an unstored source field that invalidated a proposed fix).
+   Verify each claimed finding against the index before crediting it in the merge. Also use
+   the most capable model available for mechanism-hunting: in the same runs the model
+   mattered more than the tooling, and no index closes a comprehension gap.
 
 The main surface is the **`v_usage`** view (one row per reference edge, with
 readable source/target names) and the **`text_index`** FTS5 table (catch-all
