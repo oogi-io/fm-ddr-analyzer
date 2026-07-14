@@ -46,6 +46,13 @@ One engine answers all three. It parses the DDR **once** into a normalized index
 The three build on each other in that order — start in the browser, install the
 CLI when you want it scriptable, add the skill when your AI should use it too.
 
+> **Sibling tool — [fmstyle](https://fmstyle.dev):** fmsonar tells you *where*
+> things are used; fmstyle keeps the calculations themselves readable. A
+> deterministic FileMaker calculation formatter with the same shape (browser,
+> CLI via `pipx install fmstyle`, Claude Code skill) and the same kind of hard
+> guarantee: it never changes what a calculation computes.
+> [Source](https://github.com/oogi-io/fm-code-formatter), MIT.
+
 ## Path 1 — Explore in the browser (no install)
 
 1. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
