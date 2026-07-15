@@ -737,12 +737,79 @@ def _banner(stream=None):
     return f"◎ fmsonar {__version__}  FileMaker DDR explorer"
 
 
+_WORDMARK = [
+    r"    ____                                     ",
+    r"   / __/___ ___  _________  ____  ____ ______",
+    r"  / /_/ __ `__ \/ ___/ __ \/ __ \/ __ `/ ___/",
+    r" / __/ / / / / (__  ) /_/ / / / / /_/ / /    ",
+    r"/_/ /_/ /_/ /_/____/\____/_/ /_/\__,_/_/     ",
+]
+_WORD_GRAD = ("38;5;51", "38;5;45", "38;5;44", "38;5;38", "38;5;37")
+
+
+def _splash(stream=None):
+    """Neofetch-style splash for bare `fmsonar`: teal wordmark + a live summary
+    of what is indexed. Color only on a real terminal (honor NO_COLOR); plain
+    text otherwise, so a piped `fmsonar | ...` stays clean."""
+    import platform
+    from fm_ddr import __version__
+    if stream is None:
+        stream = sys.stdout
+    on = stream.isatty() and not os.environ.get("NO_COLOR")
+    def c(code): return f"\033[{code}m" if on else ""
+    def bg(n):   return f"\033[48;5;{n}m" if on else ""
+    GLOW = c("38;5;51"); LBL = c("1;38;5;38"); VAL = c("38;5;253")
+    DIM = c("38;5;244"); R = c("0")
+
+    out = [""]
+    for i, line in enumerate(_WORDMARK):
+        out.append(f"  {c(_WORD_GRAD[i])}{line}{R}")
+    out.append(f"\n  {GLOW}◎{R} {DIM}v{__version__}{R}")
+    out.append(f"  {DIM}{'─' * len(_WORDMARK[1])}{R}")
+
+    def kv(k, v): out.append(f"  {LBL}{k:<9}{R}{VAL}{v}{R}")
+    _os = {"Darwin": "macOS", "Windows": "Windows", "Linux": "Linux"}.get(
+        platform.system(), platform.system())
+    kv("Runtime", f"Python {platform.python_version()} · {_os} {platform.machine()}")
+
+    dbs_dir = os.path.expanduser("~/.fmsonar/dbs")
+    dbs = ([os.path.join(dbs_dir, f) for f in os.listdir(dbs_dir) if f.endswith(".db")]
+           if os.path.isdir(dbs_dir) else [])
+    if dbs:
+        kv("Cache", f"~/.fmsonar/dbs · {len(dbs)} indexed")
+        newest = max(dbs, key=os.path.getmtime)
+        try:
+            conn = sqlite3.connect(f"file:{newest}?mode=ro", uri=True)
+            label = (conn.execute("SELECT label FROM ddr_run LIMIT 1").fetchone() or [""])[0]
+            n = dict(conn.execute("SELECT kind, COUNT(*) FROM entities GROUP BY kind").fetchall())
+            tot = conn.execute("SELECT COUNT(*) FROM refs").fetchone()[0]
+            res = conn.execute("SELECT COUNT(*) FROM refs WHERE target_entity_id IS NOT NULL").fetchone()[0]
+            conn.close()
+            kv("Latest", f"{label} · {_human_size(os.path.getsize(newest))}")
+            kv("Scripts", f"{n.get('script', 0):,} · CFs {n.get('custom_function', 0):,}")
+            kv("Fields", f"{n.get('field', 0):,} · TOs {n.get('table_occurrence', 0):,}")
+            kv("Refs", f"{tot:,} · {GLOW}{100 * res // max(tot, 1)}% resolved{R}")
+        except (sqlite3.DatabaseError, TypeError):
+            pass
+    else:
+        kv("Cache", f"~/.fmsonar/dbs · empty — run {GLOW}fmsonar build <DDR.xml>{R}")
+
+    skill = os.path.exists(os.path.expanduser("~/.claude/skills/fmsonar/SKILL.md"))
+    kv("Skill", f"{GLOW}installed{R}" if skill else f"run {GLOW}fmsonar install-skill{R}")
+
+    if on:
+        out.append("")
+        out.append("  " + "".join(f"{bg(x)}  {R} " for x in (24, 30, 37, 44, 51, 87)))
+    out.append("")
+    print("\n".join(out), file=stream)
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="fmsonar", description=_banner(),
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--debug", action="store_true",
                    help="show the full Python traceback on error")
-    sub = p.add_subparsers(dest="cmd", required=True)
+    sub = p.add_subparsers(dest="cmd")
 
     b = sub.add_parser("build",
                        help="parse DDR XML(s) or a Summary.xml manifest into SQLite")
@@ -838,6 +905,10 @@ def main(argv=None):
     st.set_defaults(func=cmd_stats)
 
     args = p.parse_args(argv)
+    # Bare `fmsonar` (no subcommand): show the splash instead of an argparse error.
+    if args.cmd is None:
+        _splash(sys.stdout)
+        return
     # Brand line on every interactive run; stderr so piped/parsed stdout stays clean
     if sys.stderr.isatty():
         print(_banner(sys.stderr), file=sys.stderr)
