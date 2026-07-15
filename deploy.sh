@@ -46,7 +46,7 @@ if ! grep -qF "$BUILD" "$DIST/index.html"; then
 fi
 cp fm_ddr/web/about.html "$DIST/about.html"
 cp fm_ddr/web/_headers "$DIST/_headers"
-for asset in favicon.svg favicon-32.png apple-touch-icon-180.png og-image.png install-use.mp4; do
+for asset in favicon.svg favicon-32.png apple-touch-icon-180.png og-image.png fmsonar-install-use.mp4; do
   cp "fm_ddr/web/$asset" "$DIST/$asset"
 done
 # Deprecation stub: the retired watcher installer used to live at /install.sh.

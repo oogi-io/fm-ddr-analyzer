@@ -11,7 +11,7 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/install-use.gif" alt="Installing fmsonar, indexing a FileMaker solution's DDR, and querying it from the CLI" width="820">
+  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-install-use.gif" alt="Installing fmsonar, indexing a FileMaker solution's DDR, and querying it from the CLI" width="820">
 </p>
 
 ## The problems this solves
