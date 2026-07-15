@@ -83,6 +83,10 @@ Install fmsonar (pure standard library, no dependencies):
 pipx install fmsonar
 ```
 
+Run `fmsonar` on its own for a status splash — version, what is indexed in the
+cache, the newest solution's entity and reference counts, and whether the Claude
+skill is installed. (Piped output stays plain text.)
+
 Build the index once — point it at the `Summary.xml` manifest for a multi-file
 solution, or a single `*_fmp12.xml`:
 
