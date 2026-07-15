@@ -11,7 +11,7 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-install-use.gif" alt="Installing fmsonar, indexing a FileMaker solution's DDR, and querying it from the CLI" width="820">
+  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-use-web.gif" alt="Exploring a FileMaker DDR in the browser at fmsonar.com: drop a DDR, see references, scripts, and call chains" width="560">
 </p>
 
 ## The problems this solves
@@ -73,6 +73,10 @@ Prefer to self-host? The whole app is one file — serve `fm_ddr/web/index.html`
 as a static page; it works identically.
 
 ## Path 2 — The CLI
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-install-use.gif" alt="Installing fmsonar, indexing a FileMaker solution's DDR, and querying it from the CLI" width="820">
+</p>
 
 Prerequisites: Python 3.10+ and [pipx](https://pipx.pypa.io). On macOS, pipx
 comes from Homebrew:
