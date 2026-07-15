@@ -115,9 +115,12 @@ pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;pa
   and a Claude Code skill that teach any assistant the schema, the query
   patterns, and the honesty rules. Install once (needs Python 3.10+ and
   <a href="https://pipx.pypa.io">pipx</a>), ask from any project:</p>
-  <pre>pipx install git+https://github.com/oogi-io/fm-ddr-analyzer
-fm-ddr install-skill   # Claude Code: global skill</pre>
+  <pre>pipx install fmsonar
+fmsonar install-skill   # Claude Code: global skill</pre>
   <p style="font-size:14.5px">Then simply: <i>"analyze the DDR on my desktop — which scripts <b>write</b> to CTC::email?"</i> The first question builds the index <b>once</b> into a local cache (seconds, even for huge solutions). Every question after that — today, next week, from any project — answers instantly against the same index, with SQL-backed evidence and the caveats an honest analysis needs. Re-export the DDR when the solution changes, and the next question rebuilds automatically.</p>
+  <video src="install-use.mp4" autoplay loop muted playsinline preload="metadata"
+    style="width:100%;max-width:840px;display:block;margin:22px auto;border-radius:12px;box-shadow:0 8px 40px rgba(0,0,0,.28)"
+    aria-label="Installing fmsonar, indexing a FileMaker solution, and querying it from the command line"></video>
 
   <h2><span class="hash">#</span>What you can do in the browser</h2>
   <div class="feat">
