@@ -583,6 +583,22 @@ class TestCLI(unittest.TestCase):
             main(["search", db, "email AND ("])   # malformed FTS - must not crash
         self.assertIn("Text search", out.getvalue())
 
+    def test_shipped_skill_docs_match_repo_root(self):
+        # QUERIES.md / COVERAGE.md ship inside the skill; repo root is canonical.
+        # A drift here means install-skill would deliver stale docs.
+        for name in ("QUERIES.md", "COVERAGE.md"):
+            root_copy = open(os.path.join(ROOT, name), "rb").read()
+            ship_copy = open(os.path.join(ROOT, "fm_ddr", "skill", name), "rb").read()
+            self.assertEqual(root_copy, ship_copy,
+                             f"{name} drifted: cp {name} fm_ddr/skill/{name}")
+
+    def test_skill_protocol_has_merge_step(self):
+        # The blog claims the shipped protocol recommends verify-and-merge;
+        # this pins that claim to the artifact.
+        s = open(os.path.join(ROOT, "fm_ddr", "skill", "SKILL.md")).read()
+        self.assertIn("verify-and-merge", s)
+        self.assertIn("most capable model", s)
+
 
 @unittest.skipUnless(shutil.which("node"), "node not available")
 class TestJSParity(unittest.TestCase):

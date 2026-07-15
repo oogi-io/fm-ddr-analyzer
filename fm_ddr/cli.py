@@ -637,7 +637,9 @@ def cmd_install_skill(args):
     import hashlib
     import shutil
 
-    src = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill", "SKILL.md")
+    src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill")
+    skill_files = sorted(f for f in os.listdir(src_dir) if f.endswith(".md"))
+    src = os.path.join(src_dir, "SKILL.md")
     dest_dir = os.path.expanduser("~/.claude/skills/fmsonar")
     dest = os.path.join(dest_dir, "SKILL.md")
     from fm_ddr import __version__
@@ -645,12 +647,22 @@ def cmd_install_skill(args):
     def digest(b):
         return hashlib.sha256(b).hexdigest()[:12]
 
+    def tree_bytes(base, names):
+        # Aggregate digest input over every shipped skill file, missing files included
+        out = b""
+        for n in names:
+            p = os.path.join(base, n)
+            out += n.encode() + b"\x00"
+            out += open(p, "rb").read() if os.path.exists(p) else b"<missing>"
+        return out
+
     if args.check or args.remote:
         if not os.path.exists(dest):
             print(f"fmsonar skill is not installed ({dest} missing). "
                   f"Run: fm-ddr install-skill")
             sys.exit(2)
-        installed = open(dest, "rb").read()
+        installed = (open(dest, "rb").read() if args.remote
+                     else tree_bytes(dest_dir, skill_files))
         if args.remote:
             import urllib.request
             try:
@@ -662,7 +674,7 @@ def cmd_install_skill(args):
             hint = ("update your install first (pipx upgrade fmsonar / pipx reinstall fmsonar, "
                     "or git pull in a clone), then: fm-ddr install-skill")
         else:
-            ref = open(src, "rb").read()
+            ref = tree_bytes(src_dir, skill_files)
             ref_label = f"the skill shipped with fm_ddr {__version__}"
             hint = "run: fm-ddr install-skill"
         if digest(installed) == digest(ref):
@@ -674,8 +686,10 @@ def cmd_install_skill(args):
         sys.exit(1)
 
     os.makedirs(dest_dir, exist_ok=True)
-    shutil.copy(src, dest)
-    print(f"Installed the 'fmsonar' skill (fm_ddr {__version__}) -> {dest_dir}")
+    for name in skill_files:
+        shutil.copy(os.path.join(src_dir, name), os.path.join(dest_dir, name))
+    print(f"Installed the 'fmsonar' skill (fm_ddr {__version__}, "
+          f"{', '.join(skill_files)}) -> {dest_dir}")
     print("Claude Code can now analyze FileMaker DDRs from ANY directory -")
     print("just mention a DDR or ask a where-used question.")
     print("Freshness check anytime: fm-ddr install-skill --check   "
