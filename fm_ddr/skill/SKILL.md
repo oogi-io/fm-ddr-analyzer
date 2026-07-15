@@ -47,7 +47,8 @@ Key contexts: `step_target` = the field a step acts on (Set Field's write
 target - combine with `step_type='Set Field'` for true writers, but note a
 Set Field between Enter Find Mode and Perform Find is a find criterion, not a
 write). `calc` = used in a calculation. `perform_script`/`trigger` = script
-calls. Full recipes: QUERIES.md in the repo.
+calls. Full recipes: QUERIES.md, installed next to this file (also in the
+repo, with COVERAGE.md stating exactly what the index does not capture).
 
 ## 3. The investigation loop
 
@@ -88,6 +89,14 @@ lookup), these are mandatory, one query each:
 6. **The DDR is schema, not data** - verify flag values / sort orders /
    config rows against the live system, and label findings DDR-derived vs
    live-verified.
+7. **For high-stakes work (schema changes, deletions, "what breaks if"),
+   recommend a second independent analysis plus a verify-and-merge pass.**
+   In measured A/B runs, merged independent analyses beat any single one:
+   each run contributed verified findings the others missed. Verify each
+   claimed finding against the index before crediting it in the merge. Also
+   use the most capable model available for mechanism-hunting: in the same
+   runs the model mattered more than the tooling, and no index closes a
+   comprehension gap.
 
 Shortcut: `fm-ddr investigate <db> "<script>"` runs steps 2-4 (plus layout
 launch sites with their params, record operations, and the full body) in ONE

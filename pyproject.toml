@@ -33,4 +33,4 @@ packages = ["fm_ddr"]
 version = { attr = "fm_ddr.__version__" }
 
 [tool.setuptools.package-data]
-fm_ddr = ["*.sql", "web/index.html", "skill/SKILL.md"]
+fm_ddr = ["*.sql", "web/index.html", "skill/*.md"]
