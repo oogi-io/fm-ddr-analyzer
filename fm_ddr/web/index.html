@@ -611,9 +611,18 @@ onmessage=(ev)=>{ run(ev.data).catch(e=>postMessage({type:'error',message:String
 <!-- ================= MAIN THREAD ================= -->
 <script>
 const APP_BUILD='__BUILD__';
+const APP_VERSION='__VERSION__';
+// Footer label: "v1.8.1 · <git-hash> · <date>". Both markers are substituted at
+// deploy time; an unsubstituted placeholder (e.g. opened straight from source)
+// falls back so the footer reads "dev" rather than showing the raw marker.
+const VERSTAMP=(function(){
+  const v=APP_VERSION.indexOf('__')===0?'':'v'+APP_VERSION;
+  const b=APP_BUILD.indexOf('__')===0?'':APP_BUILD;
+  return [v,b].filter(Boolean).join(' · ')||'dev';
+})();
 const $=id=>document.getElementById(id);
 (function(){ const b=document.getElementById('buildstamp');
-  if(b) b.textContent=APP_BUILD.indexOf('__')===0?'dev':APP_BUILD; })();
+  if(b) b.textContent=VERSTAMP; })();
 const workerSrc=$('worker-src').textContent;
 const workerURL=URL.createObjectURL(new Blob([workerSrc],{type:'text/javascript'}));
 
@@ -1805,7 +1814,7 @@ function initViewer(DATA){
     if(sb&&!document.getElementById('credit')){
       const c=document.createElement('div'); c.id='credit'; c.className='credit';
       c.innerHTML='<a href="https://oogi.io/en/" target="_blank" rel="noopener">OOGI</a>'+
-        (typeof APP_BUILD!=='undefined'&&APP_BUILD.indexOf('__')!==0?' \u00b7 '+APP_BUILD:'');
+        (typeof VERSTAMP!=='undefined'&&VERSTAMP!=='dev'?' \u00b7 '+VERSTAMP:'');
       sb.appendChild(c);
     }
   })();
