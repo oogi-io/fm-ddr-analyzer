@@ -121,6 +121,8 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .chain .ecount{fill:var(--muted);font:9px "SF Mono",Menlo,monospace}
 .chain .dim{opacity:.18}
 .chain .cnode.match rect{stroke:var(--accent);stroke-width:2}
+.chain .cnode.pinroot rect{stroke:var(--accent);stroke-width:2.5}
+.chain.pinned .cnode{cursor:pointer}
 .chain .entrydot{fill:var(--in)}
 .chainbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}
 .chainbar input{border:1px solid var(--border);border-radius:6px;background:var(--bg);
@@ -1123,7 +1125,7 @@ function initViewer(DATA){
       '<button class="csv" id="copymermaid">Copy Mermaid</button>'+
       '<button class="csv" id="dlpng">Download PNG</button>'+
       '<button class="csv" id="dlchain">SVG</button>'+
-      '<span class="legend">hover: highlight \u00b7 click: preview below</span></div>'+
+      '<span class="legend">hover: trace \u00b7 click: pin lineage (Esc or click empty to clear)</span></div>'+
       '<div id="chainwrap">'+chainSVG(lastChain,'')+'</div><div id="chainpreview"></div>';
   }
   function renderStepLines(steps){
@@ -1197,7 +1199,8 @@ function initViewer(DATA){
       '.entrydot{fill:'+v('--in')+'} .ecount{fill:'+v('--muted')+';font:9px Menlo,monospace} '+
       'path{fill:none;stroke:'+v('--border')+';stroke-width:1.2} '+
       'path.t-trigger{stroke-dasharray:2 3} path.t-psos{stroke-dasharray:7 3} '+
-      'path.t-button{stroke-dasharray:1 2 5 2}</style>';
+      'path.t-button{stroke-dasharray:1 2 5 2} '+
+      '.dim{opacity:.18} .pinroot rect{stroke:'+v('--accent')+';stroke-width:2.5}</style>';
     el.setAttribute('xmlns','http://www.w3.org/2000/svg');
     // export the whole diagram, not the current zoom/pan viewport
     el.setAttribute('viewBox','0 0 '+el.getAttribute('width')+' '+el.getAttribute('height'));
@@ -1335,35 +1338,66 @@ function initViewer(DATA){
       walk(key,adj.fwd,'f'); walk(key,adj.rev,'r');
       return {nodes:nodes,edges:edges};
     };
-    wrap.onmouseover=(ev)=>{
-      const g=ev.target.closest&&ev.target.closest('.cnode'); if(!g) return;
-      const lin=lineage(g.dataset.key);
+    // Highlight = dim everything outside a node's lineage. Hover shows it
+    // transiently; clicking a node PINS it so it survives mouse-leave and bakes
+    // into the PNG/SVG export. Clear by re-clicking the node, clicking empty
+    // canvas, or pressing Esc.
+    let pinnedKey=null;
+    const chainEl=()=>wrap.querySelector('.chain');
+    function applyDim(key){
+      const lin=lineage(key);
       wrap.querySelectorAll('.cnode').forEach(n=>{
-        if(!lin.nodes[n.dataset.key]) n.classList.add('dim');});
+        n.classList.toggle('dim',!lin.nodes[n.dataset.key]);
+        n.classList.toggle('pinroot',pinnedKey!=null&&n.dataset.key===key);});
       wrap.querySelectorAll('path').forEach(p=>{
-        if(!lin.edges[p.dataset.a+'>'+p.dataset.b]) p.classList.add('dim');});
+        p.classList.toggle('dim',!lin.edges[p.dataset.a+'>'+p.dataset.b]);});
+      wrap.querySelectorAll('.ecount').forEach(t=>{
+        t.classList.toggle('dim',!lin.edges[t.dataset.a+'>'+t.dataset.b]);});
+    }
+    function clearDim(){
+      wrap.querySelectorAll('.dim').forEach(x=>x.classList.remove('dim'));
+      wrap.querySelectorAll('.pinroot').forEach(x=>x.classList.remove('pinroot'));
+    }
+    function unpin(){ pinnedKey=null; clearDim(); const c=chainEl(); if(c) c.classList.remove('pinned'); }
+    wrap.onmouseover=(ev)=>{
+      if(pinnedKey!=null) return;                         // pinned view is stable
+      const g=ev.target.closest&&ev.target.closest('.cnode'); if(!g) return;
+      applyDim(g.dataset.key);
     };
     wrap.onmouseout=(ev)=>{
-      if(ev.target.closest&&ev.target.closest('.cnode')&&!wrap.contains(ev.relatedTarget&&ev.relatedTarget.closest&&ev.relatedTarget.closest('.cnode')))
-        wrap.querySelectorAll('.dim').forEach(x=>x.classList.remove('dim'));
-      if(!wrap.contains(ev.relatedTarget)) wrap.querySelectorAll('.dim').forEach(x=>x.classList.remove('dim'));
+      if(pinnedKey!=null) return;
+      const to=ev.relatedTarget&&ev.relatedTarget.closest&&ev.relatedTarget.closest('.cnode');
+      if(!to) clearDim();
     };
     wrap.onclick=(ev)=>{
-      if(wrap._suppressClick) return;
-      const g=ev.target.closest&&ev.target.closest('.cnode'); if(!g||!g.dataset.node) return;
-      showChainPreview(+g.dataset.node);
+      if(wrap._suppressClick) return;                     // a pan/drag just ended
+      const g=ev.target.closest&&ev.target.closest('.cnode');
+      if(!g){ if(pinnedKey!=null) unpin(); return; }       // empty canvas clears
+      const nodeId=g.dataset.node!=null?+g.dataset.node:null;
+      const ent=nodeId!=null?byId[nodeId]:null;
+      // A non-script node navigates the whole detail away (existing behaviour),
+      // so pinning it would be pointless — let it drill through, no pin.
+      if(ent&&ent.k!=='script'){ showChainPreview(nodeId); return; }
+      const key=g.dataset.key;                            // script / external / rollup: toggle pin
+      if(pinnedKey===key){ unpin(); }
+      else { pinnedKey=key; applyDim(key); const c=chainEl(); if(c) c.classList.add('pinned'); }
+      if(ent&&ent.k==='script') showChainPreview(nodeId);
     };
+    wrap.addEventListener('keydown',(ev)=>{ if(ev.key==='Escape'&&pinnedKey!=null) unpin(); });
+    if(!wrap.hasAttribute('tabindex')) wrap.setAttribute('tabindex','-1');
     const cq=document.getElementById('chainq');
     if(cq) cq.oninput=()=>{
       chainQ=cq.value.trim();
       lastChain=buildChain(rootEnt,chainQ);
       wrap.innerHTML=chainSVG(lastChain,chainQ);
+      pinnedKey=null;
       adj=adjacency(); attachPanZoom(wrap); attachNodeDrag(wrap,nodeOff);
     };
     const rl=document.getElementById('resetlayout');
     if(rl) rl.onclick=()=>{
       Object.keys(nodeOff).forEach(k=>delete nodeOff[k]);
       wrap.innerHTML=chainSVG(lastChain,chainQ);
+      pinnedKey=null;
       adj=adjacency(); attachPanZoom(wrap); attachNodeDrag(wrap,nodeOff);
     };
     const cm=document.getElementById('copymermaid');
