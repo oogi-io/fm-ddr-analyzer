@@ -843,6 +843,7 @@ function initViewer(DATA){
     }).slice(0,600);
     const list=$('list'); list.innerHTML='';
     rows.forEach(e=>{const d=document.createElement('div');d.className='item'+(e.id===selId?' sel':'');
+      d.title=e.n||'';
       const sub=[e.fm!=null?'FMID '+e.fm:null,e.bt,e.g].filter(Boolean).join(' \u00b7 ');
       d.innerHTML='<div class="n"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(e.n||'(unnamed)')+
         (so.num?'<span class="metric">'+so.get(e)+'</span>':'')+'</div>'+
@@ -853,7 +854,7 @@ function initViewer(DATA){
   }
   function select(id,fromHash){
     const e=byId[id]; if(!e) return;
-    selId=id; render();
+    selId=id; renderList();
     if(!fromHash && location.hash!=='#e'+id){
       try{ location.hash='e'+id; }catch(x){}
     }
@@ -1710,6 +1711,16 @@ function initViewer(DATA){
     return h;
   }
   let codeResults=null;   // null = normal name-filter mode
+  let codeQuery='';       // the term behind the current code-search list
+  // Single entry point for (re)drawing the sidebar list. Selecting an entity
+  // must NOT collapse an active code-search result set, so select() routes
+  // through here instead of calling render() (name-filter) directly. Scroll
+  // position is preserved so cycling through results stays put.
+  function renderList(){
+    const list=$('list'); const st=list?list.scrollTop:0;
+    if(codeResults) renderCodeResults(codeQuery); else render();
+    if(list) list.scrollTop=st;
+  }
   function runCodeSearch(qraw){
     const q=qraw.toLowerCase(); const res=[]; const CAPR=300;
     for(const e of DATA.entities){
@@ -1741,7 +1752,8 @@ function initViewer(DATA){
       ' match'+(codeResults.length===1?'':'es')+' for \u201c'+q+'\u201d \u00b7 Esc or type to go back';
     list.appendChild(head);
     codeResults.forEach(r=>{
-      const d=document.createElement('div'); d.className='item';
+      const d=document.createElement('div'); d.className='item'+(r.e.id===selId?' sel':'');
+      d.title=r.e.n||'';
       d.innerHTML='<div class="n"><span class="kind-tag">'+kl(r.e.k)+'</span>'+esc(r.e.n||'(unnamed)')+'</div>'+
         '<div class="snip">'+snippet(r.snip,q)+'</div>';
       d.onclick=()=>{
@@ -1764,10 +1776,10 @@ function initViewer(DATA){
   $('q').onkeydown=(ev)=>{
     if(ev.key==='Enter'){
       const v=$('q').value.trim();
-      if(v.length>=2){ codeResults=runCodeSearch(v); renderCodeResults(v); }
-    } else if(ev.key==='Escape'){ codeResults=null; render(); }
+      if(v.length>=2){ codeResults=runCodeSearch(v); codeQuery=v; renderCodeResults(v); }
+    } else if(ev.key==='Escape'){ codeResults=null; codeQuery=''; render(); }
   };
-  $('q').oninput=()=>{ if(codeResults){ codeResults=null; } render(); };
+  $('q').oninput=()=>{ if(codeResults){ codeResults=null; codeQuery=''; } render(); };
   $('q').value='';
   (function(){
     const sb=$('list')&&$('list').parentElement;
