@@ -188,6 +188,13 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 .ref{padding:4px 8px;border-radius:6px;cursor:pointer;font-size:13px}
 .in .ref:hover{background:var(--in-bg)} .out .ref:hover{background:var(--out-bg)}
 .ref .via{color:var(--muted);font-size:11px}
+.ref .qual{color:var(--muted);font-size:11.5px}
+.refctl{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin:14px 0 -4px;
+  font-size:11px;color:var(--muted)}
+.refctl button{border:1px solid var(--border);background:var(--bg);color:var(--muted);
+  border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer}
+.refctl button:hover{border-color:var(--accent);color:var(--accent)}
+.refctl button.on{background:var(--accent-bg);color:var(--accent);border-color:var(--accent)}
 .ext{color:var(--muted);font-style:italic;cursor:default}
 .empty{color:var(--muted)}
 .count{color:var(--muted);font-weight:400;font-size:12px}
@@ -815,16 +822,19 @@ function initViewer(DATA){
     to_reference:'TO reference',value_list_field:'value list source',sort:'sort order'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
+  // Owning table + file for a resolved entity, so a reference list can
+  // disambiguate same-named rows (two "ID" fields from different tables).
+  const qualOf=e=>({bt:(e&&e.bt)||null, file:(e&&e.f!=null&&files[e.f])?files[e.f]:null});
   function sourceDisplay(x){
     let e=byId[x.s];
     if(e&&e.k==='script_step'){ const p=byId[e.p];
-      return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabelFor(x), amb:x.a}; }
+      return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabelFor(x), amb:x.a, ...qualOf(p)}; }
     if(!e) return {label:'?', id:x.s, cat:'unknown', via:ctxLabelFor(x), amb:x.a};
-    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabelFor(x), amb:x.a};
+    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabelFor(x), amb:x.a, ...qualOf(e)};
   }
   function targetDisplay(x){
     if(x.t!=null){ const t=byId[x.t];
-      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabelFor(x), amb:x.a}; }
+      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabelFor(x), amb:x.a, ...qualOf(t)}; }
     return {label:x.tr||('('+x.tk+')'), ext:true, cat:x.tk, via:ctxLabelFor(x)};
   }
   function groupBy(a,k){const m={};a.forEach(x=>{(m[x[k]]=m[x[k]]||[]).push(x);});return m;}
@@ -897,6 +907,13 @@ function initViewer(DATA){
         ' (hide conditions, conditional formatting, button &amp; label calcs)</div>';
       h+='<div class="calc'+(isFormula?'':' calcmulti')+'"><button class="copybtn" id="copycalc">Copy</button>'+esc(e.c)+'</div>';
     }
+    if(ins.length||outs.length){
+      const qopts=[['auto','Auto'],['tables','Table']]
+        .concat(files.length>1?[['tablesfiles','+File']]:[]).concat([['off','Off']]);
+      h+='<div class="refctl" title="How reference names are qualified (owning table / file)">Qualify '+
+        qopts.map(o=>'<button data-q="'+o[0]+'"'+(qualifyMode===o[0]?' class="on"':'')+'>'+o[1]+'</button>').join('')+
+        '</div>';
+    }
     h+='<div class="cols">';
     h+='<div class="col in"><h3>Referenced by <span class="count">'+ins.length+'</span></h3>'+
        renderRefs(ins,sourceDisplay)+'</div>';
@@ -904,6 +921,11 @@ function initViewer(DATA){
        renderRefs(outs,targetDisplay)+'</div>';
     h+='</div>';
     const d=$('detail'); d.innerHTML=h;
+    d.querySelectorAll('.refctl button').forEach(b=>b.onclick=()=>{
+      qualifyMode=b.dataset.q;
+      try{ localStorage.setItem('fmsonar.qualify',qualifyMode); }catch(x){}
+      select(id);
+    });
     d.querySelectorAll('[data-go]').forEach(el=>el.onclick=()=>select(+el.dataset.go));
     wireCopy();
     const sh=document.getElementById('shareent');
@@ -1735,23 +1757,43 @@ function initViewer(DATA){
       });
     };
   }
+  // Name-qualification preference for reference lists (option C):
+  //   auto        - table always (fields/TOs); file only when it disambiguates
+  //   tables      - table always; never file
+  //   tablesfiles - table always; file always (multi-file solutions)
+  //   off         - bare names, no qualifiers
+  let qualifyMode=(function(){ try{ return localStorage.getItem('fmsonar.qualify')||'auto'; }catch(x){ return 'auto'; } })();
   function renderRefs(refs,resolveFn){
     if(!refs.length) return '<p class="empty">None</p>';
     const items=refs.map(resolveFn);
     const g=groupBy(items,'cat');
     const cats=Object.keys(g).sort((a,b)=>g[b].length-g[a].length);
+    // qualifier for one row; dup = count of (label|table) within its group,
+    // so 'auto' adds the file only when table alone still collides.
+    const qualStr=(r,dup)=>{
+      if(qualifyMode==='off') return '';
+      const parts=[];
+      if(r.bt) parts.push(r.bt);
+      if(r.file&&files.length>1){
+        const k=(r.label||'')+'|'+(r.bt||'');
+        if(qualifyMode==='tablesfiles'||(qualifyMode==='auto'&&dup[k]>1)) parts.push(r.file);
+      }
+      return parts.length?' <span class="qual">\u00b7 '+parts.map(esc).join(' \u00b7 ')+'</span>':'';
+    };
     let h='';
     cats.forEach(cat=>{
       const seen={}, rows=[];
       g[cat].forEach(r=>{ const key=(r.id||r.label); if(seen[key])return; seen[key]=1; rows.push(r); });
       const ctxs=[...new Set(rows.map(r=>r.via))]; const single=ctxs.length===1;
       const hdr=catLabel(cat)+(single&&ctxs[0]?' \u00b7 '+ctxs[0]:'')+' ('+rows.length+')';
+      const dup={}; rows.forEach(r=>{ const k=(r.label||'')+'|'+(r.bt||''); dup[k]=(dup[k]||0)+1; });
       h+='<div class="grp"><div class="ctx">'+esc(hdr)+'</div>';
       rows.forEach(r=>{
         const via=single?'':r.via;
         const amb=r.amb?' <span class="via" title="several candidates matched this name">(ambiguous)</span>':'';
-        if(r.ext) h+='<div class="ref ext">'+esc(r.label)+(via?' <span class="via">'+esc(via)+'</span>':'')+'</div>';
-        else h+='<div class="ref" data-go="'+r.id+'">'+esc(r.label)+
+        const q=qualStr(r,dup);
+        if(r.ext) h+='<div class="ref ext">'+esc(r.label)+q+(via?' <span class="via">'+esc(via)+'</span>':'')+'</div>';
+        else h+='<div class="ref" data-go="'+r.id+'">'+esc(r.label)+q+
           (via?' <span class="via">'+esc(via)+'</span>':'')+amb+'</div>';
       });
       h+='</div>';
