@@ -37,11 +37,16 @@ fi
 
 DIST=$(mktemp -d)
 BUILD="$(git rev-parse --short HEAD)$DIRTY · $(date +%Y-%m-%d)"
-sed "s/__BUILD__/$BUILD/" fm_ddr/web/index.html > "$DIST/index.html"
-# Fail loudly if the build stamp was not substituted (renamed marker) rather
-# than silently shipping the literal placeholder.
-if ! grep -qF "$BUILD" "$DIST/index.html"; then
-  echo "deploy.sh: __BUILD__ marker not found in index.html; aborting." >&2
+VERSION="$(grep -E '^__version__' fm_ddr/__init__.py | sed 's/.*"\(.*\)".*/\1/')"
+if [ -z "$VERSION" ]; then
+  echo "deploy.sh: could not read __version__ from fm_ddr/__init__.py; aborting." >&2
+  rm -rf "$DIST"; exit 1
+fi
+sed -e "s/__BUILD__/$BUILD/" -e "s/__VERSION__/$VERSION/" fm_ddr/web/index.html > "$DIST/index.html"
+# Fail loudly if either stamp was not substituted (renamed marker) rather than
+# silently shipping the literal placeholder.
+if ! grep -qF "$BUILD" "$DIST/index.html" || ! grep -qF "v$VERSION" "$DIST/index.html"; then
+  echo "deploy.sh: __BUILD__/__VERSION__ marker not found in index.html; aborting." >&2
   rm -rf "$DIST"; exit 1
 fi
 cp fm_ddr/web/about.html "$DIST/about.html"
