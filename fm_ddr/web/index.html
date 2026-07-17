@@ -310,6 +310,7 @@ const H={
   tagstack:[], pushed:[], estack:[], eid:0, rid:0, fileIdx:-1,
   entities:[], edges:[], fileNames:[], ver:null, label:'',
   cap:null, capAttrs:null, buf:[],
+  trigEv:[], deadAE:false,
 };
 function ptag(){ return H.tagstack.length>=2?H.tagstack[H.tagstack.length-2]:''; }
 function anc(t){ for(let k=0;k<H.tagstack.length-1;k++) if(H.tagstack[k]===t) return true; return false; }
@@ -333,7 +334,9 @@ function emitRef(context,tk,o){
   H.edges.push({s:src?src.id:null, sk:src?src.k:null, f:H.fileIdx,
     c:context, tk:tk, fm:o.fm!=null?o.fm:null, name:o.name!=null?o.name:null,
     to:o.to!=null?o.to:null, tr:o.raw!=null?o.raw:null, tf:tf, t:null,
-    dis:(src&&src._dis)?1:0});
+    // dead code: disabled script steps AND dead auto-enter calc residue
+    dis:((src&&src._dis)||H.deadAE)?1:0,
+    ev:o.ev!=null?o.ev:null});
 }
 
 function onStart(tag,a){
@@ -367,6 +370,16 @@ function onStart(tag,a){
     newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal;
     if(a.enable==='False') e._dis=true; return; }
   if(tag==='Object' && anc('Layout')){ newEntity('layout_object',a,{name:a.name||null}); return; }
+  // Storage flags / auto-enter options attach to the OPEN field definition
+  // (Field REFERENCE elements are self-closing — never a parent of these).
+  if((tag==='Storage'||tag==='AutoEnter') && parent==='Field'
+     && H.estack.length && H.estack[H.estack.length-1].k==='field'){
+    const fe=H.estack[H.estack.length-1];
+    if(tag==='Storage'){ fe._stor=a; }
+    else { fe._ae=a; H.deadAE = a.calculation==='False'; }
+    return; }
+  // Script-trigger ancestry: remember the event for the Script ref below
+  if(tag==='Trigger'){ H.trigEv.push(a.event!=null?a.event:null); return; }
   if(tag==='CustomFunction' && anc('CustomFunctionCatalog')){ newEntity('custom_function',a); return; }
   if(tag==='ValueList'){
     if(parent==='ValueListCatalog') newEntity('value_list',a);
@@ -396,7 +409,7 @@ function onStart(tag,a){
   if(tag==='Field' && (parent==='LeftField'||parent==='RightField'||parent==='Chunk'
                        ||parent==='PrimaryField'||parent==='SecondaryField'||parent==='Step')){
     let ctx;
-    if(parent==='Chunk') ctx='calc';
+    if(parent==='Chunk') ctx=anc('AutoEnter')?'auto_enter':(anc('Validation')?'validation':'calc');
     else if(parent==='Step') ctx='step_target';
     else if(parent==='PrimaryField'||parent==='SecondaryField')
       ctx=anc('ValueList')?'value_list_field':'sort';
@@ -409,7 +422,9 @@ function onStart(tag,a){
   if(tag==='Script' && parent!=='Group' && parent!=='ScriptCatalog'){
     const fm=a.id, nm=a.name;
     if((fm!=null&&fm!=='0')||nm){ const ctx=(anc('ScriptTriggers')||parent==='Trigger')?'trigger':'perform_script';
-      if(nm||(fm&&fm!=='0')) emitRef(ctx,'script',{fm:fm,name:nm,raw:nm}); } return; }
+      if(nm||(fm&&fm!=='0')){
+        const ev=(ctx==='trigger'&&H.trigEv.length)?H.trigEv[H.trigEv.length-1]:null;
+        emitRef(ctx,'script',{fm:fm,name:nm,raw:nm,ev:ev}); } } return; }
 
   // text capture
   if(CAPTURE_TAGS.has(tag)){ H.cap=tag; H.capAttrs=a; H.buf=[]; }
@@ -423,29 +438,56 @@ function onEnd(tag){
   if(H.cap===tag){ consumeText(tag,H.capAttrs,H.buf.join('').trim()); H.cap=null; H.buf=[]; }
   if(H.pushed.length && H.pushed.pop()) finalize(H.estack.pop());
   if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; }
+  if(tag==='AutoEnter') H.deadAE=false;
+  else if(tag==='Trigger' && H.trigEv.length) H.trigEv.pop();
   if(H.tagstack.length) H.tagstack.pop();
 }
 
 function consumeText(tag,attrs,text){
   if(!text) return;
   const src=curSource();
-  if(tag==='Calculation'){ if(src) src._calc.push(text); }
+  if(tag==='Calculation'){ if(src){
+    if(src.k==='field'&&anc('AutoEnter')) (src._aec=src._aec||[]).push(text);
+    else if(src.k==='field'&&anc('Validation')) (src._vc=src._vc||[]).push(text);
+    else src._calc.push(text); } }
   else if(tag==='StepText'){ if(src) src._step=text; }
   else if(tag==='Name' && ptag()==='FieldObj'){ const [to,leaf]=splitQ(text);
     if(leaf) emitRef('layout_object','field',{name:leaf,to:to,raw:text}); }
   else if(tag==='Chunk'){ const ct=attrs&&attrs.type;
     if(ct==='CustomFunctionRef') emitRef('function_ref','custom_function',{name:text,raw:text});
-    else if(ct==='FieldRef'){ const [to,leaf]=splitQ(text); if(leaf) emitRef('calc','field',{name:leaf,to:to,raw:text}); } }
+    else if(ct==='FieldRef'){ const [to,leaf]=splitQ(text); if(leaf){
+      const cx=anc('AutoEnter')?'auto_enter':(anc('Validation')?'validation':'calc');
+      emitRef(cx,'field',{name:leaf,to:to,raw:text}); } } }
 }
 
 function finalize(e){
   const calc=e._calc.length?e._calc.join('\n'):null;
   if(e.k==='relationship' && e._ends) e.n=e._ends.join(' :: ');
+  // field storage + auto-enter capture (v1.9.0, mirrors parse.py)
+  let sto=null, idx=null, glb=null, ae=null;
+  if(e.k==='field'){
+    if(e._stor){ sto=e._stor.storeCalculationResults==='False'?0:1;
+      idx=e._stor.index!=null?e._stor.index:null;
+      glb=e._stor.global==='True'?1:(e._stor.global==='False'?0:null); }
+    const aec=e._aec&&e._aec.length?e._aec.join('\n'):null;
+    if(e._ae){
+      const d={};
+      if(aec!=null){ d.calc=aec; d.calc_active=e._ae.calculation==='True'; }
+      if(e._ae.value) d.type=e._ae.value;
+      if(e._ae.lookup==='True') d.lookup=true;
+      if('alwaysEvaluate' in e._ae) d.always_evaluate=e._ae.alwaysEvaluate==='True';
+      if('overwriteExistingValue' in e._ae) d.overwrite_existing=e._ae.overwriteExistingValue==='True';
+      if(e._ae.allowEditing==='False') d.prohibit_editing=true;
+      if(e._ae.constant==='True') d.constant=true;
+      if(Object.keys(d).length) ae=d;
+    }
+  }
   // custom functions are copy-sources: keep their full body (others cap at 4k)
   const calcCap=e.k==='custom_function'?65536:4000;
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
     st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null,
-    c:calc?calc.slice(0,calcCap):null, step:e._step||null, d:e._dis?1:0});
+    c:calc?calc.slice(0,calcCap):null, step:e._step||null, d:e._dis?1:0,
+    sto:sto, idx:idx, glb:glb, ae:ae});
 }
 
 // ---- incremental tokenizer ----
@@ -603,8 +645,8 @@ async function run(input){
   const counts={}; for(const e of H.entities) counts[e.k]=(counts[e.k]||0)+1;
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
-  const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0}));
+  const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0,ev:r.ev||null}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,

@@ -85,6 +85,17 @@ lookup), these are mandatory, one query each:
    `SELECT body FROM text_index WHERE kind='layout' AND name=...`.
    A flag read on a layout but set by no launch anywhere is a bug of the
    same family as the write-only global.
+5b. **Data flows through THREE write mechanisms, not one** (v1.9.0+) - a
+   field is populated by Set Field steps (`step_target`), by an **auto-enter
+   calc** (`context='auto_enter'`; check `entities.auto_enter` -
+   `calc_active=false` = dead residue, its refs are `disabled=1`), or by a
+   **script trigger** firing on a layout event. Sweep all three: a writer
+   sweep that stops at Set Field misses auto-enter-heavy tables entirely.
+   Triggers ONLY via `v_triggers` (they're sourced from layouts/objects - a
+   script-parent join returns zero rows and looks complete). For any perf or
+   caching question, check `stored`/`is_global` per cited field first: a
+   stored calc cannot reference an unstored/global/related field, and that
+   constraint usually IS the mechanism.
 
 6. **The DDR is schema, not data** - verify flag values / sort orders /
    config rows against the live system, and label findings DDR-derived vs

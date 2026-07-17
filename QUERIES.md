@@ -337,3 +337,61 @@ SELECT s.grp, s.name,
        (SELECT COUNT(*) FROM entities st WHERE st.parent_entity_id=s.entity_id) AS steps
 FROM entities s WHERE s.kind='script' ORDER BY s.grp, s.name;
 ```
+
+## Storage, auto-enter & triggers (v1.9.0+)
+
+**A field's FULL dependency set spans three contexts** — `calc` (its own
+formula), `auto_enter`, and `validation`. Asking only for `calc` misses the
+dominant population mechanism on auto-enter-heavy tables:
+
+```sql
+SELECT r.context, r.target_name, te.base_table
+FROM refs r JOIN entities s ON s.entity_id=r.source_entity_id
+LEFT JOIN entities te ON te.entity_id=r.target_entity_id
+WHERE s.kind='field' AND s.name='MyField' AND r.disabled=0
+  AND r.context IN ('calc','auto_enter','validation');
+```
+
+Unstored calc fields (the classic FM performance hazard) per table:
+
+```sql
+SELECT base_table, name FROM entities
+WHERE kind='field' AND field_type='Calculated' AND stored=0
+ORDER BY base_table, name;
+```
+
+"Can a stored calc reference this field?" — a stored calc may NOT reference
+an unstored calc, a global, or a related field. Check the candidate:
+
+```sql
+SELECT name, stored, is_global FROM entities
+WHERE kind='field' AND base_table='ADR__Adder' AND name='PriceSurcharge_u';
+-- stored=0 or is_global=1 -> referencing it forces the referencing calc unstored
+```
+
+Auto-enter census — active vs DEAD residue (calc retained after the option
+was unchecked; its refs are `disabled=1` and excluded from v_usage):
+
+```sql
+SELECT base_table, name,
+       json_extract(auto_enter,'$.calc_active') AS active,
+       json_extract(auto_enter,'$.type')        AS ae_type
+FROM entities
+WHERE kind='field' AND json_extract(auto_enter,'$.calc') IS NOT NULL
+ORDER BY active, base_table, name;
+```
+
+**Script triggers — ALWAYS via `v_triggers`.** Trigger refs are sourced from
+layouts and layout objects, so a caller query that joins through script
+parents silently drops every one of them:
+
+```sql
+-- what fires when a record commits on the pricing layouts?
+SELECT trigger_event, layout_name, object_name, script_name
+FROM v_triggers
+WHERE trigger_event='OnRecordCommit' AND layout_name LIKE '%Pricing%';
+
+-- every trigger that launches a given script
+SELECT trigger_event, source_kind, layout_name, object_name
+FROM v_triggers WHERE script_name='My Trigger Script';
+```

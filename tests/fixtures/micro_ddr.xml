@@ -32,6 +32,45 @@
 				<Field id="4" dataType="Text" fieldType="Normal" name="sql_only_field">
 					<Comment>Referenced ONLY inside ExecuteSQL text - documents the structural blind spot</Comment>
 				</Field>
+				<Field id="5" dataType="Text" fieldType="Normal" name="autofill_active">
+					<Comment>ACTIVE auto-enter calc: option checked, refs live with context=auto_enter</Comment>
+					<AutoEnter allowEditing="True" overwriteExistingValue="True" alwaysEvaluate="False" constant="False" furigana="False" lookup="False" calculation="True">
+						<ConstantData/>
+						<Calculation table="CTC"><![CDATA[Upper ( CTC::email )]]></Calculation>
+						<DisplayCalculation>
+							<Chunk type="FunctionRef">Upper</Chunk>
+							<Chunk type="NoRef"> ( </Chunk>
+							<Chunk type="FieldRef"><Field table="CTC" id="2" name="email"></Field></Chunk>
+							<Chunk type="NoRef"> )</Chunk>
+						</DisplayCalculation>
+					</AutoEnter>
+					<Storage storeCalculationResults="True" index="None" indexLanguage="English" global="False" maxRepetition="1"/>
+				</Field>
+				<Field id="6" dataType="Text" fieldType="Normal" name="autofill_dead">
+					<Comment>DEAD auto-enter residue: option unchecked, calc retained - refs must carry disabled=1</Comment>
+					<AutoEnter allowEditing="True" constant="False" furigana="False" lookup="False" calculation="False">
+						<ConstantData/>
+						<Calculation table="CTC"><![CDATA[CTC::email & "deadresidue"]]></Calculation>
+						<DisplayCalculation>
+							<Chunk type="FieldRef"><Field table="CTC" id="2" name="email"></Field></Chunk>
+							<Chunk type="NoRef"> &amp; "deadresidue"</Chunk>
+						</DisplayCalculation>
+					</AutoEnter>
+				</Field>
+				<Field id="7" dataType="Number" fieldType="Normal" name="validated_qty">
+					<Comment>Validation calc: refs carry context=validation, stay live</Comment>
+					<Validation message="False" maxLength="False" valuelist="False" calculation="True" alwaysValidateCalculation="False" type="OnlyDuringDataEntry">
+						<Calculation table="CTC"><![CDATA[CTC::zkp > 0]]></Calculation>
+						<DisplayCalculation>
+							<Chunk type="FieldRef"><Field table="CTC" id="1" name="zkp"></Field></Chunk>
+							<Chunk type="NoRef"> &gt; 0</Chunk>
+						</DisplayCalculation>
+					</Validation>
+				</Field>
+				<Field id="8" dataType="Text" fieldType="Normal" name="pref_g">
+					<Comment>Global-storage field</Comment>
+					<Storage global="True" maxRepetition="1"/>
+				</Field>
 			</FieldCatalog>
 		</BaseTable>
 		<BaseTable id="2" records="5" name="INV">
