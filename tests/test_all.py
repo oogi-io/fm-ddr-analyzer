@@ -55,7 +55,13 @@ def normalize(entities, refs):
         keys[e["id"]] = f'{e["kind"]}|{e["name"] or ""}|{parent_key or ""}|{ordinal}'
 
     ent_rows = sorted(
-        [keys[e["id"]], e["base_table"] or "", e["grp"] or ""] for e in entities
+        [keys[e["id"]], e["base_table"] or "", e["grp"] or "",
+         # v1.9.0 columns — guard JS/Python parity on storage + auto-enter
+         "" if e.get("stored") is None else str(e["stored"]),
+         e.get("indexed") or "",
+         "" if e.get("is_global") is None else str(e["is_global"]),
+         _canon_ae(e.get("auto_enter"))]
+        for e in entities
     )
     ref_rows = sorted(
         [
@@ -66,25 +72,37 @@ def normalize(entities, refs):
             keys.get(r["target_id"]) or "" if r["target_id"] is not None else "",
             r["ambiguous"],
             r.get("disabled", 0),
+            r.get("trigger_event") or "",
         ]
         for r in refs
     )
     return {"entities": ent_rows, "refs": ref_rows}
 
 
+def _canon_ae(ae):
+    """Auto-enter JSON is emitted key-order-independently by the two parsers;
+    canonicalize to a sorted-key string so parity compares content, not order."""
+    if not ae:
+        return ""
+    d = ae if isinstance(ae, dict) else json.loads(ae)
+    return json.dumps(d, sort_keys=True, ensure_ascii=False)
+
+
 def read_sqlite(db_path):
     conn = sqlite3.connect(db_path)
     entities = [
-        {"id": i, "kind": k, "name": n, "parent_id": p, "base_table": bt, "grp": g}
-        for i, k, n, p, bt, g in conn.execute(
-            "SELECT entity_id,kind,name,parent_entity_id,base_table,grp FROM entities")
+        {"id": i, "kind": k, "name": n, "parent_id": p, "base_table": bt, "grp": g,
+         "stored": st, "indexed": ix, "is_global": ig, "auto_enter": ae}
+        for i, k, n, p, bt, g, st, ix, ig, ae in conn.execute(
+            "SELECT entity_id,kind,name,parent_entity_id,base_table,grp,"
+            "stored,indexed,is_global,auto_enter FROM entities")
     ]
     refs = [
         {"source_id": s, "context": c, "target_kind": tk, "target_raw": tr,
-         "target_id": t, "ambiguous": a or 0, "disabled": d or 0}
-        for s, c, tk, tr, t, a, d in conn.execute(
+         "target_id": t, "ambiguous": a or 0, "disabled": d or 0, "trigger_event": ev}
+        for s, c, tk, tr, t, a, d, ev in conn.execute(
             "SELECT source_entity_id,context,target_kind,target_raw,target_entity_id,"
-            "ambiguous,disabled FROM refs")
+            "ambiguous,disabled,trigger_event FROM refs")
     ]
     conn.close()
     return entities, refs
@@ -93,13 +111,15 @@ def read_sqlite(db_path):
 def read_js(js_json):
     entities = [
         {"id": e["id"], "kind": e["k"], "name": e["n"], "parent_id": e["p"],
-         "base_table": e["bt"], "grp": e["g"]}
+         "base_table": e["bt"], "grp": e["g"],
+         "stored": e.get("sto"), "indexed": e.get("idx"),
+         "is_global": e.get("glb"), "auto_enter": e.get("ae")}
         for e in js_json["entities"]
     ]
     refs = [
         {"source_id": r["s"], "context": r["c"], "target_kind": r["tk"],
          "target_raw": r["tr"], "target_id": r["t"], "ambiguous": r.get("a", 0),
-         "disabled": r.get("dis", 0)}
+         "disabled": r.get("dis", 0), "trigger_event": r.get("ev")}
         for r in js_json["edges"]
     ]
     return entities, refs

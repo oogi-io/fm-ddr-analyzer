@@ -431,7 +431,14 @@ function onStart(tag,a){
 }
 
 function onText(text,isCDATA){
-  if(H.cap!==null && text) H.buf.push(isCDATA?text:dec(text));
+  if(H.cap!==null && text){
+    // XML line-ending normalization (spec 2.11; expat/Python do this): CRLF and
+    // lone CR -> LF. DDRs use lone CR inside CDATA, so without this the web
+    // parser's calc/auto-enter text diverges from the Python build. Normalize
+    // BEFORE dec() so a literal &#13; (an intentional CR) survives, matching expat.
+    text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+    H.buf.push(isCDATA?text:dec(text));
+  }
 }
 
 function onEnd(tag){
