@@ -31,12 +31,32 @@
    ""
   ],
   [
+   "field|autofill_active|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|autofill_dead|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
    "field|email|base_table|CTC||0|0",
    "CTC",
    ""
   ],
   [
+   "field|pref_g|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
    "field|sql_only_field|base_table|CTC||0|0",
+   "CTC",
+   ""
+  ],
+  [
+   "field|validated_qty|base_table|CTC||0|0",
    "CTC",
    ""
   ],
@@ -319,6 +339,33 @@
    "custom_function",
    "MakeTitle",
    "custom_function|MakeTitle||0",
+   0,
+   0
+  ],
+  [
+   "field|autofill_active|base_table|CTC||0|0",
+   "auto_enter",
+   "field",
+   "CTC::email",
+   "field|email|base_table|CTC||0|0",
+   0,
+   0
+  ],
+  [
+   "field|autofill_dead|base_table|CTC||0|0",
+   "auto_enter",
+   "field",
+   "CTC::email",
+   "field|email|base_table|CTC||0|0",
+   0,
+   1
+  ],
+  [
+   "field|validated_qty|base_table|CTC||0|0",
+   "validation",
+   "field",
+   "CTC::zkp",
+   "field|zkp|base_table|CTC||0|0",
    0,
    0
   ],

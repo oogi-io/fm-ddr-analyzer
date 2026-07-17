@@ -45,13 +45,24 @@ CREATE TABLE IF NOT EXISTS entities (
     grp              TEXT,          -- script/layout group path
     records          INTEGER,       -- base_table record count
     ext_file         TEXT,          -- table_occurrence: external file its base table lives in
-    extra_json       TEXT           -- kind-specific leftovers
+    extra_json       TEXT,          -- kind-specific leftovers
+    -- field storage & auto-enter (v1.9.0; NULL for non-fields and pre-1.9 builds)
+    stored           INTEGER,       -- 0 = unstored calc (storeCalculationResults="False"), 1 = stored
+    indexed          TEXT,          -- index setting: None | Minimal | All
+    is_global        INTEGER,       -- 1 = global storage field
+    auto_enter       TEXT           -- JSON: {calc, calc_active, type, lookup, always_evaluate,
+                                    --        overwrite_existing, prohibit_editing, constant}
+                                    -- calc_active=false marks DEAD residue: a calc left behind after
+                                    -- the "Calculated value" option was unchecked (refs disabled=1)
 );
 
 -- Generic reference edge: source entity USES target thing.
 -- target may be unresolved at parse time; resolve.sql fills target_entity_id.
--- context: calc | join_predicate | perform_script | go_to_layout | trigger
---          | layout_object | value_list_source | field_reference | to_reference | function_ref
+-- context: calc | auto_enter | validation | join_predicate | perform_script
+--          | go_to_layout | trigger | layout_object | value_list_source
+--          | field_reference | to_reference | function_ref
+-- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
+--  a field's full dependency set is context IN ('calc','auto_enter','validation'))
 CREATE TABLE IF NOT EXISTS refs (
     ref_id           INTEGER PRIMARY KEY,
     file_id          INTEGER NOT NULL REFERENCES files(file_id),
@@ -66,7 +77,9 @@ CREATE TABLE IF NOT EXISTS refs (
     target_file      TEXT,              -- external target: FileMaker file named by a FileReference marker
     target_entity_id INTEGER REFERENCES entities(entity_id),  -- filled by resolve step
     ambiguous        INTEGER DEFAULT 0, -- 1 = several candidates matched; pick is deterministic but uncertain
-    disabled         INTEGER DEFAULT 0  -- 1 = emitted from a disabled (enable="False") script step: dead code
+    disabled         INTEGER DEFAULT 0, -- 1 = emitted from a disabled (enable="False") script step OR from a
+                                        --     dead auto-enter calc (option unchecked, calc residue): dead code
+    trigger_event    TEXT               -- context='trigger' only: OnRecordCommit, OnObjectSave, ...
 );
 
 CREATE INDEX IF NOT EXISTS ix_entities_lookup ON entities(file_id, kind, name);

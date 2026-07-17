@@ -9,7 +9,9 @@ outputs as review lists, never as delete lists.
 
 | Context | What it means | Source |
 |---------|---------------|--------|
-| `calc` | Field used in a calculation (field calc, script step calc, layout object calc) | `Chunk type="FieldRef"` (both element and text forms) |
+| `calc` | Field used in a calculation (field's own calc, script step calc, layout object calc) | `Chunk type="FieldRef"` (both element and text forms) |
+| `auto_enter` (v1.9.0) | Field used in an **auto-enter** calculation — distinct from `calc` so a Normal field with auto-enter can't pose as a calc field. A field's full dependency set is `context IN ('calc','auto_enter','validation')` | `Chunk type="FieldRef"` inside `AutoEnter` |
+| `validation` (v1.9.0) | Field used in a validation calculation | `Chunk type="FieldRef"` inside `Validation` |
 | `function_ref` | **Custom** function called in a calculation | `Chunk type="CustomFunctionRef"` |
 | `join_predicate` | Field or TO used in a relationship | `LeftField`/`RightField`/`LeftTable`/`RightTable` |
 | `sort` | Field used in a sort order (relationship sort lists and similar) | `PrimaryField`/`SecondaryField` outside value lists |
@@ -20,7 +22,7 @@ outputs as review lists, never as delete lists.
 | `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
 | `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
 | `perform_script` | Script called by a script step | `Script` reference elements |
-| `trigger` | Script attached to a script trigger | `Script` inside `ScriptTriggers` |
+| `trigger` | Script attached to a script trigger; `refs.trigger_event` records the firing event (OnRecordCommit, OnObjectSave, ...) (v1.9.0). **Trigger refs are sourced from layouts/layout objects, not scripts** — query them via `v_triggers`, never via a script-parent join | `Script` inside `ScriptTriggers`, event from the enclosing `Trigger` |
 | `go_to_layout` | Layout targeted by a Go to Layout step/button | `Layout` reference elements |
 | `to_reference` | Table occurrence referenced directly | `TableOccurrenceReference` |
 
@@ -37,6 +39,17 @@ from `v_usage` and the health views; `v_usage_disabled` exposes them, and
 `v_unused_fields` / `v_orphan_scripts` mark entities whose only references are
 dead code with `only_disabled_refs = 1`. Steps themselves carry
 `extra_json.disabled`.
+
+**Field storage & auto-enter (v1.9.0):** fields carry `stored` (0 = unstored
+calc — the classic FM performance hazard), `indexed` (None/Minimal/All),
+`is_global`, and `auto_enter` (JSON: calc, calc_active, type, lookup,
+always_evaluate, overwrite_existing). The DDR retains auto-enter calc text
+even after the "Calculated value" option is **unchecked** — such **dead
+residue** is marked `auto_enter.calc_active = false` and its refs get
+`disabled = 1`, so leftover calcs no longer produce false where-used
+positives (they remain visible in `v_usage_disabled` and in FTS). Auto-enter
+and validation calc text lives in `auto_enter`/`extra_json.validation_calc`,
+NOT in `calc_text` — `calc_text` is now exclusively the field's own formula.
 
 ## NOT captured (blind spots — use FTS `search` as the fallback)
 

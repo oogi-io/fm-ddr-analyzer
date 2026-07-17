@@ -143,7 +143,7 @@ class TestParser(unittest.TestCase):
     def test_entity_counts(self):
         c = self.counts()
         self.assertEqual(c["base_table"], 2)
-        self.assertEqual(c["field"], 6)
+        self.assertEqual(c["field"], 10)
         self.assertEqual(c["table_occurrence"], 4)  # incl. external ext_LOG
         self.assertEqual(c["relationship"], 1)
         # 2 layout DEFINITIONS; the go-to-layout button on the layout is a ref
@@ -637,6 +637,102 @@ class TestJSParity(unittest.TestCase):
         build([FIXTURE, FIXTURE_B], db, label="multi")
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_B], 13))
+
+
+class TestV19Capture(unittest.TestCase):
+    """v1.9.0: field storage, auto-enter (active vs dead residue), validation
+    contexts, and trigger events."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v19_")
+        cls.db = build_fixture_db(cls.tmp)
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def field(self, name, cols):
+        row = self.conn.execute(
+            f"SELECT {cols} FROM entities WHERE kind='field' AND name=?",
+            (name,)).fetchone()
+        self.assertIsNotNone(row, f"field {name} missing")
+        return row
+
+    def test_storage_columns(self):
+        self.assertEqual(self.field("zkp", "stored, indexed, is_global"),
+                         (1, "All", 0))
+        self.assertEqual(self.field("Segment", "stored, indexed, is_global"),
+                         (1, "None", 0))
+        self.assertEqual(self.field("pref_g", "stored, indexed, is_global"),
+                         (1, None, 1))
+        # no <Storage> tag at all -> all NULL
+        self.assertEqual(self.field("email", "stored, indexed, is_global"),
+                         (None, None, None))
+
+    def test_auto_enter_active(self):
+        (ae,) = self.field("autofill_active", "auto_enter")
+        d = json.loads(ae)
+        self.assertTrue(d["calc_active"])
+        self.assertIn("Upper", d["calc"])
+        self.assertTrue(d["overwrite_existing"])
+        # the auto-enter calc must NOT pose as the field's own formula
+        (calc,) = self.field("autofill_active", "calc_text")
+        self.assertIsNone(calc)
+        # its refs are live, context=auto_enter
+        rows = self.conn.execute(
+            "SELECT context, disabled FROM refs r JOIN entities s "
+            "ON s.entity_id=r.source_entity_id WHERE s.name='autofill_active' "
+            "AND r.target_kind='field'").fetchall()
+        self.assertEqual(rows, [("auto_enter", 0)])
+
+    def test_auto_enter_dead_residue(self):
+        (ae,) = self.field("autofill_dead", "auto_enter")
+        d = json.loads(ae)
+        self.assertFalse(d["calc_active"])
+        # refs from the dead calc are flagged dead code...
+        rows = self.conn.execute(
+            "SELECT context, disabled FROM refs r JOIN entities s "
+            "ON s.entity_id=r.source_entity_id WHERE s.name='autofill_dead' "
+            "AND r.target_kind='field'").fetchall()
+        self.assertEqual(rows, [("auto_enter", 1)])
+        # ...excluded from v_usage, kept in v_usage_disabled
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM v_usage WHERE source_name='autofill_dead'"
+        ).fetchone()[0], 0)
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM v_usage_disabled WHERE source_name='autofill_dead'"
+        ).fetchone()[0], 1)
+
+    def test_dead_auto_enter_text_stays_searchable(self):
+        # the FTS blind-spot check must keep finding auto-enter text
+        n = self.conn.execute(
+            "SELECT COUNT(*) FROM text_index WHERE body MATCH 'deadresidue'"
+        ).fetchone()[0]
+        self.assertEqual(n, 1)
+
+    def test_validation_context(self):
+        rows = self.conn.execute(
+            "SELECT context, disabled, target_name FROM refs r JOIN entities s "
+            "ON s.entity_id=r.source_entity_id WHERE s.name='validated_qty' "
+            "AND r.target_kind='field'").fetchall()
+        self.assertEqual(rows, [("validation", 0, "zkp")])
+        # validation calc lands in extra_json, not calc_text
+        (calc, extra) = self.field("validated_qty", "calc_text, extra_json")
+        self.assertIsNone(calc)
+        self.assertIn("validation_calc", extra or "")
+
+    def test_trigger_event_and_view(self):
+        row = self.conn.execute(
+            "SELECT trigger_event FROM refs WHERE context='trigger'").fetchone()
+        self.assertEqual(row, ("OnObjectEnter",))
+        rows = self.conn.execute(
+            "SELECT trigger_event, source_kind, layout_name, script_name, resolved "
+            "FROM v_triggers").fetchall()
+        self.assertEqual(rows, [("OnObjectEnter", "layout_object", "Contacts",
+                                 "Helper Script", 1)])
 
 
 if __name__ == "__main__":

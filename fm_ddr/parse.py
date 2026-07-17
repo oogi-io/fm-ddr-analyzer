@@ -51,6 +51,9 @@ class DDRHandler(xml.sax.ContentHandler):
         self._cap_attrs = None
         self._buf: list[str] = []
 
+        self._trig_events: list = []           # <Trigger event=...> ancestry
+        self._in_dead_ae = False               # inside an AutoEnter whose calc option is OFF
+
         self.ent_rows: list[tuple] = []
         self.ref_rows: list[tuple] = []
         self.fts_rows: list[tuple] = []
@@ -100,7 +103,7 @@ class DDRHandler(xml.sax.ContentHandler):
         return ent
 
     def emit_ref(self, context, target_kind, *, fm_id=None, name=None,
-                 to_name=None, raw=None):
+                 to_name=None, raw=None, trigger_event=None):
         src = self.current_source()
         # a FileReference inside the current step marks script/layout targets
         # as living in another FILE — they must never resolve locally
@@ -113,7 +116,10 @@ class DDRHandler(xml.sax.ContentHandler):
             src["entity_id"] if src else None,
             src["kind"] if src else None,
             context, target_kind, fm_id, name, to_name, raw, target_file, None,
-            1 if (src and src.get("_disabled")) else 0,
+            # dead code: refs from disabled script steps AND from auto-enter
+            # calcs whose "Calculated value" option is unchecked (residue)
+            1 if ((src and src.get("_disabled")) or self._in_dead_ae) else 0,
+            trigger_event,
         ))
         if len(self.ref_rows) >= BATCH:
             self.flush()
@@ -218,6 +224,26 @@ class DDRHandler(xml.sax.ContentHandler):
                 pass
             return
 
+        # Storage flags / auto-enter options attach to the OPEN field definition.
+        # (Field REFERENCE elements are empty/self-closing, so they can never be
+        # the parent of these tags — the entity-stack guard keeps this exact.)
+        if tag in ("Storage", "AutoEnter") and parent == "Field" and (
+                self.entity_stack and self.entity_stack[-1]["kind"] == "field"):
+            if tag == "Storage":
+                self.entity_stack[-1]["_storage"] = a
+            else:
+                self.entity_stack[-1]["_ae_attrs"] = a
+                # calc text present while the option is OFF = dead residue;
+                # refs emitted from inside get disabled=1 (like disabled steps)
+                self._in_dead_ae = a.get("calculation") == "False"
+            return
+
+        # Script-trigger ancestry: remember the event so the Script ref below
+        # can record WHICH trigger fires it (OnRecordCommit, OnObjectSave, ...)
+        if tag == "Trigger":
+            self._trig_events.append(a.get("event"))
+            return
+
         if tag == "CustomFunction" and self.has_ancestor("CustomFunctionCatalog"):
             self.new_entity("custom_function", a,
                             extra_json=_json({"parameters": a.get("parameters"),
@@ -293,7 +319,14 @@ class DDRHandler(xml.sax.ContentHandler):
         if tag == "Field" and parent in ("LeftField", "RightField", "Chunk",
                                          "PrimaryField", "SecondaryField", "Step"):
             if parent == "Chunk":
-                ctx = "calc"
+                # a field's own formula, an auto-enter calc, or a validation
+                # calc — distinct mechanisms, distinct contexts
+                if self.has_ancestor("AutoEnter"):
+                    ctx = "auto_enter"
+                elif self.has_ancestor("Validation"):
+                    ctx = "validation"
+                else:
+                    ctx = "calc"
             elif parent == "Step":
                 # the field a step acts on: Set Field's write target, Go to
                 # Field, Insert ... - combine with the step_type to tell
@@ -323,7 +356,9 @@ class DDRHandler(xml.sax.ContentHandler):
             if fmid not in (None, "0") or (nm or ""):
                 ctx = "trigger" if self.has_ancestor("ScriptTriggers") or parent == "Trigger" else "perform_script"
                 if nm or (fmid and fmid != "0"):
-                    self.emit_ref(ctx, "script", fm_id=fmid, name=nm, raw=nm)
+                    ev = self._trig_events[-1] if (ctx == "trigger" and self._trig_events) else None
+                    self.emit_ref(ctx, "script", fm_id=fmid, name=nm, raw=nm,
+                                  trigger_event=ev)
             return
 
         # ---- text capture ----
@@ -355,6 +390,11 @@ class DDRHandler(xml.sax.ContentHandler):
             if src is not None:
                 src.pop("_ext_file", None)
 
+        if tag == "AutoEnter":
+            self._in_dead_ae = False
+        elif tag == "Trigger" and self._trig_events:
+            self._trig_events.pop()
+
         if self.tagstack:
             self.tagstack.pop()
 
@@ -369,6 +409,12 @@ class DDRHandler(xml.sax.ContentHandler):
                     src["_hide_calc"] = text
                 elif src["kind"] == "layout_object" and self.has_ancestor("ToolTip"):
                     src["_tooltip_calc"] = text
+                elif src["kind"] == "field" and self.has_ancestor("AutoEnter"):
+                    # auto-enter calc — NOT the field's own formula; keeping
+                    # them apart stops Normal fields posing as calc fields
+                    src.setdefault("_ae_calc_parts", []).append(text)
+                elif src["kind"] == "field" and self.has_ancestor("Validation"):
+                    src.setdefault("_val_calc_parts", []).append(text)
                 else:
                     src.setdefault("_calc_parts", []).append(text)
         elif tag == "StepText":
@@ -386,7 +432,10 @@ class DDRHandler(xml.sax.ContentHandler):
             elif ctype == "FieldRef":
                 to, leaf = _split_qualified(text)
                 if leaf:
-                    self.emit_ref("calc", "field", name=leaf, to_name=to, raw=text)
+                    ctx = ("auto_enter" if self.has_ancestor("AutoEnter")
+                           else "validation" if self.has_ancestor("Validation")
+                           else "calc")
+                    self.emit_ref(ctx, "field", name=leaf, to_name=to, raw=text)
             # plain built-in FunctionRef / NoRef chunks are left to FTS search.
 
     def _finalize_entity(self, ent):
@@ -400,6 +449,42 @@ class DDRHandler(xml.sax.ContentHandler):
             d0 = _j.loads(extra) if extra else {}
             d0["disabled"] = True
             extra = _json(d0)
+        # field storage + auto-enter capture (v1.9.0)
+        stored = indexed = is_global = auto_enter = None
+        ae_calc = val_calc = None
+        if ent["kind"] == "field":
+            st = ent.get("_storage")
+            if st is not None:
+                stored = 0 if st.get("storeCalculationResults") == "False" else 1
+                indexed = st.get("index")
+                g = st.get("global")
+                is_global = 1 if g == "True" else (0 if g == "False" else None)
+            ae = ent.get("_ae_attrs")
+            ae_calc = "\n".join(ent.get("_ae_calc_parts") or []) or None
+            val_calc = "\n".join(ent.get("_val_calc_parts") or []) or None
+            if ae is not None:
+                d = {}
+                if ae_calc is not None:
+                    d["calc"] = ae_calc
+                    # option unchecked but calc retained = dead residue
+                    d["calc_active"] = ae.get("calculation") == "True"
+                if ae.get("value"):
+                    d["type"] = ae["value"]      # CreationTimeStamp, ConstantData, ...
+                if ae.get("lookup") == "True":
+                    d["lookup"] = True
+                if "alwaysEvaluate" in ae:
+                    d["always_evaluate"] = ae["alwaysEvaluate"] == "True"
+                if "overwriteExistingValue" in ae:
+                    d["overwrite_existing"] = ae["overwriteExistingValue"] == "True"
+                if ae.get("allowEditing") == "False":
+                    d["prohibit_editing"] = True
+                if ae.get("constant") == "True":
+                    d["constant"] = True
+                auto_enter = _json(d) if d else None
+            if val_calc:
+                d0 = _j.loads(extra) if extra else {}
+                d0["validation_calc"] = val_calc
+                extra = _json(d0)
         hide, tip, bounds = (ent.get("_hide_calc"), ent.get("_tooltip_calc"),
                              ent.get("_bounds"))
         if ent["kind"] == "layout_object" and (hide or tip or bounds):
@@ -414,8 +499,11 @@ class DDRHandler(xml.sax.ContentHandler):
         # for steps, the display text is the searchable body; keep calc separately.
         # layout objects add their type, hide/tooltip calcs, and children so both
         # the object row and the aggregated layout body are searchable.
+        # auto-enter / validation calcs stay in the FTS body: the text-fallback
+        # blind-spot check must keep finding them now that they left calc_text
         body = " ".join(filter(None,
-            [ent.get("name"), ent.get("_otype"), calc, step_text, hide, tip]
+            [ent.get("name"), ent.get("_otype"), calc, step_text, hide, tip,
+             ae_calc, val_calc]
             + (ent.get("_child_texts") or [])))
         # bubble object text up: portals/panels aggregate their children, the
         # layout aggregates everything — keeps the "read a full layout body"
@@ -429,6 +517,7 @@ class DDRHandler(xml.sax.ContentHandler):
             ent["parent_entity_id"], ent["base_table"], ent["data_type"], ent["field_type"],
             calc, ent["step_type"], ent["seq"], ent["grp"], ent["records"],
             ent["ext_file"], _merge_extra(extra, step_text),
+            stored, indexed, is_global, auto_enter,
         ))
         if body.strip():
             self.fts_rows.append((ent["entity_id"], ent["file_id"], ent["kind"],
@@ -448,15 +537,15 @@ class DDRHandler(xml.sax.ContentHandler):
             self.conn.executemany(
                 "INSERT INTO entities(entity_id,file_id,kind,fm_id,name,parent_entity_id,"
                 "base_table,data_type,field_type,calc_text,step_type,seq,grp,records,"
-                "ext_file,extra_json)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", self.ent_rows)
+                "ext_file,extra_json,stored,indexed,is_global,auto_enter)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", self.ent_rows)
             self.ent_rows.clear()
         if self.ref_rows:
             self.conn.executemany(
                 "INSERT INTO refs(ref_id,file_id,source_entity_id,source_kind,context,"
                 "target_kind,target_fm_id,target_name,target_to_name,target_raw,"
-                "target_file,target_entity_id,disabled)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)", self.ref_rows)
+                "target_file,target_entity_id,disabled,trigger_event)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", self.ref_rows)
             self.ref_rows.clear()
         if self.fts_rows:
             self.conn.executemany(

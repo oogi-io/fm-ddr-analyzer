@@ -151,6 +151,7 @@ SELECT
     (r.target_entity_id IS NOT NULL) AS resolved,
     r.ambiguous,
     r.target_file,
+    r.trigger_event,
     r.file_id
 FROM refs r
 LEFT JOIN entities se ON se.entity_id = r.source_entity_id
@@ -169,7 +170,8 @@ SELECT
     sp.kind AS source_parent_kind, sp.name AS source_parent_name,
     r.target_kind, COALESCE(te.name, r.target_raw) AS target_name,
     r.target_raw, te.entity_id AS target_id,
-    (r.target_entity_id IS NOT NULL) AS resolved, r.ambiguous, r.target_file, r.file_id
+    (r.target_entity_id IS NOT NULL) AS resolved, r.ambiguous, r.target_file,
+    r.trigger_event, r.file_id
 FROM refs r
 LEFT JOIN entities se ON se.entity_id = r.source_entity_id
 LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
@@ -200,6 +202,38 @@ FROM entities s
 WHERE s.kind = 'script'
   AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = s.entity_id
                   AND r.disabled = 0);
+
+-- Script triggers with their firing EVENT and owning layout. Trigger refs are
+-- sourced from layouts (layout-level triggers) or layout OBJECTS (object-level,
+-- possibly nested in panels/portals) — a plain caller query joining through
+-- script parents silently drops every one of them; this view is the safe path.
+DROP VIEW IF EXISTS v_triggers;
+CREATE VIEW v_triggers AS
+WITH RECURSIVE anc(ref_id, eid) AS (
+    SELECT r.ref_id, r.source_entity_id FROM refs r WHERE r.context = 'trigger'
+    UNION ALL
+    SELECT a.ref_id, e.parent_entity_id FROM anc a
+    JOIN entities e ON e.entity_id = a.eid AND e.kind <> 'layout'
+    WHERE e.parent_entity_id IS NOT NULL
+)
+SELECT
+    r.ref_id,
+    r.trigger_event,
+    se.kind   AS source_kind,        -- 'layout' or 'layout_object'
+    se.name   AS object_name,
+    lay.name  AS layout_name,
+    lay.fm_id AS layout_fm_id,
+    COALESCE(te.name, r.target_raw) AS script_name,
+    te.fm_id  AS script_fm_id,
+    (r.target_entity_id IS NOT NULL) AS resolved,
+    r.file_id
+FROM refs r
+LEFT JOIN entities se  ON se.entity_id = r.source_entity_id
+LEFT JOIN entities lay ON lay.entity_id = (
+    SELECT a.eid FROM anc a JOIN entities x ON x.entity_id = a.eid
+    WHERE a.ref_id = r.ref_id AND x.kind = 'layout' LIMIT 1)
+LEFT JOIN entities te  ON te.entity_id = r.target_entity_id
+WHERE r.context = 'trigger' AND r.disabled = 0;
 
 -- Unresolved references (broken/external/built-in). Useful health signal.
 DROP VIEW IF EXISTS v_unresolved;
