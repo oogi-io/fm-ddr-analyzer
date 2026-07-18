@@ -73,6 +73,15 @@
    "{\"calc\": \"CTC::email & \\\"deadresidue\\\"\", \"calc_active\": false}"
   ],
   [
+   "field|dead_lookup|base_table|CTC||0|0",
+   "CTC",
+   "",
+   "",
+   "",
+   "",
+   "{\"lookup_active\": false, \"lookup_source\": \"ctc_INV::zkp\"}"
+  ],
+  [
    "field|email|base_table|CTC||0|0",
    "CTC",
    "",
@@ -80,6 +89,24 @@
    "",
    "",
    ""
+  ],
+  [
+   "field|invoice_no|base_table|CTC||0|0",
+   "CTC",
+   "",
+   "",
+   "",
+   "",
+   "{\"prohibit_editing\": true, \"serial\": {\"generate\": \"OnCreation\", \"increment\": \"1\", \"nextValue\": \"42\"}}"
+  ],
+  [
+   "field|looked_up_amount|base_table|CTC||0|0",
+   "CTC",
+   "",
+   "",
+   "",
+   "",
+   "{\"lookup\": true, \"lookup_active\": true, \"lookup_source\": \"ctc_INV::amount\"}"
   ],
   [
    "field|pref_g|base_table|CTC||0|0",
@@ -534,6 +561,26 @@
  ],
  "refs": [
   [
+   "",
+   "trigger",
+   "script",
+   "Helper Script",
+   "script|Helper Script|script_group|Main||0|0",
+   0,
+   0,
+   "OnFirstWindowOpen"
+  ],
+  [
+   "",
+   "trigger",
+   "script",
+   "Missing Closer",
+   "",
+   0,
+   0,
+   "OnLastWindowClose"
+  ],
+  [
    "field|Segment|base_table|CTC||0|0",
    "calc",
    "field",
@@ -601,6 +648,26 @@
    "field|email|base_table|CTC||0|0",
    0,
    1,
+   ""
+  ],
+  [
+   "field|dead_lookup|base_table|CTC||0|0",
+   "lookup",
+   "field",
+   "ctc_INV::zkp",
+   "field|zkp|base_table|INV||0|0",
+   0,
+   1,
+   ""
+  ],
+  [
+   "field|looked_up_amount|base_table|CTC||0|0",
+   "lookup",
+   "field",
+   "ctc_INV::amount",
+   "field|amount|base_table|INV||0|0",
+   0,
+   0,
    ""
   ],
   [

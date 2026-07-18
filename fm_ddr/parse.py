@@ -103,7 +103,7 @@ class DDRHandler(xml.sax.ContentHandler):
         return ent
 
     def emit_ref(self, context, target_kind, *, fm_id=None, name=None,
-                 to_name=None, raw=None, trigger_event=None):
+                 to_name=None, raw=None, trigger_event=None, force_disabled=None):
         src = self.current_source()
         # a FileReference inside the current step marks script/layout targets
         # as living in another FILE — they must never resolve locally
@@ -116,9 +116,13 @@ class DDRHandler(xml.sax.ContentHandler):
             src["entity_id"] if src else None,
             src["kind"] if src else None,
             context, target_kind, fm_id, name, to_name, raw, target_file, None,
-            # dead code: refs from disabled script steps AND from auto-enter
-            # calcs whose "Calculated value" option is unchecked (residue)
-            1 if ((src and src.get("_disabled")) or self._in_dead_ae) else 0,
+            # dead code: refs from disabled script steps, from auto-enter calcs
+            # whose "Calculated value" option is unchecked (residue), or an
+            # explicit per-ref verdict (lookups: calculation="False" is their
+            # NORMAL state, so the calc-dead flag must not apply to them)
+            1 if ((src and src.get("_disabled"))
+                  or (force_disabled if force_disabled is not None
+                      else self._in_dead_ae)) else 0,
             trigger_event,
         ))
         if len(self.ref_rows) >= BATCH:
@@ -238,6 +242,12 @@ class DDRHandler(xml.sax.ContentHandler):
                 self._in_dead_ae = a.get("calculation") == "False"
             return
 
+        # Serial-number auto-enter: config lives in a <Serial> child (v1.9.1)
+        if tag == "Serial" and parent == "AutoEnter" and (
+                self.entity_stack and self.entity_stack[-1]["kind"] == "field"):
+            self.entity_stack[-1]["_ae_serial"] = a
+            return
+
         # Script-trigger ancestry: remember the event so the Script ref below
         # can record WHICH trigger fires it (OnRecordCommit, OnObjectSave, ...)
         if tag == "Trigger":
@@ -316,6 +326,25 @@ class DDRHandler(xml.sax.ContentHandler):
         #   - relationship join predicates (LeftField/RightField)
         #   - inside a <Chunk type="FieldRef"> within a calculation
         #   - value-list field sources and sort orders (PrimaryField/SecondaryField)
+        # Lookup source field (v1.9.1): <Lookup><Field table id name/> names the
+        # field a looked-up value is copied FROM — a real dependency that was
+        # invisible to where-used. A configured lookup with the option OFF is
+        # residue: ref flagged disabled, like dead auto-enter calcs.
+        if tag == "Field" and parent == "Lookup" and self.has_ancestor("AutoEnter"):
+            if a.get("name"):   # unset lookups ship empty <Field table="" name=""/>
+                fld = (self.entity_stack[-1]
+                       if self.entity_stack and self.entity_stack[-1]["kind"] == "field"
+                       else None)
+                ae = (fld or {}).get("_ae_attrs") or {}
+                dead = ae.get("lookup") != "True"
+                if fld is not None:
+                    fld["_lookup_src"] = (a.get("table", "") + "::" + a["name"])
+                self.emit_ref("lookup", "field", fm_id=a.get("id"),
+                              name=a["name"], to_name=a.get("table"),
+                              raw=(a.get("table", "") + "::" + a["name"]),
+                              force_disabled=dead)
+            return
+
         if tag == "Field" and parent in ("LeftField", "RightField", "Chunk",
                                          "PrimaryField", "SecondaryField", "Step"):
             if parent == "Chunk":
@@ -354,9 +383,18 @@ class DDRHandler(xml.sax.ContentHandler):
         if tag == "Script" and parent not in ("Group", "ScriptCatalog"):
             fmid, nm = a.get("id"), a.get("name")
             if fmid not in (None, "0") or (nm or ""):
-                ctx = "trigger" if self.has_ancestor("ScriptTriggers") or parent == "Trigger" else "perform_script"
+                # File-level triggers (<WindowTriggers>) carry the event as the
+                # WRAPPER TAG (<OnFirstWindowOpen><Script/>), not an attribute.
+                in_window = self.has_ancestor("WindowTriggers")
+                ctx = ("trigger" if in_window or self.has_ancestor("ScriptTriggers")
+                       or parent == "Trigger" else "perform_script")
                 if nm or (fmid and fmid != "0"):
-                    ev = self._trig_events[-1] if (ctx == "trigger" and self._trig_events) else None
+                    if ctx != "trigger":
+                        ev = None
+                    elif in_window:
+                        ev = parent   # OnFirstWindowOpen, OnLastWindowClose, ...
+                    else:
+                        ev = self._trig_events[-1] if self._trig_events else None
                     self.emit_ref(ctx, "script", fm_id=fmid, name=nm, raw=nm,
                                   trigger_event=ev)
             return
@@ -470,6 +508,13 @@ class DDRHandler(xml.sax.ContentHandler):
                     d["calc_active"] = ae.get("calculation") == "True"
                 if ae.get("value"):
                     d["type"] = ae["value"]      # CreationTimeStamp, ConstantData, ...
+                serial = ent.get("_ae_serial")
+                if serial is not None:           # v1.9.1: serial-number config
+                    d["serial"] = {k: serial[k] for k in
+                                   ("increment", "nextValue", "generate") if k in serial}
+                if ent.get("_lookup_src"):       # v1.9.1: lookup source + residue flag
+                    d["lookup_source"] = ent["_lookup_src"]
+                    d["lookup_active"] = ae.get("lookup") == "True"
                 if ae.get("lookup") == "True":
                     d["lookup"] = True
                 if "alwaysEvaluate" in ae:

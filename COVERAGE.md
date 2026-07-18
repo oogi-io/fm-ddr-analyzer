@@ -12,6 +12,7 @@ outputs as review lists, never as delete lists.
 | `calc` | Field used in a calculation (field's own calc, script step calc, layout object calc) | `Chunk type="FieldRef"` (both element and text forms) |
 | `auto_enter` (v1.9.0) | Field used in an **auto-enter** calculation — distinct from `calc` so a Normal field with auto-enter can't pose as a calc field. A field's full dependency set is `context IN ('calc','auto_enter','validation')` | `Chunk type="FieldRef"` inside `AutoEnter` |
 | `validation` (v1.9.0) | Field used in a validation calculation | `Chunk type="FieldRef"` inside `Validation` |
+| `lookup` (v1.9.1) | The source field a looked-up value copies FROM. A configured lookup whose option is unchecked is residue: ref flagged `disabled=1` | `Field` inside `AutoEnter > Lookup` |
 | `function_ref` | **Custom** function called in a calculation | `Chunk type="CustomFunctionRef"` |
 | `join_predicate` | Field or TO used in a relationship | `LeftField`/`RightField`/`LeftTable`/`RightTable` |
 | `sort` | Field used in a sort order (relationship sort lists and similar) | `PrimaryField`/`SecondaryField` outside value lists |
@@ -22,7 +23,7 @@ outputs as review lists, never as delete lists.
 | `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
 | `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
 | `perform_script` | Script called by a script step | `Script` reference elements |
-| `trigger` | Script attached to a script trigger; `refs.trigger_event` records the firing event (OnRecordCommit, OnObjectSave, ...) (v1.9.0). **Trigger refs are sourced from layouts/layout objects, not scripts** — query them via `v_triggers`, never via a script-parent join | `Script` inside `ScriptTriggers`, event from the enclosing `Trigger` |
+| `trigger` | Script attached to a script trigger; `refs.trigger_event` records the firing event (OnRecordCommit, OnObjectSave, ...) (v1.9.0). **Trigger refs are sourced from layouts/layout objects, not scripts** — query them via `v_triggers`, never via a script-parent join. v1.9.1 adds **file-level triggers** (`WindowTriggers`: OnFirstWindowOpen, OnLastWindowClose, OnWindowClose — the startup/shutdown scripts); they appear in `v_triggers` with `layout_name IS NULL` | `Script` inside `ScriptTriggers` (event from the enclosing `Trigger`) or inside `WindowTriggers` (event = wrapper tag) |
 | `go_to_layout` | Layout targeted by a Go to Layout step/button | `Layout` reference elements |
 | `to_reference` | Table occurrence referenced directly | `TableOccurrenceReference` |
 
@@ -51,11 +52,23 @@ positives (they remain visible in `v_usage_disabled` and in FTS). Auto-enter
 and validation calc text lives in `auto_enter`/`extra_json.validation_calc`,
 NOT in `calc_text` — `calc_text` is now exclusively the field's own formula.
 
+**Serial numbers & lookups (v1.9.1):** serial auto-enters carry
+`auto_enter.serial` (`{increment, nextValue, generate}`); lookups carry
+`auto_enter.lookup_source` (`TO::Field`) + `lookup_active`, and emit a
+`lookup`-context ref so the source field's where-used includes its copies.
+Dead lookups (configured, option off) follow the same residue rule as dead
+auto-enter calcs: `lookup_active=false`, ref `disabled=1`.
+
 ## NOT captured (blind spots — use FTS `search` as the fallback)
 
 | Usage pattern | Why | Fallback |
 |---------------|-----|----------|
 | **Fields named inside `ExecuteSQL` strings** | The DDR itself doesn't resolve SQL text; it's just a string | `search db "fieldname"` |
+| **Conditional-formatting calcs** | `ConditionalFormatting > Condition` calcs not yet extracted — a field used ONLY there shows as unused | `search` |
+| **Record-level security calcs** | Privilege-set record-access (`DataAccess`) calcs not extracted | `search` |
+| Validation **by value list** / detailed validation rules (unique, range, strict type) | Only validation *calcs* are captured | `search` |
+| **Placeholder-text calcs** | `PlaceholderText` calcs not extracted | `search` |
+| **Relationship options** (allow create/delete related, **cascade delete**, sort, non-equijoin operator) | Join predicates captured; the options are not — "what breaks if I delete X" can't see cascades | inspect in FileMaker |
 | Fields/scripts named in **any calculated string** (`GetField`, `Evaluate`, script names built at runtime) | Same — text, not structure | `search` |
 | **Built-in function** usage as edges | Deliberately excluded (tens of thousands of `Get()` edges would drown the graph) | `search db "ExecuteSQL"` |
 | Script invocation from **custom menus** | Menu internals not yet mapped | `search` on the script name |
