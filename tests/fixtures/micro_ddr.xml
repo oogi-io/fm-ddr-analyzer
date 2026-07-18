@@ -71,6 +71,37 @@
 					<Comment>Global-storage field</Comment>
 					<Storage global="True" maxRepetition="1"/>
 				</Field>
+				<Field id="9" dataType="Number" fieldType="Normal" name="invoice_no">
+					<Comment>Serial-number auto-enter (v1.9.1 capture)</Comment>
+					<AutoEnter allowEditing="False" constant="False" furigana="False" lookup="False" calculation="False">
+						<Serial increment="1" nextValue="42" generate="OnCreation"/>
+						<ConstantData/>
+					</AutoEnter>
+				</Field>
+				<Field id="10" dataType="Number" fieldType="Normal" name="looked_up_amount">
+					<Comment>ACTIVE lookup: copies from ctc_INV::amount - dependency must appear in where-used</Comment>
+					<AutoEnter allowEditing="True" constant="False" furigana="False" lookup="True" calculation="False">
+						<ConstantData/>
+						<Lookup>
+							<Table id="3" name="ctc_INV"/>
+							<Field table="ctc_INV" id="2" name="amount"/>
+							<NoMatchCopyOption value="CopyConstant"/>
+							<CopyConstantValue/>
+							<CopyEmptyContent value="False"/>
+						</Lookup>
+					</AutoEnter>
+				</Field>
+				<Field id="11" dataType="Number" fieldType="Normal" name="dead_lookup">
+					<Comment>DEAD lookup residue: configured but option unchecked - ref must be disabled</Comment>
+					<AutoEnter allowEditing="True" constant="False" furigana="False" lookup="False" calculation="False">
+						<ConstantData/>
+						<Lookup>
+							<Table id="3" name="ctc_INV"/>
+							<Field table="ctc_INV" id="1" name="zkp"/>
+							<NoMatchCopyOption value="CopyConstant"/>
+						</Lookup>
+					</AutoEnter>
+				</Field>
 			</FieldCatalog>
 		</BaseTable>
 		<BaseTable id="2" records="5" name="INV">
@@ -324,5 +355,13 @@ beta</Text>
 	<ThemeCatalog>
 		<Theme name="Minimal" id="1"/>
 	</ThemeCatalog>
+	<WindowTriggers>
+		<OnFirstWindowOpen>
+			<Script id="2" name="Helper Script"/>
+		</OnFirstWindowOpen>
+		<OnLastWindowClose>
+			<Script id="9999" name="Missing Closer"/>
+		</OnLastWindowClose>
+	</WindowTriggers>
 </File>
 </FMPReport>

@@ -340,16 +340,17 @@ FROM entities s WHERE s.kind='script' ORDER BY s.grp, s.name;
 
 ## Storage, auto-enter & triggers (v1.9.0+)
 
-**A field's FULL dependency set spans three contexts** — `calc` (its own
-formula), `auto_enter`, and `validation`. Asking only for `calc` misses the
-dominant population mechanism on auto-enter-heavy tables:
+**A field's FULL dependency set spans four contexts** — `calc` (its own
+formula), `auto_enter`, `validation`, and `lookup` (v1.9.1: the field a
+looked-up value copies from). Asking only for `calc` misses the dominant
+population mechanism on auto-enter-heavy tables:
 
 ```sql
 SELECT r.context, r.target_name, te.base_table
 FROM refs r JOIN entities s ON s.entity_id=r.source_entity_id
 LEFT JOIN entities te ON te.entity_id=r.target_entity_id
 WHERE s.kind='field' AND s.name='MyField' AND r.disabled=0
-  AND r.context IN ('calc','auto_enter','validation');
+  AND r.context IN ('calc','auto_enter','validation','lookup');
 ```
 
 Unstored calc fields (the classic FM performance hazard) per table:
@@ -394,4 +395,23 @@ WHERE trigger_event='OnRecordCommit' AND layout_name LIKE '%Pricing%';
 -- every trigger that launches a given script
 SELECT trigger_event, source_kind, layout_name, object_name
 FROM v_triggers WHERE script_name='My Trigger Script';
+```
+
+File-level triggers (v1.9.1) — the startup/shutdown scripts live in
+`WindowTriggers` and show up with a NULL layout:
+
+```sql
+SELECT trigger_event, script_name FROM v_triggers WHERE layout_name IS NULL;
+-- OnFirstWindowOpen = the file's startup script
+```
+
+Serial-number fields and lookup sources (v1.9.1):
+
+```sql
+SELECT base_table, name, json_extract(auto_enter,'$.serial.nextValue') AS next
+FROM entities WHERE json_extract(auto_enter,'$.serial') IS NOT NULL;
+
+SELECT base_table, name, json_extract(auto_enter,'$.lookup_source') AS src,
+       json_extract(auto_enter,'$.lookup_active') AS active
+FROM entities WHERE json_extract(auto_enter,'$.lookup_source') IS NOT NULL;
 ```

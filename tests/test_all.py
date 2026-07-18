@@ -163,7 +163,7 @@ class TestParser(unittest.TestCase):
     def test_entity_counts(self):
         c = self.counts()
         self.assertEqual(c["base_table"], 2)
-        self.assertEqual(c["field"], 10)
+        self.assertEqual(c["field"], 13)
         self.assertEqual(c["table_occurrence"], 4)  # incl. external ext_LOG
         self.assertEqual(c["relationship"], 1)
         # 2 layout DEFINITIONS; the go-to-layout button on the layout is a ref
@@ -745,14 +745,78 @@ class TestV19Capture(unittest.TestCase):
         self.assertIn("validation_calc", extra or "")
 
     def test_trigger_event_and_view(self):
-        row = self.conn.execute(
-            "SELECT trigger_event FROM refs WHERE context='trigger'").fetchone()
-        self.assertEqual(row, ("OnObjectEnter",))
+        events = {r[0] for r in self.conn.execute(
+            "SELECT trigger_event FROM refs WHERE context='trigger'")}
+        self.assertEqual(events,
+                         {"OnObjectEnter", "OnFirstWindowOpen", "OnLastWindowClose"})
         rows = self.conn.execute(
             "SELECT trigger_event, source_kind, layout_name, script_name, resolved "
-            "FROM v_triggers").fetchall()
+            "FROM v_triggers WHERE layout_name IS NOT NULL").fetchall()
         self.assertEqual(rows, [("OnObjectEnter", "layout_object", "Contacts",
                                  "Helper Script", 1)])
+
+
+class TestV191Capture(unittest.TestCase):
+    """v1.9.1: serial-number config, lookup source refs (live vs dead residue),
+    file-level WindowTriggers events."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v191_")
+        cls.db = build_fixture_db(cls.tmp)
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def ae(self, field):
+        (raw,) = self.conn.execute(
+            "SELECT auto_enter FROM entities WHERE kind='field' AND name=?",
+            (field,)).fetchone()
+        return json.loads(raw) if raw else None
+
+    def test_serial_config(self):
+        d = self.ae("invoice_no")
+        self.assertEqual(d["serial"], {"increment": "1", "nextValue": "42",
+                                       "generate": "OnCreation"})
+
+    def test_lookup_live(self):
+        d = self.ae("looked_up_amount")
+        self.assertEqual(d["lookup_source"], "ctc_INV::amount")
+        self.assertTrue(d["lookup_active"])
+        # dependency edge exists, live, resolved through the TO to INV::amount
+        rows = self.conn.execute(
+            "SELECT r.context, r.disabled, te.base_table, te.name FROM refs r "
+            "JOIN entities s ON s.entity_id=r.source_entity_id "
+            "LEFT JOIN entities te ON te.entity_id=r.target_entity_id "
+            "WHERE s.name='looked_up_amount'").fetchall()
+        self.assertEqual(rows, [("lookup", 0, "INV", "amount")])
+
+    def test_lookup_dead_residue(self):
+        d = self.ae("dead_lookup")
+        self.assertFalse(d["lookup_active"])
+        rows = self.conn.execute(
+            "SELECT r.context, r.disabled FROM refs r JOIN entities s "
+            "ON s.entity_id=r.source_entity_id WHERE s.name='dead_lookup'"
+        ).fetchall()
+        self.assertEqual(rows, [("lookup", 1)])
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM v_usage WHERE source_name='dead_lookup'"
+        ).fetchone()[0], 0)
+
+    def test_file_level_triggers(self):
+        rows = self.conn.execute(
+            "SELECT trigger_event, script_name, resolved FROM v_triggers "
+            "WHERE layout_name IS NULL ORDER BY trigger_event").fetchall()
+        self.assertEqual(rows, [("OnFirstWindowOpen", "Helper Script", 1),
+                                ("OnLastWindowClose", "Missing Closer", 0)])
+        # file-level trigger must NOT be misfiled as perform_script
+        n = self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context='perform_script' "
+            "AND target_name='Missing Closer'").fetchone()[0]
+        self.assertEqual(n, 0)
 
 
 if __name__ == "__main__":
