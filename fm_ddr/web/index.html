@@ -745,6 +745,12 @@ async function run(input){
     }
   }
   if(H.ver===null) throw new Error(NOT_DDR);
+  // A truncated upload must NOT produce a silently-partial index: if any
+  // element is still open at end of input, the file was cut off mid-stream.
+  // (Python's expat refuses such files; the web parser must refuse too.)
+  if(H.tagstack.length)
+    throw new Error('This DDR appears truncated: <'+H.tagstack[H.tagstack.length-1]+
+      '> is still open at the end of the file. Re-export it from FileMaker.');
 
   postMessage({type:'progress',pct:100,phase:'resolving'});
   resolve();
@@ -1718,17 +1724,24 @@ function initViewer(DATA){
   function attrEscape(name){
     return name.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
   }
+  // ' and > are legal both literally and as &apos;/&gt; in attribute values —
+  // match either form, or scripts named O'Brien come back "not found"
+  function needleRegex(scriptName){
+    const esc=attrEscape(scriptName).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')
+      .replace(/'/g,"(?:'|&apos;)").replace(/>/g,'(?:>|&gt;)');
+    return new RegExp('name="'+esc+'"');
+  }
   async function extractScriptXML(fileIdx, scriptName){
     const stream=await window.__DDR_SOURCE(fileIdx);
     const reader=stream.getReader();
-    const needle='name="'+attrEscape(scriptName)+'"';
+    const needleRe=needleRegex(scriptName);
     const openRe=/<Script\b[^>]*[^/]>/g;
     let decoder=null, tail='', cap=false, depth=0, buf=[];
     // trigger references use the same open+close form as definitions, so a
     // candidate only counts if the captured block contains a StepList
     const feedLine=(line)=>{
       if(!cap){
-        if(line.indexOf('<Script')>-1 && line.indexOf(needle)>-1 && !/\/>\s*$/.test(line)){
+        if(line.indexOf('<Script')>-1 && needleRe.test(line) && !/\/>\s*$/.test(line)){
           cap=true; buf=[]; depth=0;
         } else return false;
       }
