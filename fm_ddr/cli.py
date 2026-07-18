@@ -87,6 +87,11 @@ def _connect(db_path):
     running now — a stale index silently lacks newer reference types (learned
     the hard way: an index built pre-step_target reported 98% healthy while
     missing every Set Field write target)."""
+    # sqlite3.connect CREATES a missing file — a typo'd path would leave a
+    # phantom empty .db behind and produce a misleading "<1.2.0" stale warning
+    if not os.path.exists(db_path):
+        raise SystemExit(f"error: {db_path} does not exist. "
+                         f"Build an index first: fm-ddr build <ddr.xml...> -o {db_path}")
     conn = sqlite3.connect(db_path)
     try:
         row = conn.execute("SELECT parser_version FROM ddr_run LIMIT 1").fetchone()
@@ -164,6 +169,10 @@ def cmd_cascades(args):
     DDR fact no step census can see — a Delete Record on the deleting side
     silently removes victim-side records."""
     conn = _connect(args.db)
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='v_cascades'").fetchone():
+        raise SystemExit("error: this index has no v_cascades view (built with "
+                         "parser < 1.10.0). Rebuild: fm-ddr build <ddr.xml...> "
+                         f"-o {args.db} --force")
     where, params = "", ()
     if args.table:
         where = "WHERE victim_table = ? OR victim_to = ?"

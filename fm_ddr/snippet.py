@@ -31,7 +31,14 @@ def extract_script_xml(ddr_path: str, script_name: str,
     with open(ddr_path, "rb") as f:
         if f.read(2) != b"\xff\xfe":
             enc = "utf-8"
-    needle = 'name="%s"' % script_name.replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
+    # &, " and < are ALWAYS entity-encoded in attribute values; ' and > are
+    # legal both literally and as &apos;/&gt; — the needle must match either
+    # form or scripts named O'Brien silently come back "not found".
+    base = (script_name.replace("&", "&amp;").replace('"', "&quot;")
+            .replace("<", "&lt;"))
+    needle_re = re.compile(
+        'name="%s"' % re.escape(base)
+        .replace(r"'", "(?:'|&apos;)").replace(">", "(?:>|&gt;)"))
     open_re = re.compile(r"<Script\b[^>]*[^/]>")
     cap, buf, depth = False, [], 0
     with open(ddr_path, encoding=enc, errors="replace") as f:
@@ -41,7 +48,7 @@ def extract_script_xml(ddr_path: str, script_name: str,
                 # NOTE: trigger references use the same open+close form, so a
                 # candidate only counts as the definition if it turns out to
                 # contain a StepList - otherwise we keep scanning.
-                if "<Script" in line and needle in line and not line.rstrip().endswith("/>"):
+                if "<Script" in line and needle_re.search(line) and not line.rstrip().endswith("/>"):
                     cap, buf, depth = True, [], 0
                 else:
                     continue

@@ -909,5 +909,86 @@ class TestV110Capture(unittest.TestCase):
         self.assertIn("value_list", kinds)
 
 
+class TestRobustness(unittest.TestCase):
+    """Hostile-input and error-path behavior (v1.10.0 hardening round)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_rob_")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def _truncated_fixture(self):
+        with open(FIXTURE, encoding="utf-8") as f:
+            fix = f.read()
+        cut = fix.find("]]>", fix.find("CDATA"))
+        p = os.path.join(self.tmp, "truncated.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(fix[:cut - 10])
+        return p
+
+    def test_missing_db_no_phantom_file(self):
+        # sqlite3.connect would CREATE the file; _connect must refuse instead
+        from fm_ddr import cli
+        ghost = os.path.join(self.tmp, "ghost.db")
+        with self.assertRaises(SystemExit):
+            cli._connect(ghost)
+        self.assertFalse(os.path.exists(ghost), "phantom .db file created")
+
+    def test_old_index_without_v_cascades_gets_rebuild_hint(self):
+        db = build_fixture_db(self.tmp)
+        conn = sqlite3.connect(db)
+        conn.execute("DROP VIEW v_cascades")
+        conn.commit(); conn.close()
+        from fm_ddr import cli
+        args = type("A", (), {"db": db, "table": None, "limit": 10})()
+        with self.assertRaises(SystemExit) as cm:
+            cli.cmd_cascades(args)
+        self.assertIn("1.10.0", str(cm.exception))
+
+    def test_truncated_ddr_refused_by_python(self):
+        with self.assertRaises(Exception):
+            build(self._truncated_fixture(),
+                  os.path.join(self.tmp, "t.db"), label="t")
+
+    def test_failed_build_does_not_clobber_existing_index(self):
+        db = os.path.join(self.tmp, "keep.db")
+        build(FIXTURE, db, label="good")
+        before = sqlite3.connect(db).execute(
+            "SELECT COUNT(*) FROM entities").fetchone()[0]
+        try:
+            build(self._truncated_fixture(), db, label="bad")
+        except Exception:
+            pass
+        after = sqlite3.connect(db).execute(
+            "SELECT COUNT(*) FROM entities").fetchone()[0]
+        self.assertEqual((before > 0, after), (True, before))
+
+    def test_snippet_finds_apostrophe_names_both_encodings(self):
+        # ' is legal both literally and as &apos; in attributes — the raw-XML
+        # needle must match either, or O'Brien scripts are "not found"
+        from fm_ddr.snippet import extract_script_xml
+        with open(FIXTURE, encoding="utf-8") as f:
+            fix = f.read()
+        for variant in ("O'Brien Script", "O&apos;Brien Script"):
+            p = os.path.join(self.tmp, "apos.xml")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(fix.replace('name="Helper Script"',
+                                    f'name="{variant}"'))
+            xml = extract_script_xml(p, "O'Brien Script")
+            self.assertIn("<StepList", xml, f"variant {variant!r} not found")
+
+    @unittest.skipIf(shutil.which("node") is None, "node not available")
+    def test_truncated_ddr_refused_by_js(self):
+        # the web parser must not build a silently-partial index
+        out = subprocess.run(
+            ["node", JS_RUNNER, WEB_APP, "13", self._truncated_fixture()],
+            capture_output=True, text=True, timeout=120)
+        self.assertNotEqual(out.returncode, 0)
+        self.assertIn("truncated", (out.stderr + out.stdout).lower())
+
+
 if __name__ == "__main__":
     unittest.main()
