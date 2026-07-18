@@ -157,6 +157,74 @@ def cmd_sql(args):
     _print_table(cols, rows, limit=args.limit, full=getattr(args, "full", False))
 
 
+def cmd_cascades(args):
+    """What deletes into a table by relationship cascade? (v1.10.0)
+
+    Deleting a record on deleting_table cascades into victim_table. This is a
+    DDR fact no step census can see — a Delete Record on the deleting side
+    silently removes victim-side records."""
+    conn = _connect(args.db)
+    where, params = "", ()
+    if args.table:
+        where = "WHERE victim_table = ? OR victim_to = ?"
+        params = (args.table, args.table)
+    cols, rows = _rows(conn,
+        f"""SELECT deleting_table, deleting_to, victim_table, victim_to, relationship
+            FROM v_cascades {where}
+            ORDER BY victim_table, deleting_table""", params)
+    scope = f" into {args.table}" if args.table else ""
+    print(f"# Cascade deletes{scope} — {len(rows)} relationship side(s)\n")
+    if rows:
+        _print_table(cols, rows, limit=args.limit)
+    else:
+        print("(none — no relationship side has cascade delete enabled"
+              + (f" for {args.table}" if args.table else "") + ")")
+
+
+def cmd_valuelist(args):
+    """Show a value list's DEFINITION (source, fields, custom values) + where
+    it's bound. (v1.10.0)"""
+    import json as _json_mod
+    conn = _connect(args.db)
+    rows = conn.execute(
+        """SELECT entity_id, name, extra_json, file_id FROM entities
+           WHERE kind='value_list' AND name LIKE ? ORDER BY name""",
+        (args.name,)).fetchall()
+    if not rows:
+        print(f"No value list matching '{args.name}'. LIKE patterns allowed (%).")
+        return
+    for eid, name, extra, _f in rows:
+        d = _json_mod.loads(extra) if extra else {}
+        print(f"# Value list: {name}")
+        src = d.get("source")
+        if src == "Custom":
+            vals = d.get("custom_values") or []
+            print(f"  source: Custom — {len(vals)} value(s)")
+            for v in vals[:args.limit]:
+                print(f"    • {v}")
+            if len(vals) > args.limit:
+                print(f"    ... {len(vals) - args.limit} more")
+        elif src == "Field":
+            for slot in ("primary", "secondary"):
+                if d.get(slot):
+                    s = d[slot]
+                    opts = ", ".join(k for k in ("show", "sort") if s.get(k))
+                    print(f"  {slot}: {s.get('field')}"
+                          + (f"  ({opts})" if opts else ""))
+            if "show_related" in d:
+                print(f"  show related values only: {d['show_related']}")
+        else:
+            print("  (no definition captured — index built with parser < 1.10.0?)")
+        _c, urows = _rows(conn,
+            """SELECT context, source_kind, source_parent_name, source_name
+               FROM v_usage WHERE target_id = ? ORDER BY context, source_name""",
+            (eid,))
+        print(f"  bound in {len(urows)} place(s)")
+        if urows:
+            _print_table(_c, urows, limit=args.limit)
+        print()
+
+
 def cmd_snippet(args):
     from .snippet import snippet
     res = snippet(args.ddr, args.script, out_path=args.out,
@@ -880,6 +948,23 @@ def main(argv=None):
     mu.add_argument("--limit", type=int, default=100000,
                     help="row cap per section (default: effectively unlimited — an inventory must be complete)")
     mu.set_defaults(func=cmd_mutations)
+
+    ca = sub.add_parser("cascades",
+                        help="cascade deletes: what deletes into a table via "
+                             "relationship options (v1.10.0)")
+    ca.add_argument("db")
+    ca.add_argument("table", nargs="?", default=None,
+                    help="victim base table or TO name (default: all)")
+    ca.add_argument("--limit", type=int, default=200)
+    ca.set_defaults(func=cmd_cascades)
+
+    vl = sub.add_parser("valuelist",
+                        help="value-list definition (source, fields, custom "
+                             "values) + bindings (v1.10.0)")
+    vl.add_argument("db")
+    vl.add_argument("name", help="value-list name (LIKE pattern allowed)")
+    vl.add_argument("--limit", type=int, default=50)
+    vl.set_defaults(func=cmd_valuelist)
 
     ins = sub.add_parser("install-skill",
                          help="install the Claude Code skill globally (~/.claude/skills)")
