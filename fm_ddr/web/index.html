@@ -334,8 +334,10 @@ function emitRef(context,tk,o){
   H.edges.push({s:src?src.id:null, sk:src?src.k:null, f:H.fileIdx,
     c:context, tk:tk, fm:o.fm!=null?o.fm:null, name:o.name!=null?o.name:null,
     to:o.to!=null?o.to:null, tr:o.raw!=null?o.raw:null, tf:tf, t:null,
-    // dead code: disabled script steps AND dead auto-enter calc residue
-    dis:((src&&src._dis)||H.deadAE)?1:0,
+    // dead code: disabled script steps, dead auto-enter calc residue, or an
+    // explicit per-ref verdict (lookups: calculation="False" is their normal
+    // state, so the calc-dead flag must not apply to them)
+    dis:((src&&src._dis)||(o.forceDis!==undefined?o.forceDis:H.deadAE))?1:0,
     ev:o.ev!=null?o.ev:null});
 }
 
@@ -380,6 +382,10 @@ function onStart(tag,a){
     return; }
   // Script-trigger ancestry: remember the event for the Script ref below
   if(tag==='Trigger'){ H.trigEv.push(a.event!=null?a.event:null); return; }
+  // Serial-number auto-enter config (v1.9.1)
+  if(tag==='Serial' && parent==='AutoEnter'
+     && H.estack.length && H.estack[H.estack.length-1].k==='field'){
+    H.estack[H.estack.length-1]._serial=a; return; }
   if(tag==='CustomFunction' && anc('CustomFunctionCatalog')){ newEntity('custom_function',a); return; }
   if(tag==='ValueList'){
     if(parent==='ValueListCatalog') newEntity('value_list',a);
@@ -406,6 +412,17 @@ function onStart(tag,a){
   if(tag==='FieldReference'){ const [to,leaf]=splitQ(a.name);
     emitRef(anc('Layout')?'layout_object':'field_reference','field',{fm:a.id,name:leaf,to:to,raw:a.name}); return; }
   if(tag==='TableOccurrenceReference'){ emitRef('to_reference','table_occurrence',{fm:a.id,name:a.name,raw:a.name}); return; }
+  // Lookup source field (v1.9.1): the field a looked-up value copies FROM.
+  // Configured-but-switched-off lookup = residue -> ref flagged disabled.
+  if(tag==='Field' && parent==='Lookup' && anc('AutoEnter')){
+    if(a.name){
+      const fe=(H.estack.length&&H.estack[H.estack.length-1].k==='field')?H.estack[H.estack.length-1]:null;
+      const ae=(fe&&fe._ae)||{}; const dead=ae.lookup!=='True';
+      if(fe) fe._lksrc=(a.table||'')+'::'+a.name;
+      emitRef('lookup','field',{fm:a.id,name:a.name,to:a.table,
+        raw:(a.table||'')+'::'+a.name,forceDis:dead});
+    }
+    return; }
   if(tag==='Field' && (parent==='LeftField'||parent==='RightField'||parent==='Chunk'
                        ||parent==='PrimaryField'||parent==='SecondaryField'||parent==='Step')){
     let ctx;
@@ -421,9 +438,13 @@ function onStart(tag,a){
       (H.estack[k]._ends=H.estack[k]._ends||[]).push(a.name); break; } return; }
   if(tag==='Script' && parent!=='Group' && parent!=='ScriptCatalog'){
     const fm=a.id, nm=a.name;
-    if((fm!=null&&fm!=='0')||nm){ const ctx=(anc('ScriptTriggers')||parent==='Trigger')?'trigger':'perform_script';
+    if((fm!=null&&fm!=='0')||nm){
+      // File-level triggers (<WindowTriggers>) carry the event as the WRAPPER
+      // TAG (<OnFirstWindowOpen><Script/>), not an attribute.
+      const inWin=anc('WindowTriggers');
+      const ctx=(inWin||anc('ScriptTriggers')||parent==='Trigger')?'trigger':'perform_script';
       if(nm||(fm&&fm!=='0')){
-        const ev=(ctx==='trigger'&&H.trigEv.length)?H.trigEv[H.trigEv.length-1]:null;
+        const ev=ctx!=='trigger'?null:(inWin?parent:(H.trigEv.length?H.trigEv[H.trigEv.length-1]:null));
         emitRef(ctx,'script',{fm:fm,name:nm,raw:nm,ev:ev}); } } return; }
 
   // text capture
@@ -481,6 +502,9 @@ function finalize(e){
       const d={};
       if(aec!=null){ d.calc=aec; d.calc_active=e._ae.calculation==='True'; }
       if(e._ae.value) d.type=e._ae.value;
+      if(e._serial){ const s={}; for(const k of ['increment','nextValue','generate'])
+        if(k in e._serial) s[k]=e._serial[k]; d.serial=s; }
+      if(e._lksrc){ d.lookup_source=e._lksrc; d.lookup_active=e._ae.lookup==='True'; }
       if(e._ae.lookup==='True') d.lookup=true;
       if('alwaysEvaluate' in e._ae) d.always_evaluate=e._ae.alwaysEvaluate==='True';
       if('overwriteExistingValue' in e._ae) d.overwrite_existing=e._ae.overwriteExistingValue==='True';

@@ -58,11 +58,12 @@ CREATE TABLE IF NOT EXISTS entities (
 
 -- Generic reference edge: source entity USES target thing.
 -- target may be unresolved at parse time; resolve.sql fills target_entity_id.
--- context: calc | auto_enter | validation | join_predicate | perform_script
---          | go_to_layout | trigger | layout_object | value_list_source
---          | field_reference | to_reference | function_ref
+-- context: calc | auto_enter | validation | lookup | join_predicate
+--          | perform_script | go_to_layout | trigger | layout_object
+--          | value_list_source | field_reference | to_reference | function_ref
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
---  a field's full dependency set is context IN ('calc','auto_enter','validation'))
+--  lookup = the source field a looked-up value copies FROM; a field's full
+--  dependency set is context IN ('calc','auto_enter','validation','lookup'))
 CREATE TABLE IF NOT EXISTS refs (
     ref_id           INTEGER PRIMARY KEY,
     file_id          INTEGER NOT NULL REFERENCES files(file_id),
