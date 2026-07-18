@@ -60,7 +60,8 @@ def normalize(entities, refs):
          "" if e.get("stored") is None else str(e["stored"]),
          e.get("indexed") or "",
          "" if e.get("is_global") is None else str(e["is_global"]),
-         _canon_ae(e.get("auto_enter"))]
+         _canon_ae(e.get("auto_enter")),
+         _canon_v10(e.get("v10"))]
         for e in entities
     )
     ref_rows = sorted(
@@ -88,14 +89,29 @@ def _canon_ae(ae):
     return json.dumps(d, sort_keys=True, ensure_ascii=False)
 
 
+# v1.10.0 extra capture (relationship sides/predicates, value-list defs,
+# layout-object text) — the keys both parsers must agree on.
+V10_KEYS = ("sides", "predicates", "source", "show_related", "primary",
+            "secondary", "custom_values", "text")
+
+
+def _canon_v10(v10):
+    if not v10:
+        return ""
+    d = {k: v for k, v in v10.items() if k in V10_KEYS and v is not None}
+    return json.dumps(d, sort_keys=True, ensure_ascii=False) if d else ""
+
+
 def read_sqlite(db_path):
     conn = sqlite3.connect(db_path)
     entities = [
         {"id": i, "kind": k, "name": n, "parent_id": p, "base_table": bt, "grp": g,
-         "stored": st, "indexed": ix, "is_global": ig, "auto_enter": ae}
-        for i, k, n, p, bt, g, st, ix, ig, ae in conn.execute(
+         "stored": st, "indexed": ix, "is_global": ig, "auto_enter": ae,
+         "v10": (json.loads(ex) if ex and k in ("relationship", "value_list",
+                                                "layout_object") else None)}
+        for i, k, n, p, bt, g, st, ix, ig, ae, ex in conn.execute(
             "SELECT entity_id,kind,name,parent_entity_id,base_table,grp,"
-            "stored,indexed,is_global,auto_enter FROM entities")
+            "stored,indexed,is_global,auto_enter,extra_json FROM entities")
     ]
     refs = [
         {"source_id": s, "context": c, "target_kind": tk, "target_raw": tr,
@@ -113,7 +129,9 @@ def read_js(js_json):
         {"id": e["id"], "kind": e["k"], "name": e["n"], "parent_id": e["p"],
          "base_table": e["bt"], "grp": e["g"],
          "stored": e.get("sto"), "indexed": e.get("idx"),
-         "is_global": e.get("glb"), "auto_enter": e.get("ae")}
+         "is_global": e.get("glb"), "auto_enter": e.get("ae"),
+         "v10": (dict(e["ex"] or {}, **({"text": e["tx"]} if e.get("tx") else {}))
+                 if (e.get("ex") or e.get("tx")) else None)}
         for e in js_json["entities"]
     ]
     refs = [
@@ -817,6 +835,78 @@ class TestV191Capture(unittest.TestCase):
             "SELECT COUNT(*) FROM refs WHERE context='perform_script' "
             "AND target_name='Missing Closer'").fetchone()[0]
         self.assertEqual(n, 0)
+
+
+class TestV110Capture(unittest.TestCase):
+    """v1.10.0: relationship attributes (cascades, predicates), value-list
+    definitions, layout text-object capture."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v110_")
+        cls.db = build_fixture_db(cls.tmp)
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def extra(self, kind, name):
+        (raw,) = self.conn.execute(
+            "SELECT extra_json FROM entities WHERE kind=? AND name=?",
+            (kind, name)).fetchone()
+        return json.loads(raw) if raw else {}
+
+    def test_relationship_attributes(self):
+        d = self.extra("relationship", "CTC :: ctc_INV")
+        self.assertEqual(d["sides"], [
+            {"side": "left", "to": "CTC",
+             "cascade_create": False, "cascade_delete": False},
+            {"side": "right", "to": "ctc_INV",
+             "cascade_create": True, "cascade_delete": True}])
+        self.assertEqual(d["predicates"],
+                         [{"op": "Equal", "left": "CTC::zkp",
+                           "right": "ctc_INV::zkp"}])
+
+    def test_v_cascades(self):
+        rows = self.conn.execute(
+            "SELECT deleting_table, victim_table, victim_to FROM v_cascades"
+        ).fetchall()
+        # deleting a CTC record cascades into INV (via the ctc_INV occurrence)
+        self.assertEqual(rows, [("CTC", "INV", "ctc_INV")])
+
+    def test_value_list_definitions(self):
+        d = self.extra("value_list", "VL Custom")
+        self.assertEqual(d["source"], "Custom")
+        self.assertEqual(d["custom_values"], ["alpha", "beta"])
+        d = self.extra("value_list", "VL Fields")
+        self.assertEqual(d["source"], "Field")
+        self.assertEqual(d["primary"],
+                         {"field": "ctc_INV::amount", "show": True, "sort": True})
+        self.assertFalse(d["show_related"])
+
+    def test_layout_text_capture(self):
+        # the text object's runs land in extra_json.text (merge markers intact)
+        row = self.conn.execute(
+            "SELECT extra_json FROM entities WHERE kind='layout_object' "
+            "AND extra_json LIKE '%mergemarker42%'").fetchone()
+        self.assertIsNotNone(row)
+        d = json.loads(row[0])
+        self.assertIn("<<ctc_INV::amount>>", d["text"])
+        self.assertIn("<<ƒ:Upper ( CTC::email )>>", d["text"])
+
+    def test_layout_text_searchable(self):
+        # FTS finds layout text now — on the object AND the bubbled layout body
+        kinds = {k for (k,) in self.conn.execute(
+            "SELECT kind FROM text_index WHERE body MATCH 'mergemarker42'")}
+        self.assertIn("layout_object", kinds)
+        self.assertIn("layout", kinds)
+
+    def test_custom_values_searchable(self):
+        kinds = {k for (k,) in self.conn.execute(
+            "SELECT kind FROM text_index WHERE body MATCH 'beta'")}
+        self.assertIn("value_list", kinds)
 
 
 if __name__ == "__main__":

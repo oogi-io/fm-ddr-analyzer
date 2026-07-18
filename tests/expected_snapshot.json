@@ -7,10 +7,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "base_table|CTC||0",
+   "",
    "",
    "",
    "",
@@ -25,10 +27,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "custom_function|MakeTitle||0",
+   "",
    "",
    "",
    "",
@@ -43,11 +47,13 @@
    "1",
    "None",
    "0",
+   "",
    ""
   ],
   [
    "field|amount|base_table|INV||0|0",
    "INV",
+   "",
    "",
    "",
    "",
@@ -61,7 +67,8 @@
    "1",
    "None",
    "0",
-   "{\"always_evaluate\": false, \"calc\": \"Upper ( CTC::email )\", \"calc_active\": true, \"overwrite_existing\": true}"
+   "{\"always_evaluate\": false, \"calc\": \"Upper ( CTC::email )\", \"calc_active\": true, \"overwrite_existing\": true}",
+   ""
   ],
   [
    "field|autofill_dead|base_table|CTC||0|0",
@@ -70,7 +77,8 @@
    "",
    "",
    "",
-   "{\"calc\": \"CTC::email & \\\"deadresidue\\\"\", \"calc_active\": false}"
+   "{\"calc\": \"CTC::email & \\\"deadresidue\\\"\", \"calc_active\": false}",
+   ""
   ],
   [
    "field|dead_lookup|base_table|CTC||0|0",
@@ -79,11 +87,13 @@
    "",
    "",
    "",
-   "{\"lookup_active\": false, \"lookup_source\": \"ctc_INV::zkp\"}"
+   "{\"lookup_active\": false, \"lookup_source\": \"ctc_INV::zkp\"}",
+   ""
   ],
   [
    "field|email|base_table|CTC||0|0",
    "CTC",
+   "",
    "",
    "",
    "",
@@ -97,7 +107,8 @@
    "",
    "",
    "",
-   "{\"prohibit_editing\": true, \"serial\": {\"generate\": \"OnCreation\", \"increment\": \"1\", \"nextValue\": \"42\"}}"
+   "{\"prohibit_editing\": true, \"serial\": {\"generate\": \"OnCreation\", \"increment\": \"1\", \"nextValue\": \"42\"}}",
+   ""
   ],
   [
    "field|looked_up_amount|base_table|CTC||0|0",
@@ -106,7 +117,8 @@
    "",
    "",
    "",
-   "{\"lookup\": true, \"lookup_active\": true, \"lookup_source\": \"ctc_INV::amount\"}"
+   "{\"lookup\": true, \"lookup_active\": true, \"lookup_source\": \"ctc_INV::amount\"}",
+   ""
   ],
   [
    "field|pref_g|base_table|CTC||0|0",
@@ -115,11 +127,13 @@
    "1",
    "",
    "1",
+   "",
    ""
   ],
   [
    "field|sql_only_field|base_table|CTC||0|0",
    "CTC",
+   "",
    "",
    "",
    "",
@@ -133,6 +147,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -142,7 +157,8 @@
    "1",
    "All",
    "0",
-   "{\"always_evaluate\": false}"
+   "{\"always_evaluate\": false}",
+   ""
   ],
   [
    "field|zkp|base_table|INV||0|0",
@@ -151,10 +167,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "layout_group|Interfaces||0",
+   "",
    "",
    "",
    "",
@@ -169,6 +187,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -178,12 +197,24 @@
    "",
    "",
    "",
+   "",
    ""
+  ],
+  [
+   "layout_object||layout|Contacts|layout_group|Interfaces||0|0|1",
+   "",
+   "Interfaces",
+   "",
+   "",
+   "",
+   "",
+   "{\"text\": \"Total: <<ctc_INV::amount>> mergemarker42 <<\u0192:Upper ( CTC::email )>>\"}"
   ],
   [
    "layout|Contacts|layout_group|Interfaces||0|0",
    "",
    "Interfaces",
+   "",
    "",
    "",
    "",
@@ -196,10 +227,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "privilege_set|[Full Access]||0",
+   "",
    "",
    "",
    "",
@@ -214,10 +247,12 @@
    "",
    "",
    "",
-   ""
+   "",
+   "{\"predicates\": [{\"left\": \"CTC::zkp\", \"op\": \"Equal\", \"right\": \"ctc_INV::zkp\"}], \"sides\": [{\"cascade_create\": false, \"cascade_delete\": false, \"side\": \"left\", \"to\": \"CTC\"}, {\"cascade_create\": true, \"cascade_delete\": true, \"side\": \"right\", \"to\": \"ctc_INV\"}]}"
   ],
   [
    "script_group|Main||0",
+   "",
    "",
    "",
    "",
@@ -232,10 +267,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Delete Portal Row|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -250,10 +287,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|End If|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -268,6 +307,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -277,10 +317,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Go to Layout|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -295,10 +337,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|If|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -313,10 +357,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|New Record/Request|script|Record Ops Torture||0|1",
+   "",
    "",
    "",
    "",
@@ -331,10 +377,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Perform Script|script|Chain Root||0|0",
+   "",
    "",
    "",
    "",
@@ -349,12 +397,14 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Perform Script|script|Main Script|script_group|Main||0|0|1",
    "",
    "Main",
+   "",
    "",
    "",
    "",
@@ -367,6 +417,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -376,10 +427,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Perform Script|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -394,6 +447,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -403,10 +457,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Show Custom Dialog|script|Loose Script||0|0",
+   "",
    "",
    "",
    "",
@@ -421,10 +477,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script_step|Truncate Table|script|Record Ops Torture||0|0",
+   "",
    "",
    "",
    "",
@@ -439,10 +497,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script|Chain Root||0",
+   "",
    "",
    "",
    "",
@@ -457,10 +517,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script|Loose Script||0",
+   "",
    "",
    "",
    "",
@@ -475,6 +537,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -484,10 +547,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "script|Record Ops Torture||0",
+   "",
    "",
    "",
    "",
@@ -502,11 +567,13 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "table_occurrence|INV||0",
    "INV",
+   "",
    "",
    "",
    "",
@@ -520,6 +587,7 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
@@ -529,10 +597,12 @@
    "",
    "",
    "",
+   "",
    ""
   ],
   [
    "theme|Minimal||0",
+   "",
    "",
    "",
    "",
@@ -547,7 +617,8 @@
    "",
    "",
    "",
-   ""
+   "",
+   "{\"custom_values\": [\"alpha\", \"beta\"], \"source\": \"Custom\"}"
   ],
   [
    "value_list|VL Fields||0",
@@ -556,7 +627,8 @@
    "",
    "",
    "",
-   ""
+   "",
+   "{\"primary\": {\"field\": \"ctc_INV::amount\", \"show\": true, \"sort\": true}, \"show_related\": false, \"source\": \"Field\"}"
   ]
  ],
  "refs": [

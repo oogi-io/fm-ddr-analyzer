@@ -32,6 +32,8 @@ checkout of github.com/oogi-io/fm-ddr-analyzer.
 
 ```bash
 fm-ddr where  <db> "TO::Field"      # resolved where-used (field/script/layout/TO/CF)
+fm-ddr cascades <db> [table]        # cascade deletes INTO a table (v1.10)
+fm-ddr valuelist <db> "<name>"      # value-list definition + bindings (v1.10)
 fm-ddr search <db> "text"           # FTS across every calc / step / name
 fm-ddr stats  <db>                  # counts + resolution health
 fm-ddr sql    <db> "SELECT ..."     # anything else
