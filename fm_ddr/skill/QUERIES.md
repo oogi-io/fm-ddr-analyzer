@@ -415,3 +415,21 @@ SELECT base_table, name, json_extract(auto_enter,'$.lookup_source') AS src,
        json_extract(auto_enter,'$.lookup_active') AS active
 FROM entities WHERE json_extract(auto_enter,'$.lookup_source') IS NOT NULL;
 ```
+
+Cascades & value lists (v1.10.0+):
+
+```bash
+fm-ddr cascades  <db> [table]   # what deletes into <table> via relationship cascade
+fm-ddr valuelist <db> "<name>"  # definition (source/custom values/fields) + bindings
+```
+
+```sql
+-- relationships with non-equijoin operators
+SELECT name, json_extract(extra_json,'$.predicates') FROM entities
+WHERE kind='relationship'
+  AND json_extract(extra_json,'$.predicates') NOT LIKE '%"op": "Equal"%';
+
+-- layout text (merge fields/formulas) is now in FTS + extra_json.text
+SELECT name, json_extract(extra_json,'$.text') FROM entities
+WHERE kind='layout_object' AND json_extract(extra_json,'$.text') LIKE '%<<%';
+```

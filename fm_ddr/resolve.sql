@@ -235,6 +235,30 @@ LEFT JOIN entities lay ON lay.entity_id = (
 LEFT JOIN entities te  ON te.entity_id = r.target_entity_id
 WHERE r.context = 'trigger' AND r.disabled = 0;
 
+-- Cascade deletes (v1.10.0): one row per relationship side with cascadeDelete
+-- set — deleting a record on deleting_table cascades into victim_table.
+-- The DDR fact "what deletes into this table by cascade" that step censuses
+-- structurally cannot see.
+DROP VIEW IF EXISTS v_cascades;
+CREATE VIEW v_cascades AS
+SELECT rel.entity_id AS relationship_id,
+       rel.name      AS relationship,
+       json_extract(o.value,'$.to') AS deleting_to,
+       oto.base_table               AS deleting_table,
+       json_extract(s.value,'$.to') AS victim_to,
+       vto.base_table               AS victim_table,
+       rel.file_id
+FROM entities rel
+JOIN json_each(json_extract(rel.extra_json,'$.sides')) s
+JOIN json_each(json_extract(rel.extra_json,'$.sides')) o
+     ON json_extract(s.value,'$.side') <> json_extract(o.value,'$.side')
+LEFT JOIN entities vto ON vto.file_id = rel.file_id
+     AND vto.kind='table_occurrence' AND vto.name = json_extract(s.value,'$.to')
+LEFT JOIN entities oto ON oto.file_id = rel.file_id
+     AND oto.kind='table_occurrence' AND oto.name = json_extract(o.value,'$.to')
+WHERE rel.kind='relationship'
+  AND json_extract(s.value,'$.cascade_delete') = 1;
+
 -- Unresolved references (broken/external/built-in). Useful health signal.
 DROP VIEW IF EXISTS v_unresolved;
 CREATE VIEW v_unresolved AS

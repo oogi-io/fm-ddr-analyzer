@@ -291,7 +291,8 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 
 const SOURCE_KINDS = new Set(["field","custom_function","script_step","relationship",
   "layout","layout_object","value_list","privilege_set","custom_menu"]);
-const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name"]);
+// Text = value-list custom values; Data = layout text-object character runs
+const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name","Text","Data"]);
 
 function dec(s){
   if(s.indexOf('&')===-1) return s;
@@ -431,11 +432,37 @@ function onStart(tag,a){
     else if(parent==='PrimaryField'||parent==='SecondaryField')
       ctx=anc('ValueList')?'value_list_field':'sort';
     else ctx='join_predicate';
-    emitRef(ctx,'field',{fm:a.id,name:a.name,to:a.table,raw:(a.table||'')+'::'+(a.name||'')}); return; }
+    emitRef(ctx,'field',{fm:a.id,name:a.name,to:a.table,raw:(a.table||'')+'::'+(a.name||'')});
+    const qn=(a.table||'')+'::'+(a.name||'');
+    if(ctx==='join_predicate'){
+      for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){
+        (H.estack[k]._predF=H.estack[k]._predF||[]).push([parent,qn]); break; } }
+    else if(ctx==='value_list_field' && H.estack.length
+            && H.estack[H.estack.length-1].k==='value_list'){
+      (H.estack[H.estack.length-1]._vlF=H.estack[H.estack.length-1]._vlF||{})[parent]=qn; }
+    return; }
   if((tag==='LeftTable'||tag==='RightTable') && anc('Relationship')){
     emitRef('join_predicate','table_occurrence',{name:a.name,raw:a.name});
     for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){
-      (H.estack[k]._ends=H.estack[k]._ends||[]).push(a.name); break; } return; }
+      const rel=H.estack[k];
+      (rel._ends=rel._ends||[]).push(a.name);
+      // v1.10.0: cascade options ride on the relationship ends
+      (rel._sides=rel._sides||[]).push({side:tag==='LeftTable'?'left':'right',
+        to:a.name!=null?a.name:null,
+        cascade_create:a.cascadeCreate==='True', cascade_delete:a.cascadeDelete==='True'});
+      break; } return; }
+  // v1.10.0: join operator
+  if(tag==='JoinPredicate' && anc('Relationship')){
+    for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){
+      (H.estack[k]._ops=H.estack[k]._ops||[]).push(a.type||'Equal'); break; } return; }
+  // v1.10.0: value-list DEFINITION metadata
+  if((tag==='Source'||tag==='ShowRelated'||tag==='PrimaryField'||tag==='SecondaryField')
+     && H.estack.length && H.estack[H.estack.length-1].k==='value_list'){
+    const vl=H.estack[H.estack.length-1];
+    if(tag==='Source') vl._vlSrc=a.value!=null?a.value:null;
+    else if(tag==='ShowRelated') vl._vlShow=a.value!=null?a.value:null;
+    else (vl._vlOpts=vl._vlOpts||{})[tag]={show:a.show==='True',sort:a.sort==='True'};
+    return; }
   if(tag==='Script' && parent!=='Group' && parent!=='ScriptCatalog'){
     const fm=a.id, nm=a.name;
     if((fm!=null&&fm!=='0')||nm){
@@ -457,13 +484,25 @@ function onText(text,isCDATA){
     // lone CR -> LF. DDRs use lone CR inside CDATA, so without this the web
     // parser's calc/auto-enter text diverges from the Python build. Normalize
     // BEFORE dec() so a literal &#13; (an intentional CR) survives, matching expat.
+    // Entity decoding is DEFERRED to element close: streamed reads can split an
+    // entity like &lt; across fragments, and per-fragment dec() would miss it.
     text = text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
-    H.buf.push(isCDATA?text:dec(text));
+    H.buf.push([text,isCDATA?1:0]);
   }
 }
 
+function joinBuf(){
+  // join fragments; decode entities over whole non-CDATA runs (CDATA stays raw)
+  let out='', run='';
+  for(const p of H.buf){
+    if(p[1]){ out+=dec(run); run=''; out+=p[0]; }
+    else run+=p[0];
+  }
+  return out+dec(run);
+}
+
 function onEnd(tag){
-  if(H.cap===tag){ consumeText(tag,H.capAttrs,H.buf.join('').trim()); H.cap=null; H.buf=[]; }
+  if(H.cap===tag){ consumeText(tag,H.capAttrs,joinBuf().trim()); H.cap=null; H.buf=[]; }
   if(H.pushed.length && H.pushed.pop()) finalize(H.estack.pop());
   if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; }
   if(tag==='AutoEnter') H.deadAE=false;
@@ -479,6 +518,15 @@ function consumeText(tag,attrs,text){
     else if(src.k==='field'&&anc('Validation')) (src._vc=src._vc||[]).push(text);
     else src._calc.push(text); } }
   else if(tag==='StepText'){ if(src) src._step=text; }
+  else if(tag==='Text'){
+    // value-list custom values (one Text block, newline-separated)
+    if(ptag()==='CustomValues' && H.estack.length
+       && H.estack[H.estack.length-1].k==='value_list')
+      (H.estack[H.estack.length-1]._vlVals=H.estack[H.estack.length-1]._vlVals||[]).push(text); }
+  else if(tag==='Data'){
+    // layout TEXT-object character runs (merge fields / merge formulas)
+    if(src && src.k==='layout_object' && anc('TextObj'))
+      (src._txt=src._txt||[]).push(text); }
   else if(tag==='Name' && ptag()==='FieldObj'){ const [to,leaf]=splitQ(text);
     if(leaf) emitRef('layout_object','field',{name:leaf,to:to,raw:text}); }
   else if(tag==='Chunk'){ const ct=attrs&&attrs.type;
@@ -491,6 +539,34 @@ function consumeText(tag,attrs,text){
 function finalize(e){
   const calc=e._calc.length?e._calc.join('\n'):null;
   if(e.k==='relationship' && e._ends) e.n=e._ends.join(' :: ');
+  // v1.10.0: relationship attrs + value-list defs + object text (extra payload)
+  let ex=null, tx=null;
+  if(e.k==='relationship' && (e._sides||e._ops)){
+    ex={};
+    if(e._sides) ex.sides=e._sides;
+    if(e._ops&&e._ops.length){
+      const pf=e._predF||[];
+      const L=pf.filter(p=>p[0]==='LeftField').map(p=>p[1]);
+      const R=pf.filter(p=>p[0]==='RightField').map(p=>p[1]);
+      ex.predicates=e._ops.map((op,i)=>({op:op,
+        left:i<L.length?L[i]:null, right:i<R.length?R[i]:null}));
+    }
+  }
+  if(e.k==='value_list' && (e._vlSrc||e._vlVals||e._vlF)){
+    ex={};
+    if(e._vlSrc) ex.source=e._vlSrc;
+    if(e._vlShow!=null) ex.show_related=e._vlShow==='True';
+    for(const slot in (e._vlF||{})){
+      const key=slot==='PrimaryField'?'primary':'secondary';
+      ex[key]=Object.assign({field:e._vlF[slot]},(e._vlOpts||{})[slot]||{});
+    }
+    if(e._vlVals){
+      const vals=[]; for(const t of e._vlVals) for(const ln of t.split('\n')) if(ln!=='') vals.push(ln);
+      ex.custom_values=vals;
+    }
+  }
+  if(e.k==='layout_object' && e._txt) tx=e._txt.join(' ').slice(0,2000);
+  e._ex=ex; e._tx=tx;
   // field storage + auto-enter capture (v1.9.0, mirrors parse.py)
   let sto=null, idx=null, glb=null, ae=null;
   if(e.k==='field'){
@@ -518,7 +594,7 @@ function finalize(e){
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
     st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null,
     c:calc?calc.slice(0,calcCap):null, step:e._step||null, d:e._dis?1:0,
-    sto:sto, idx:idx, glb:glb, ae:ae});
+    sto:sto, idx:idx, glb:glb, ae:ae, ex:e._ex||null, tx:e._tx||null});
 }
 
 // ---- incremental tokenizer ----
@@ -677,7 +753,7 @@ async function run(input){
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0,ev:r.ev||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,

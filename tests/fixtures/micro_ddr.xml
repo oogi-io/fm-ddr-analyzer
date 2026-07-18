@@ -129,7 +129,7 @@
 				<LeftTable cascadeCreate="False" cascadeDelete="False" name="CTC">
 					<SortList Maintain="True" value="False"/>
 				</LeftTable>
-				<RightTable cascadeCreate="True" cascadeDelete="False" name="ctc_INV">
+				<RightTable cascadeCreate="True" cascadeDelete="True" name="ctc_INV">
 					<SortList Maintain="True" value="True">
 						<Sort type="Ascending">
 							<PrimaryField>
@@ -171,6 +171,19 @@
 							<ValueList name="" id="0"/>
 						</DDRInfo>
 					</FieldObj>
+				</Object>
+				<Object type="Text" key="12" LabelKey="0" flags="0" rotation="0">
+					<Bounds top="80" left="10" bottom="95" right="300"/>
+					<TextObj flags="2">
+						<CharacterStyleVector>
+							<Style>
+								<Data>Total: &lt;&lt;ctc_INV::amount&gt;&gt; mergemarker42 </Data>
+							</Style>
+							<Style>
+								<Data>&lt;&lt;ƒ:Upper ( CTC::email )&gt;&gt;</Data>
+							</Style>
+						</CharacterStyleVector>
+					</TextObj>
 				</Object>
 				<Object type="Button" key="11" LabelKey="0" name="btnGo" flags="0" rotation="0">
 					<HideCondition findMode="True">

@@ -24,7 +24,9 @@ SOURCE_KINDS = {
 }
 
 # Leaf text elements whose character data we accumulate.
-CAPTURE_TAGS = {"Calculation", "StepText", "Chunk", "Name"}
+# Text = value-list custom values; Data = layout text-object character runs
+# (both consumed only under their specific ancestors).
+CAPTURE_TAGS = {"Calculation", "StepText", "Chunk", "Name", "Text", "Data"}
 
 def _parser_version():
     from fm_ddr import __version__
@@ -368,6 +370,17 @@ class DDRHandler(xml.sax.ContentHandler):
             self.emit_ref(ctx, "field", fm_id=a.get("id"),
                           name=a.get("name"), to_name=a.get("table"),
                           raw=(a.get("table", "") + "::" + a.get("name", "")))
+            qname = a.get("table", "") + "::" + a.get("name", "")
+            if ctx == "join_predicate":
+                # v1.10.0: record the predicate field pair on the relationship
+                rel = next((e for e in reversed(self.entity_stack)
+                            if e["kind"] == "relationship"), None)
+                if rel is not None:
+                    rel.setdefault("_pred_fields", []).append((parent, qname))
+            elif ctx == "value_list_field" and (
+                    self.entity_stack and self.entity_stack[-1]["kind"] == "value_list"):
+                # v1.10.0: definition metadata — which field each slot displays
+                self.entity_stack[-1].setdefault("_vl_fields", {})[parent] = qname
             return
         if tag in ("LeftTable", "RightTable") and self.has_ancestor("Relationship"):
             self.emit_ref("join_predicate", "table_occurrence", name=a.get("name"),
@@ -377,6 +390,37 @@ class DDRHandler(xml.sax.ContentHandler):
                         if e["kind"] == "relationship"), None)
             if rel is not None:
                 rel.setdefault("_ends", []).append(a.get("name"))
+                # v1.10.0: cascade options ride on the relationship ends —
+                # cascadeDelete on a side means deleting a record on the OTHER
+                # side deletes related records on THIS side
+                rel.setdefault("_sides", []).append({
+                    "side": "left" if tag == "LeftTable" else "right",
+                    "to": a.get("name"),
+                    "cascade_create": a.get("cascadeCreate") == "True",
+                    "cascade_delete": a.get("cascadeDelete") == "True",
+                })
+            return
+
+        # v1.10.0: join operator (Equal, NotEqual, Cartesian, ranges)
+        if tag == "JoinPredicate" and self.has_ancestor("Relationship"):
+            rel = next((e for e in reversed(self.entity_stack)
+                        if e["kind"] == "relationship"), None)
+            if rel is not None:
+                rel.setdefault("_ops", []).append(a.get("type") or "Equal")
+            return
+
+        # v1.10.0: value-list DEFINITION metadata attaches to the open catalog
+        # entry (Source, ShowRelated, display-field options)
+        if tag in ("Source", "ShowRelated", "PrimaryField", "SecondaryField") and (
+                self.entity_stack and self.entity_stack[-1]["kind"] == "value_list"):
+            vl = self.entity_stack[-1]
+            if tag == "Source":
+                vl["_vl_source"] = a.get("value")
+            elif tag == "ShowRelated":
+                vl["_vl_showrel"] = a.get("value")
+            else:
+                vl.setdefault("_vl_fieldopts", {})[tag] = {
+                    "show": a.get("show") == "True", "sort": a.get("sort") == "True"}
             return
 
         # script reference (Perform Script, triggers) — NOT a definition
@@ -458,6 +502,18 @@ class DDRHandler(xml.sax.ContentHandler):
         elif tag == "StepText":
             if src is not None:
                 src["_step_text"] = text
+        elif tag == "Text":
+            # value-list custom values (one Text block, newline-separated)
+            if (self.parent_tag() == "CustomValues" and self.entity_stack
+                    and self.entity_stack[-1]["kind"] == "value_list"):
+                self.entity_stack[-1].setdefault("_vl_custom", []).append(text)
+        elif tag == "Data":
+            # layout TEXT-object character runs — carry merge fields <<F>> and
+            # merge formulas <<ƒ:...>>; without this, layout text is invisible
+            # even to FTS (the blind-spot fallback)
+            if (src is not None and src["kind"] == "layout_object"
+                    and self.has_ancestor("TextObj")):
+                src.setdefault("_text_runs", []).append(text)
         elif tag == "Name" and self.parent_tag() == "FieldObj":
             to, leaf = _split_qualified(text)
             if leaf:
@@ -483,6 +539,40 @@ class DDRHandler(xml.sax.ContentHandler):
         if ent["kind"] == "relationship" and ent.get("_ends"):
             ent["name"] = " :: ".join(ent["_ends"])
         extra = ent.get("extra_json")
+        # v1.10.0: relationship attributes — cascade options + join predicates
+        if ent["kind"] == "relationship" and (ent.get("_sides") or ent.get("_ops")):
+            d0 = _j.loads(extra) if extra else {}
+            if ent.get("_sides"):
+                d0["sides"] = ent["_sides"]
+            ops = ent.get("_ops") or []
+            if ops:
+                pf = ent.get("_pred_fields") or []
+                lefts = [q for p, q in pf if p == "LeftField"]
+                rights = [q for p, q in pf if p == "RightField"]
+                d0["predicates"] = [
+                    {"op": ops[i],
+                     "left": lefts[i] if i < len(lefts) else None,
+                     "right": rights[i] if i < len(rights) else None}
+                    for i in range(len(ops))]
+            extra = _json(d0)
+        # v1.10.0: value-list definition metadata
+        if ent["kind"] == "value_list" and (
+                ent.get("_vl_source") or ent.get("_vl_custom") or ent.get("_vl_fields")):
+            d0 = _j.loads(extra) if extra else {}
+            if ent.get("_vl_source"):
+                d0["source"] = ent["_vl_source"]
+            if ent.get("_vl_showrel") is not None:
+                d0["show_related"] = ent["_vl_showrel"] == "True"
+            for slot, qname in (ent.get("_vl_fields") or {}).items():
+                key = "primary" if slot == "PrimaryField" else "secondary"
+                d0[key] = {"field": qname,
+                           **(ent.get("_vl_fieldopts", {}).get(slot) or {})}
+            if ent.get("_vl_custom"):
+                vals = []
+                for t in ent["_vl_custom"]:
+                    vals += [ln for ln in t.split("\n") if ln != ""]
+                d0["custom_values"] = vals
+            extra = _json(d0)
         if ent.get("_disabled"):
             d0 = _j.loads(extra) if extra else {}
             d0["disabled"] = True
@@ -532,7 +622,9 @@ class DDRHandler(xml.sax.ContentHandler):
                 extra = _json(d0)
         hide, tip, bounds = (ent.get("_hide_calc"), ent.get("_tooltip_calc"),
                              ent.get("_bounds"))
-        if ent["kind"] == "layout_object" and (hide or tip or bounds):
+        # v1.10.0: text-object character runs (merge fields / merge formulas)
+        obj_text = " ".join(ent.get("_text_runs") or []) or None
+        if ent["kind"] == "layout_object" and (hide or tip or bounds or obj_text):
             d = _j.loads(extra) if extra else {}
             if hide:
                 d["hide_calc"] = hide
@@ -540,6 +632,8 @@ class DDRHandler(xml.sax.ContentHandler):
                 d["tooltip_calc"] = tip
             if bounds:
                 d["bounds"] = bounds
+            if obj_text:
+                d["text"] = obj_text[:2000]
             extra = _json(d)
         # for steps, the display text is the searchable body; keep calc separately.
         # layout objects add their type, hide/tooltip calcs, and children so both
@@ -548,7 +642,10 @@ class DDRHandler(xml.sax.ContentHandler):
         # blind-spot check must keep finding them now that they left calc_text
         body = " ".join(filter(None,
             [ent.get("name"), ent.get("_otype"), calc, step_text, hide, tip,
-             ae_calc, val_calc]
+             ae_calc, val_calc, obj_text,
+             # value-list custom values are searchable ("which list holds X?")
+             " ".join(v for t in (ent.get("_vl_custom") or [])
+                      for v in t.split("\n") if v) or None]
             + (ent.get("_child_texts") or [])))
         # bubble object text up: portals/panels aggregate their children, the
         # layout aggregates everything — keeps the "read a full layout body"

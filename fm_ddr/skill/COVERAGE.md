@@ -52,6 +52,17 @@ positives (they remain visible in `v_usage_disabled` and in FTS). Auto-enter
 and validation calc text lives in `auto_enter`/`extra_json.validation_calc`,
 NOT in `calc_text` — `calc_text` is now exclusively the field's own formula.
 
+**Relationship attributes, value-list definitions & layout text (v1.10.0):**
+relationships carry `extra_json.sides` (`cascade_create`/`cascade_delete` per
+end — `v_cascades` view + `cascades` command answer "what deletes into this
+table by cascade") and `extra_json.predicates` (operator + field pair per join
+predicate). Value lists carry their DEFINITION (`source`, `custom_values`,
+`primary`/`secondary` display fields, `show_related`) — `valuelist` command;
+custom values are FTS-searchable. Layout TEXT objects' character runs (incl.
+merge fields `<<F>>` and merge formulas `<<ƒ:...>>`) land in
+`extra_json.text` and the FTS body — layout text is finally searchable.
+Merge-formula field refs are TEXT, not structured edges (stage b, future).
+
 **Serial numbers & lookups (v1.9.1):** serial auto-enters carry
 `auto_enter.serial` (`{increment, nextValue, generate}`); lookups carry
 `auto_enter.lookup_source` (`TO::Field`) + `lookup_active`, and emit a
@@ -64,11 +75,9 @@ auto-enter calcs: `lookup_active=false`, ref `disabled=1`.
 | Usage pattern | Why | Fallback |
 |---------------|-----|----------|
 | **Fields named inside `ExecuteSQL` strings** | The DDR itself doesn't resolve SQL text; it's just a string | `search db "fieldname"` |
-| **Layout TEXT objects — merge fields `<<Field>>` and merge formulas `<<ƒ:...>>`** | Live in `TextObj` character-run `Data` — not parsed AND not in the FTS body, so even `search` misses layout text today | inspect in FileMaker |
 | **Record-level security calcs** | Privilege-set custom record-access calcs not extracted | `search` |
 | Detailed validation rules (unique, existing, range, strict type, not-empty) | Only validation *calcs* (and value-list bindings) are captured | inspect in FileMaker |
-| **Relationship options** (`cascadeCreate` / `cascadeDelete` on the relationship ends, sort, non-equijoin operator) | Join predicates captured; the options are not — "what breaks if I delete X" can't see cascades | inspect in FileMaker |
-| **Value-list DEFINITIONS** (source type, custom values list, show-related TO) | The value-list entity + its display-field refs are captured; the definition metadata is not | `search` on the list name |
+| Relationship **sort order** | Not captured (cascades + operators ARE, v1.10.0) | inspect in FileMaker |
 
 **Captured but easy to miss** (verified against a real solution, v1.9.1): conditional-formatting
 condition calcs, placeholder-text calcs, and tooltip/hide calcs all emit `calc`-context refs
