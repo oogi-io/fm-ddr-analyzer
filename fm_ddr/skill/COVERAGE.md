@@ -64,16 +64,22 @@ auto-enter calcs: `lookup_active=false`, ref `disabled=1`.
 | Usage pattern | Why | Fallback |
 |---------------|-----|----------|
 | **Fields named inside `ExecuteSQL` strings** | The DDR itself doesn't resolve SQL text; it's just a string | `search db "fieldname"` |
-| **Conditional-formatting calcs** | `ConditionalFormatting > Condition` calcs not yet extracted — a field used ONLY there shows as unused | `search` |
-| **Record-level security calcs** | Privilege-set record-access (`DataAccess`) calcs not extracted | `search` |
-| Validation **by value list** / detailed validation rules (unique, range, strict type) | Only validation *calcs* are captured | `search` |
-| **Placeholder-text calcs** | `PlaceholderText` calcs not extracted | `search` |
-| **Relationship options** (allow create/delete related, **cascade delete**, sort, non-equijoin operator) | Join predicates captured; the options are not — "what breaks if I delete X" can't see cascades | inspect in FileMaker |
+| **Layout TEXT objects — merge fields `<<Field>>` and merge formulas `<<ƒ:...>>`** | Live in `TextObj` character-run `Data` — not parsed AND not in the FTS body, so even `search` misses layout text today | inspect in FileMaker |
+| **Record-level security calcs** | Privilege-set custom record-access calcs not extracted | `search` |
+| Detailed validation rules (unique, existing, range, strict type, not-empty) | Only validation *calcs* (and value-list bindings) are captured | inspect in FileMaker |
+| **Relationship options** (`cascadeCreate` / `cascadeDelete` on the relationship ends, sort, non-equijoin operator) | Join predicates captured; the options are not — "what breaks if I delete X" can't see cascades | inspect in FileMaker |
+| **Value-list DEFINITIONS** (source type, custom values list, show-related TO) | The value-list entity + its display-field refs are captured; the definition metadata is not | `search` on the list name |
+
+**Captured but easy to miss** (verified against a real solution, v1.9.1): conditional-formatting
+condition calcs, placeholder-text calcs, and tooltip/hide calcs all emit `calc`-context refs
+sourced from the enclosing **layout object** — so where-used DOES include them (they are not
+distinguishable from each other by context, but no edge is lost). Custom-menu items that run
+scripts emit `perform_script` refs sourced from the **custom_menu** entity — menu-run scripts do
+NOT appear in `v_orphan_scripts` claims wrongly. Validation by value list emits a
+`value_list_source` ref from the field.
 | Fields/scripts named in **any calculated string** (`GetField`, `Evaluate`, script names built at runtime) | Same — text, not structure | `search` |
 | **Built-in function** usage as edges | Deliberately excluded (tens of thousands of `Get()` edges would drown the graph) | `search db "ExecuteSQL"` |
-| Script invocation from **custom menus** | Menu internals not yet mapped | `search` on the script name |
 | **Import/export field orders** | Not yet mapped | `search` |
-| Merge fields / merge variables in layout text | Text objects are not parsed for `<<field>>` markers yet | `search` |
 
 ## Multi-file solutions
 
