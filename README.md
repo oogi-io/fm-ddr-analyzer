@@ -113,6 +113,7 @@ Then query it. Each command is copy-paste safe on its own:
 | `fmsonar stats solution.db` | entity counts + reference-resolution health |
 | `fmsonar list` | all cached databases: which solution, built when, by which parser, stale or not (multi-client overview; add a folder argument to scan elsewhere) |
 | `fmsonar mutations solution.db --like adder` | which scripts create/delete records — with context clues and confidence tiers, never a guess (record ops carry no table in the DDR) |
+| `fmsonar trigger-map solution.db --inputs "LI::Amount_c" --set-flag "LI::Picked_flag" --table LI --recompute "Recompute Order"` | caching/"keep X in sync" tickets: every entry point that can change a cached value's inputs, classified from the **transitive** call chain (a trigger that writes nothing relevant itself can still be the biggest stamp-point via a callee) |
 | `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
 
 Because the output is plain SQLite, anything can query it — `sqlite3`,

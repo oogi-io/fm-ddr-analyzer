@@ -32,6 +32,10 @@ checkout of github.com/oogi-io/fm-ddr-analyzer.
 
 ```bash
 fm-ddr where  <db> "TO::Field"      # resolved where-used (field/script/layout/TO/CF)
+fm-ddr trigger-map <db> --inputs "TO::Field" [--set-flag ... --table ... --recompute ...]
+                                    # caching/sync tickets: every entry point that can
+                                    # change a cached value's inputs, classified from
+                                    # the TRANSITIVE chain (v1.11)
 fm-ddr cascades <db> [table]        # cascade deletes INTO a table (v1.10)
 fm-ddr valuelist <db> "<name>"      # value-list definition + bindings (v1.10)
 fm-ddr search <db> "text"           # FTS across every calc / step / name
@@ -129,6 +133,17 @@ likely / check). The clue is the nearest Go to Layout - runtime state a
 script can inherit from its caller - so treat 'likely' as a strong hint and
 'check' rows as the to-verify list. Find-mode record ops are find requests,
 not mutations (tagged, never dropped).
+
+6c. **Caching / "keep X in sync" / "where does Y change" tickets: run
+`fm-ddr trigger-map` FIRST**, not a hand-rolled sweep. It expands calc
+inputs to their writable dependencies, finds every mutator (field writes +
+record ops), climbs to every launchable entry point (triggers, buttons,
+roots), and prints each with its chain-to-mutation and a
+recompute-in-chain / gap-candidate verdict. Classifying entry points from
+a script's DIRECT writes is the classic miss - a trigger whose callee flips
+a selection flag is a stamp-point even though the trigger itself writes
+nothing relevant. Your judgment belongs on the borderline rows (execution
+order, 'check'-tier ops), not on the graph walk.
 
 ## 4. Honesty guardrails (non-negotiable)
 

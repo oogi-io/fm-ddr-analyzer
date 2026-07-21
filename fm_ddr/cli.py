@@ -702,6 +702,252 @@ def cmd_mutations(args):
           "named table) is stated by the DDR itself.")
 
 
+def _resolve_field_specs(conn, spec):
+    """Parse a comma list of 'BaseTable::Field' into entity rows. Leaf-only
+    names are refused: same-named fields exist in many tables and a silent
+    wrong pick would poison the whole map."""
+    out = []
+    for item in [s.strip() for s in spec.split(",") if s.strip()]:
+        if "::" not in item:
+            raise SystemExit(f"error: '{item}' — write it as BaseTable::FieldName "
+                             "(leaf names are ambiguous across tables)")
+        bt, name = item.split("::", 1)
+        rows = conn.execute(
+            "SELECT entity_id, base_table, name, field_type FROM entities "
+            "WHERE kind='field' AND base_table=? AND name=?", (bt, name)).fetchall()
+        if not rows:
+            raise SystemExit(f"error: field {item} not found in the index")
+        out.extend(rows)
+    return out
+
+
+def _expand_calc_inputs(conn, fields):
+    """Recursively expand calc fields into the WRITABLE fields they depend on
+    (live calc/auto_enter refs, cross-table included — an aggregate's related
+    source fields matter as much as same-table ones). Returns
+    ({writable_eid: (base_table, name, [derived-from chain])}, all_seen_eids)."""
+    writable, seen = {}, set()
+    frontier = [(eid, bt, nm, ft, []) for eid, bt, nm, ft in fields]
+    while frontier:
+        eid, bt, nm, ft, via = frontier.pop()
+        if eid in seen:
+            continue
+        seen.add(eid)
+        label = f"{bt}::{nm}"
+        if ft != "Calculated":
+            writable[eid] = (bt, nm, via)
+            continue
+        deps = conn.execute(
+            "SELECT tgt.entity_id, tgt.base_table, tgt.name, tgt.field_type "
+            "FROM refs r JOIN entities tgt ON tgt.entity_id = r.target_entity_id "
+            "WHERE r.source_entity_id = ? AND r.context IN ('calc','auto_enter') "
+            "AND r.disabled = 0 AND tgt.kind='field'", (eid,)).fetchall()
+        frontier.extend((d[0], d[1], d[2], d[3], via + [label]) for d in deps)
+    return writable, seen
+
+
+def _launch_sites(conn, eid):
+    """Human-readable non-script launch sites for a script: layout/object
+    triggers (via v_triggers) and layout-object button launches."""
+    sites = []
+    for ev, sk, lay, obj in conn.execute(
+            "SELECT v.trigger_event, v.source_kind, v.layout_name, v.object_name "
+            "FROM v_triggers v JOIN refs r ON r.ref_id = v.ref_id "
+            "WHERE r.target_entity_id = ?", (eid,)).fetchall():
+        where = f"layout '{lay}'" if lay else "file-level"
+        sites.append(f"{ev or 'trigger'} · {where}"
+                     + (f" · obj '{obj}'" if obj and sk == 'layout_object' else ""))
+    for (oname,) in conn.execute(
+            "SELECT COALESCE(NULLIF(o.name,''),'(unnamed)') FROM refs r "
+            "JOIN entities o ON o.entity_id = r.source_entity_id "
+            "AND o.kind='layout_object' "
+            "WHERE r.context='perform_script' AND r.disabled=0 "
+            "AND r.target_entity_id = ?", (eid,)).fetchall():
+        sites.append(f"button {oname!r}")
+    return sites
+
+
+def cmd_trigger_map(args):
+    """Classify every entry point that can change a cached value's inputs.
+
+    The deliverable of a caching/'keep X in sync' ticket is the COMPLETE set of
+    mutation entry points, classified from the TRANSITIVE call chain — a trigger
+    that writes nothing relevant itself can still be the biggest stamp-point via
+    a callee (real case: a finance-change trigger whose callee auto-adds a
+    record and flips the selection flag). Humans (and LLMs) reliably stop one
+    hop short under time pressure; this walk cannot."""
+    conn = _connect(args.db)
+    from collections import defaultdict
+
+    # ---- 1. watched inputs: resolve, then expand calcs to writable fields ----
+    specs = _resolve_field_specs(conn, args.inputs)
+    if args.set_flag:
+        specs += _resolve_field_specs(conn, args.set_flag)
+    writable, _seen = _expand_calc_inputs(conn, specs)
+    print(f"# Trigger map — {len(specs)} input(s) -> "
+          f"{len(writable)} writable field(s) after calc expansion")
+    for eid, (bt, nm, via) in sorted(writable.items(), key=lambda kv: (kv[1][0], kv[1][1])):
+        src = f"   (via {' -> '.join(via)})" if via else ""
+        print(f"  {bt}::{nm}{src}")
+
+    # ---- 2. mutators: field writers + record ops on --table ----
+    mutators = defaultdict(list)          # script_eid -> [evidence strings]
+    names = {}                            # script_eid -> (fm_id, name)
+    if writable:
+        ph = ",".join("?" * len(writable))
+        for seid, fmid, snm, written in conn.execute(
+                "SELECT scr.entity_id, scr.fm_id, scr.name, "
+                "tgt.base_table || '::' || tgt.name "
+                "FROM refs r "
+                "JOIN entities st ON st.entity_id = r.source_entity_id "
+                "AND st.kind='script_step' "
+                "JOIN entities scr ON scr.entity_id = st.parent_entity_id "
+                "AND scr.kind='script' "
+                "JOIN entities tgt ON tgt.entity_id = r.target_entity_id "
+                f"WHERE r.context='step_target' AND r.disabled=0 "
+                f"AND r.target_entity_id IN ({ph})",
+                list(writable)).fetchall():
+            names[seid] = (fmid, snm)
+            if f"writes {written}" not in mutators[seid]:
+                mutators[seid].append(f"writes {written}")
+    unresolved_ops = []                   # caller-set context: verify, don't count
+    if args.table:
+        rows = _script_steps_ordered(conn, "", ())
+        per_script = defaultdict(list)
+        meta = {}
+        for fmid, nm, seq, st, txt, dis in rows:
+            per_script[fmid].append((seq, st, txt, dis))
+            meta[fmid] = nm
+        want = args.table.lower()
+        for fmid, steps in per_script.items():
+            for op in _scan_record_ops(steps):
+                if op["state"] != "live" or op["kind"] not in ("create", "delete"):
+                    continue
+                ctx = (op["context"] or "").lower()
+                if want in ctx:
+                    # context clue names our table -> counts as a mutator
+                    row = conn.execute(
+                        "SELECT entity_id, fm_id, name FROM entities "
+                        "WHERE kind='script' AND fm_id=?", (fmid,)).fetchone()
+                    if row:
+                        seid = row[0]
+                        names[seid] = (row[1], row[2])
+                        ev = (f"record op {op['step_type']} ({op['tier']}"
+                              + (f", ctx {op['context']}" if op["context"] else "")
+                              + ")")
+                        if ev not in mutators[seid]:
+                            mutators[seid].append(ev)
+                elif not ctx:
+                    # no clue at all (context set by caller): can't rule the
+                    # table in OR out — surface for a human pass, but do NOT
+                    # let it flood the entry-point closure
+                    unresolved_ops.append(
+                        [f"[{fmid}] {meta[fmid]}", op["step_type"],
+                         op["note"] or "context set by caller"])
+                # a clue naming a DIFFERENT table: excluded (footer says so)
+
+    print(f"\n## Mutators ({len(mutators)} script(s))")
+    for seid in sorted(mutators, key=lambda e: names[e][1]):
+        fmid, nm = names[seid]
+        print(f"  [{fmid}] {nm} — " + "; ".join(mutators[seid]))
+    if not mutators:
+        print("  (none — check the field specs, or the writes may be "
+              "ExecuteSQL/import-only; see COVERAGE.md)")
+        return
+
+    # ---- 3. upward closure with next-hop pointers (chain reconstruction) ----
+    callers_of = defaultdict(set)
+    for caller, callee in conn.execute(
+            "SELECT scr.entity_id, r.target_entity_id FROM refs r "
+            "JOIN entities st ON st.entity_id = r.source_entity_id "
+            "AND st.kind='script_step' "
+            "JOIN entities scr ON scr.entity_id = st.parent_entity_id "
+            "AND scr.kind='script' "
+            "JOIN entities tgt ON tgt.entity_id = r.target_entity_id "
+            "AND tgt.kind='script' "
+            "WHERE r.context IN ('perform_script','trigger') AND r.disabled=0"):
+        callers_of[callee].add(caller)
+    next_hop, reach = {}, set(mutators)
+    frontier = list(mutators)
+    while frontier:
+        nxt = []
+        for s in frontier:
+            for c in callers_of.get(s, ()):
+                if c not in reach:
+                    reach.add(c)
+                    next_hop[c] = s
+                    nxt.append(c)
+        frontier = nxt
+    for eid in reach:
+        if eid not in names:
+            row = conn.execute("SELECT fm_id, name FROM entities WHERE entity_id=?",
+                               (eid,)).fetchone()
+            names[eid] = row or ("?", "?")
+
+    def chain_str(eid):
+        parts = [names[eid][1]]
+        while eid in next_hop:
+            eid = next_hop[eid]
+            parts.append(names[eid][1])
+        return " -> ".join(parts) + f"  [{mutators[eid][0]}]"
+
+    # ---- 4. entry points = closure members that are triggered, button-launched,
+    #         or roots (no script callers) ----
+    recompute_eid = None
+    if args.recompute:
+        row = conn.execute("SELECT entity_id FROM entities WHERE kind='script' "
+                           "AND name = ?", (args.recompute,)).fetchone()
+        if not row:
+            raise SystemExit(f"error: recompute script '{args.recompute}' not found")
+        recompute_eid = row[0]
+    entries = []
+    for eid in sorted(reach, key=lambda e: names[e][1]):
+        sites = _launch_sites(conn, eid)
+        is_root = not callers_of.get(eid)
+        if not sites and not is_root:
+            continue                       # interior script — reached via its callers
+        launched = "; ".join(sites) if sites else "(no script callers — menu/root)"
+        verdict = "-"
+        if recompute_eid is not None:
+            chain, _, _ = _chain_scripts(conn, eid)
+            verdict = ("recompute-in-chain" if recompute_eid in chain
+                       else "NO RECOMPUTE — gap candidate")
+        entries.append([f"[{names[eid][0]}] {names[eid][1]}", launched,
+                        chain_str(eid), verdict])
+    print(f"\n## Entry points ({len(entries)}) — every launchable path that can "
+          "change the watched inputs")
+    _print_table(["entry point", "launched by", "chain to mutation",
+                  "recompute?"], entries, limit=100000, full=args.full)
+
+    if unresolved_ops:
+        print(f"\n## Record ops with NO context clue ({len(unresolved_ops)}) — "
+              "could target any table incl. yours; verify, not counted above")
+        _print_table(["script", "step", "note"], unresolved_ops,
+                     limit=100000, full=args.full)
+
+    # ---- 5. optional: triggers on named layouts with NO path to a mutator ----
+    if args.layouts:
+        quiet = conn.execute(
+            "SELECT DISTINCT v.script_name, v.trigger_event, v.layout_name "
+            "FROM v_triggers v JOIN refs r ON r.ref_id = v.ref_id "
+            "WHERE v.layout_name LIKE ? AND (r.target_entity_id IS NULL "
+            f"OR r.target_entity_id NOT IN ({','.join('?'*len(reach))}))",
+            [args.layouts] + list(reach)).fetchall()
+        print(f"\n## Triggers on layouts LIKE {args.layouts!r} with no path to a "
+              f"mutator ({len(quiet)}) — non-issue candidates")
+        _print_table(["script", "event", "layout"],
+                     [[s, e, l] for s, e, l in quiet], limit=100000)
+
+    print("\nThis is static call-graph analysis: conditionals, loops and execution "
+          "ORDER are not\nmodeled — 'recompute-in-chain' means the orchestrator is "
+          "reachable from this entry,\nnot that it runs AFTER the mutation; confirm "
+          "order by reading the entry script.\nExecuteSQL writes and import mappings "
+          "are not captured (COVERAGE.md). Record-op\ncontext clues inherit the "
+          "mutations-command caveats; ops whose clue names a\nDIFFERENT table are "
+          "excluded entirely, and clue-less ops are listed but not\ncounted — run "
+          "'fm-ddr mutations <db>' for the untriaged inventory.")
+
+
 def cmd_install_skill(args):
     """Install the fmsonar skill for Claude Code, or check its freshness.
 
@@ -957,6 +1203,31 @@ def main(argv=None):
     mu.add_argument("--limit", type=int, default=100000,
                     help="row cap per section (default: effectively unlimited — an inventory must be complete)")
     mu.set_defaults(func=cmd_mutations)
+
+    tm = sub.add_parser("trigger-map",
+                        help="classify every entry point that can change a "
+                             "cached value's inputs (caching/'keep in sync' "
+                             "tickets)")
+    tm.add_argument("db")
+    tm.add_argument("--inputs", required=True,
+                    help="comma list of BaseTable::Field the cached value "
+                         "depends on; calc fields auto-expand recursively to "
+                         "their writable inputs")
+    tm.add_argument("--set-flag", dest="set_flag", default=None,
+                    help="set-membership flag field (BaseTable::Field) whose "
+                         "writes change WHICH records the aggregate sums")
+    tm.add_argument("--table", default=None,
+                    help="base table whose record create/delete shifts the "
+                         "aggregate (runs the record-ops engine)")
+    tm.add_argument("--recompute", default=None,
+                    help="orchestrator script that re-stamps the cache; each "
+                         "entry point is checked for it in its callee chain")
+    tm.add_argument("--layouts", default=None,
+                    help="also list triggers on layouts LIKE this pattern with "
+                         "NO path to a mutator (non-issue candidates)")
+    tm.add_argument("--full", action="store_true",
+                    help="don't truncate table cells")
+    tm.set_defaults(func=cmd_trigger_map)
 
     ca = sub.add_parser("cascades",
                         help="cascade deletes: what deletes into a table via "

@@ -1,0 +1,155 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-07-07" type="Report" version="99.9.9">
+<File name="TMTest.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="8" name="LI">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="Rate">
+					<Comment>Writable pricing input</Comment>
+				</Field>
+				<Field id="2" dataType="Number" fieldType="Normal" name="Qty">
+					<Comment>Writable pricing input</Comment>
+				</Field>
+				<Field id="3" dataType="Number" fieldType="Calculated" name="Amount_c">
+					<Calculation table="LI"><![CDATA[LI::Rate * LI::Qty]]></Calculation>
+					<DisplayCalculation>
+						<Chunk type="FieldRef"><Field table="LI" id="1" name="Rate"></Field></Chunk>
+						<Chunk type="NoRef"> * </Chunk>
+						<Chunk type="FieldRef"><Field table="LI" id="2" name="Qty"></Field></Chunk>
+					</DisplayCalculation>
+					<Comment>Stored calc summed by the order subtotal - the cached aggregate's input</Comment>
+					<Storage storeCalculationResults="True" index="None" indexLanguage="English" global="False" maxRepetition="1"/>
+				</Field>
+				<Field id="4" dataType="Number" fieldType="Normal" name="Picked_flag">
+					<Comment>Set-membership flag: included in the subtotal when 1</Comment>
+				</Field>
+				<Field id="5" dataType="Text" fieldType="Normal" name="Notes">
+					<Comment>Irrelevant to the aggregate - written by the non-issue trigger</Comment>
+				</Field>
+				<Field id="6" dataType="Number" fieldType="Normal" name="Total">
+					<Comment>Downstream net amount - NOT an aggregate input</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="LI" name="LI"/>
+		</TableList>
+		<RelationshipList/>
+	</RelationshipGraph>
+	<LayoutCatalog>
+		<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Order Pricing">
+			<Object type="Field" key="10" LabelKey="0" flags="0" rotation="0">
+				<ScriptTriggers>
+					<Trigger event="OnObjectSave" id="1" triggerFlags="1">
+						<Script id="5" name="Handle Plan Change">
+						</Script>
+						<TriggerText>Handle Plan Change</TriggerText>
+					</Trigger>
+				</ScriptTriggers>
+				<Bounds top="10" left="10" bottom="30" right="200"/>
+				<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="2" tableViewVisibility="0" quickFind="0" pictFormat="5">
+					<Name>LI::Notes</Name>
+					<DDRInfo>
+						<Field name="" id="0" repetition="1" maxRepetition="1" table=""/>
+					</DDRInfo>
+				</FieldObj>
+			</Object>
+			<Object type="Field" key="11" LabelKey="0" flags="0" rotation="0">
+				<ScriptTriggers>
+					<Trigger event="OnObjectSave" id="2" triggerFlags="1">
+						<Script id="6" name="Handle Total Change">
+						</Script>
+						<TriggerText>Handle Total Change</TriggerText>
+					</Trigger>
+				</ScriptTriggers>
+				<Bounds top="40" left="10" bottom="60" right="200"/>
+				<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="2" tableViewVisibility="0" quickFind="0" pictFormat="5">
+					<Name>LI::Total</Name>
+					<DDRInfo>
+						<Field name="" id="0" repetition="1" maxRepetition="1" table=""/>
+					</DDRInfo>
+				</FieldObj>
+			</Object>
+			<Object type="Button" key="12" LabelKey="0" name="btnToggle" flags="0" rotation="0">
+				<Bounds top="70" left="10" bottom="90" right="120"/>
+				<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
+					<Step enable="True" id="1" name="Perform Script">
+						<StepText>Perform Script [ "Toggle Line" ]</StepText>
+						<Script id="3" name="Toggle Line"></Script>
+					</Step>
+				</ButtonObj>
+			</Object>
+		</Layout>
+	</LayoutCatalog>
+	<ScriptCatalog>
+		<Script includeInMenu="True" id="1" name="Apply Line Pricing">
+			<StepList>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Rate; LI_LIO::DefaultRate ]</StepText>
+					<Field table="LI" id="1" name="Rate"/>
+				</Step>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Qty; 1 ]</StepText>
+					<Field table="LI" id="2" name="Qty"/>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="2" name="Recompute Order">
+			<StepList>
+				<Step enable="True" id="1" name="Perform Script">
+					<StepText>Perform Script [ "Apply Line Pricing" ]</StepText>
+					<Script id="1" name="Apply Line Pricing"></Script>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="3" name="Toggle Line">
+			<StepList>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Picked_flag; not LI::Picked_flag ]</StepText>
+					<Field table="LI" id="4" name="Picked_flag"/>
+				</Step>
+				<Step enable="True" id="1" name="Perform Script">
+					<StepText>Perform Script [ "Recompute Order" ]</StepText>
+					<Script id="2" name="Recompute Order"></Script>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="4" name="Auto Add Line">
+			<StepList>
+				<Step enable="True" id="6" name="Go to Layout">
+					<StepText>Go to Layout [ "Order Pricing" (LI) ]</StepText>
+				</Step>
+				<Step enable="True" id="7" name="New Record/Request">
+					<StepText>New Record/Request</StepText>
+				</Step>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Picked_flag; 1 ]</StepText>
+					<Field table="LI" id="4" name="Picked_flag"/>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="5" name="Handle Plan Change">
+			<StepList>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Notes; "plan changed" ]</StepText>
+					<Field table="LI" id="5" name="Notes"/>
+				</Step>
+				<Step enable="True" id="1" name="Perform Script">
+					<StepText>Perform Script [ "Auto Add Line" ]</StepText>
+					<Script id="4" name="Auto Add Line"></Script>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="6" name="Handle Total Change">
+			<StepList>
+				<Step enable="True" id="76" name="Set Field">
+					<StepText>Set Field [ LI::Total; LI::Total - 200 ]</StepText>
+					<Field table="LI" id="6" name="Total"/>
+				</Step>
+			</StepList>
+		</Script>
+	</ScriptCatalog>
+</File>
+</FMPReport>
