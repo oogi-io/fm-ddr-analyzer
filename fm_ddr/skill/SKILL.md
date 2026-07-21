@@ -50,7 +50,7 @@ target - combine with `step_type='Set Field'` for true writers, but note a
 Set Field between Enter Find Mode and Perform Find is a find criterion, not a
 write). `calc` = used in a calculation. `perform_script`/`trigger` = script
 calls. Full recipes: QUERIES.md, installed next to this file (also in the
-repo, with COVERAGE.md stating exactly what the index does not capture).
+repo, with COVERAGE.md stating exactly what the index does not capture). **Read QUERIES.md's Investigation protocol and recipes BEFORE writing ad-hoc SQL** — it pre-answers the schema gotchas rather than making you rediscover them by trial-and-error (triggers only via `v_triggers`; `perform_script` target names carry the parameter signature, so match with `LIKE`; `entities` has no source-parent name — use `v_usage`). Also holds when you query the cached DB directly with `sqlite3` instead of the CLI.
 
 ## 3. The investigation loop
 
