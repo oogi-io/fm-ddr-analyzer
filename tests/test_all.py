@@ -990,5 +990,79 @@ class TestRobustness(unittest.TestCase):
         self.assertIn("truncated", (out.stderr + out.stdout).lower())
 
 
+class TestTriggerMap(unittest.TestCase):
+    """trigger-map: classify entry points from the TRANSITIVE chain.
+
+    The fixture encodes the trap that motivated the command: a trigger script
+    (Handle Plan Change) that writes nothing relevant DIRECTLY but calls a
+    script that flips the set-membership flag and creates a record. Classifying
+    from direct writes marks it a non-issue; the chain marks it a gap."""
+
+    FIXTURE_TM = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_tm.xml")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.db = os.path.join(cls.tmp, "tm.db")
+        build(cls.FIXTURE_TM, cls.db, label="tm")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def run_map(self, *extra):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["trigger-map", self.db,
+                  "--inputs", "LI::Amount_c",
+                  "--set-flag", "LI::Picked_flag",
+                  "--table", "LI",
+                  "--recompute", "Recompute Order", *extra])
+        return out.getvalue()
+
+    def test_calc_expansion_reaches_writable_inputs(self):
+        out = self.run_map()
+        # Amount_c is a calc -> expands to Rate + Qty; the flag is watched as-is
+        self.assertIn("LI::Rate", out)
+        self.assertIn("LI::Qty", out)
+        self.assertIn("3 writable field(s)", out)
+
+    def test_transitive_gap_detected(self):
+        out = self.run_map()
+        # The trap: Handle Plan Change writes only LI::Notes directly, but its
+        # callee Auto Add Line flips the flag -> must surface as a gap with the
+        # chain that proves it
+        self.assertIn("Handle Plan Change -> Auto Add Line", out)
+        line = next(l for l in out.splitlines() if "Handle Plan Change" in l
+                    and "->" in l)
+        self.assertIn("gap candidate", line)
+
+    def test_covered_path_sees_recompute_in_chain(self):
+        out = self.run_map()
+        entries = out.split("## Entry points")[1]
+        line = next(l for l in entries.splitlines()
+                    if l.strip().startswith("[3] Toggle Line"))
+        self.assertIn("recompute-in-chain", line)
+
+    def test_record_op_creator_counted_as_mutator(self):
+        out = self.run_map()
+        self.assertIn("Auto Add Line", out.split("## Entry points")[0])
+        self.assertIn("New Record/Request", out.split("## Entry points")[0])
+
+    def test_downstream_trigger_is_non_issue_not_entry(self):
+        out = self.run_map("--layouts", "Order%")
+        entries = out.split("## Entry points")[1].split("##")[0]
+        self.assertNotIn("Handle Total Change", entries)
+        quiet = out.split("no path to a mutator")[1]
+        self.assertIn("Handle Total Change", quiet)
+
+    def test_leaf_only_field_spec_refused(self):
+        from fm_ddr.cli import main
+        with self.assertRaises(SystemExit):
+            main(["trigger-map", self.db, "--inputs", "Amount_c"])
+
+
 if __name__ == "__main__":
     unittest.main()

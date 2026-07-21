@@ -38,6 +38,16 @@ order — each is one query:
    the most capable model available for mechanism-hunting: in the same runs the model
    mattered more than the tooling, and no index closes a comprehension gap.
 
+**Field attributes are first-class COLUMNS on `entities`, never in `extra_json`.**
+`stored` (0/1), `indexed`, `is_global` (0/1), `auto_enter`, `field_type`,
+`data_type` are real columns — `json_extract(extra_json,'$.stored')` returns
+NULL and will silently trick you into *guessing* the storage of a field. Storage
+is the crux attribute for every caching / performance / "make this stored"
+ticket, so read the column, and never infer stored-vs-unstored from a name
+suffix (`_u`/`_c`): `SELECT name, stored, indexed, is_global FROM entities WHERE
+kind='field' AND base_table='ADR__Adder' AND name='PriceSurcharge_u';`. Full
+recipes in "Storage, auto-enter & triggers".
+
 The main surface is the **`v_usage`** view (one row per reference edge, with
 readable source/target names) and the **`text_index`** FTS5 table (catch-all
 search). `refs.target_entity_id` is NULL for unresolved (external/calculated)
@@ -432,4 +442,75 @@ WHERE kind='relationship'
 -- layout text (merge fields/formulas) is now in FTS + extra_json.text
 SELECT name, json_extract(extra_json,'$.text') FROM entities
 WHERE kind='layout_object' AND json_extract(extra_json,'$.text') LIKE '%<<%';
+```
+
+## Analysis-completeness recipes (stop-one-hop-short traps)
+
+Three recurring ways an analysis stops one hop short and reaches a wrong or
+incomplete answer. Each has a cheap query that resolves it to completion.
+
+**1. A predecessor's FULL change surface — not the one comment you found.** AMPS
+devs annotate every changed calc/step with the ticket number. Finding one such
+comment tells you the predecessor; it does NOT tell you everything the
+predecessor changed (a change usually spans a field family: the tier field, its
+subtotal, its total). Dump every entity the ticket touched:
+
+```sql
+SELECT base_table, name, calc_text FROM entities WHERE calc_text GLOB '*SS-2633*'
+UNION ALL
+SELECT scr.name, s.step_type, json_extract(s.extra_json,'$.step_text')
+FROM entities s JOIN entities scr ON scr.entity_id=s.parent_entity_id AND scr.kind='script'
+WHERE json_extract(s.extra_json,'$.step_text') GLOB '*SS-2633*';
+-- the "// Previous calc: ..." lines reveal the before/after of the whole change
+```
+
+**2. A naming convention's meaning — from the POPULATION, not one instance.** Before
+asserting what a prefix/suffix/marker means (`Ω_`, `_u`, `_g`), query the
+distribution using the real storage columns:
+
+```sql
+SELECT stored, is_global, COUNT(*) FROM entities
+WHERE kind='field' AND name GLOB 'Ω_*' GROUP BY 1,2 ORDER BY 3 DESC;
+-- e.g. 47/50 Ω_ fields stored => Ω_ is a normal convention, not "do-not-use"
+```
+
+**3. Trigger / mutation classification — from the TRANSITIVE chain, not direct writes.**
+For a caching/sync ticket you must classify every entry point as
+stamp-point / covered-transitively / non-issue. A trigger that writes nothing
+relevant *directly* can still be the biggest stamp-point via a callee (real
+case: a finance-change trigger writes only net-price fields, but calls an
+auto-adder script that flips the selection flag and creates records). Never
+classify from a script's own writes. **This whole deliverable is one command
+(v1.11.0):**
+
+```bash
+fm-ddr trigger-map <db> --inputs "LI::Amount_c" --set-flag "LI::Picked_flag" \
+    --table LI --recompute "Recompute Order" --layouts "Order%"
+# -> watched inputs (calc fields auto-expand to their writable dependencies),
+#    mutators with evidence, every entry point with its chain-to-mutation and
+#    a recompute-in-chain / gap-candidate verdict, plus no-mutator-reach
+#    triggers on the named layouts (non-issue candidates)
+```
+
+For a single suspicious script, the manual walk is:
+
+```bash
+fm-ddr investigate <db> "Trigger: Lease | Handle Lease Company Change" --chain
+# reads: callees (recursive), record create/delete tiers, and $$global hygiene
+```
+```sql
+-- Does a candidate script transitively reach a mutator of the aggregate's inputs?
+-- (selection-flag writes + record ops anywhere in its callee closure)
+WITH RECURSIVE reach(eid) AS (
+  SELECT entity_id FROM entities WHERE kind='script' AND name=:script
+  UNION
+  SELECT r.target_entity_id FROM refs r JOIN entities st ON st.entity_id=r.source_entity_id
+  JOIN reach ON reach.eid=st.parent_entity_id
+  WHERE r.target_kind='script' AND r.target_entity_id IS NOT NULL
+)
+SELECT DISTINCT scr.name AS reached_script, u.context, u.target_name
+FROM reach JOIN entities scr ON scr.entity_id=reach.eid
+JOIN v_usage u ON u.source_parent_name=scr.name
+WHERE (u.context='step_target' AND u.target_name IN ('Selected_flag', /*…input fields…*/ ''))
+   OR u.target_name LIKE '%New Record%' OR u.target_name LIKE '%Delete%';
 ```
