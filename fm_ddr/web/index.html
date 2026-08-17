@@ -372,7 +372,7 @@ function onStart(tag,a){
     if(owner){ owner._nsteps=(owner._nsteps||0)+1; ordinal=owner._nsteps; }
     newEntity('script_step',a,{step_type:a.name,name:a.name}); const e=H.estack[H.estack.length-1]; e.seq=ordinal;
     if(a.enable==='False') e._dis=true; return; }
-  if(tag==='Object' && anc('Layout')){ newEntity('layout_object',a,{name:a.name||null}); return; }
+  if(tag==='Object' && anc('Layout')){ const e=newEntity('layout_object',a,{name:a.name||null}); e.ot=a.type||null; return; }
   // Storage flags / auto-enter options attach to the OPEN field definition
   // (Field REFERENCE elements are self-closing — never a parent of these).
   if((tag==='Storage'||tag==='AutoEnter') && parent==='Field'
@@ -592,7 +592,7 @@ function finalize(e){
   // custom functions are copy-sources: keep their full body (others cap at 4k)
   const calcCap=e.k==='custom_function'?65536:4000;
   H.entities.push({id:e.id, f:e.f, k:e.k, fm:e.fm, n:e.n, p:e.p, bt:e.bt,
-    st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null,
+    st:e.st, g:e.g, dt:e.dt||null, ft:e.ft||null, ef:e.ef||null, ot:e.ot||null,
     c:calc?calc.slice(0,calcCap):null, step:e._step||null, d:e._dis?1:0,
     sto:sto, idx:idx, glb:glb, ae:ae, ex:e._ex||null, tx:e._tx||null});
 }
@@ -759,7 +759,7 @@ async function run(input){
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0,ev:r.ev||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,ot:e.ot,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,
@@ -980,16 +980,31 @@ function initViewer(DATA){
   // Owning table + file for a resolved entity, so a reference list can
   // disambiguate same-named rows (two "ID" fields from different tables).
   const qualOf=e=>({bt:(e&&e.bt)||null, file:(e&&e.f!=null&&files[e.f])?files[e.f]:null});
+  // Most layout objects are unnamed; '?' told the user nothing. Fall back to
+  // the object type plus the nearest named ancestors up to the owning layout:
+  // "Field in Portal: Adders on Accounting".
+  function entLabel(e){
+    if(!e) return '?';
+    if(e.n) return e.n;
+    if(e.k!=='layout_object') return '?';
+    const bits=[e.ot||'object']; let p=byId[e.p], hops=0;
+    while(p&&hops++<12){
+      if(p.k==='layout'){ bits.push('on '+(p.n||'layout')); break; }
+      if(p.n) bits.push('in '+p.n);
+      p=byId[p.p];
+    }
+    return bits.join(' ');
+  }
   function sourceDisplay(x){
     let e=byId[x.s];
     if(e&&e.k==='script_step'){ const p=byId[e.p];
       return {label:p?(p.n||'?'):'script', id:p?p.id:x.s, cat:'script', via:ctxLabelFor(x), amb:x.a, ...qualOf(p)}; }
     if(!e) return {label:'?', id:x.s, cat:'unknown', via:ctxLabelFor(x), amb:x.a};
-    return {label:e.n||'?', id:e.id, cat:e.k, via:ctxLabelFor(x), amb:x.a, ...qualOf(e)};
+    return {label:entLabel(e), id:e.id, cat:e.k, via:ctxLabelFor(x), amb:x.a, ...qualOf(e)};
   }
   function targetDisplay(x){
     if(x.t!=null){ const t=byId[x.t];
-      return {label:t?(t.n||'?'):'?', id:x.t, cat:x.tk, via:ctxLabelFor(x), amb:x.a, ...qualOf(t)}; }
+      return {label:entLabel(t), id:x.t, cat:x.tk, via:ctxLabelFor(x), amb:x.a, ...qualOf(t)}; }
     return {label:x.tr||('('+x.tk+')'), ext:true, cat:x.tk, via:ctxLabelFor(x)};
   }
   function groupBy(a,k){const m={};a.forEach(x=>{(m[x[k]]=m[x[k]]||[]).push(x);});return m;}
@@ -1175,7 +1190,7 @@ function initViewer(DATA){
       const type=edgeType(x);
       if(src.k==='script_step'){ src=byId[src.p]; if(!src) return; }
       const k=src.id;
-      if(!acc[k]) acc[k]={id:src.id,label:src.n||'?',kind:src.k,type:type,count:0};
+      if(!acc[k]) acc[k]={id:src.id,label:entLabel(src),kind:src.k,type:type,count:0};
       acc[k].count++;
       if(type==='trigger') acc[k].type='trigger';
     });
