@@ -61,6 +61,25 @@ live-based and carry an `only_disabled_refs` marker: 1 means the entity's only
 remaining references sit in commented-out steps — a strong dead-code signal,
 but check `v_usage_disabled` before recommending deletion.
 
+## Script family survey (protocol step 1)
+
+List every script whose name carries the domain, with the file each one lives in, before
+reading any of them:
+
+```sql
+SELECT e.fm_id, f.name AS file, e.name
+FROM entities e JOIN files f USING(file_id)
+WHERE e.kind = 'script' AND e.name LIKE '%aurora%'
+ORDER BY f.name, e.name;
+```
+
+**Qualify every `name` in this join.** `entities` and `files` both have a `name` column, so a
+bare `name LIKE ...` or `kind = 'script'` fails with `ambiguous column name: name`. The alias
+prefix is not optional here even though it is elsewhere.
+
+Same shape for fields, layouts or table occurrences: change `e.kind`. Drop the join when the
+solution is a single file and `e.name LIKE` on its own is enough.
+
 ## "Where is X used?"
 
 Where is a **field** used (calcs, scripts, layouts, relationships)?
