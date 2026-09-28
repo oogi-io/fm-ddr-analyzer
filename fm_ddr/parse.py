@@ -808,6 +808,10 @@ def build(ddr_paths, db_path: str, label: str | None = None,
             "refusing to overwrite it. Choose another -o path or pass --force.")
 
     target_dir = os.path.dirname(os.path.abspath(db_path)) or "."
+    # The temp DB is written next to the target so the final rename is atomic,
+    # which means the target's directory has to exist: -o into a fresh
+    # ~/.fmsonar/dbs is the normal first run on a new machine.
+    os.makedirs(target_dir, exist_ok=True)
     fd, tmp_path = tempfile.mkstemp(suffix=".db", prefix=".fmsonar-build-",
                                     dir=target_dir)
     os.close(fd)
