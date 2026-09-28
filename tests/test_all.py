@@ -481,6 +481,17 @@ class TestParser(unittest.TestCase):
         leftovers = [n for n in os.listdir(self.tmp) if n.startswith(".fmsonar-build-")]
         self.assertEqual(leftovers, [])
 
+    def test_build_creates_a_missing_output_directory(self):
+        """-o into a directory that does not exist yet is the normal first run
+        on a new machine (~/.fmsonar/dbs). mkstemp does not create it, so build
+        has to: without this, the failure surfaces as Errno 2 naming the temp
+        file, which reads as if the temp file were the problem."""
+        target = os.path.join(self.tmp, "fresh", "dbs", "amps.db")
+        self.assertFalse(os.path.isdir(os.path.dirname(target)))
+        build(FIXTURE, target, label="fresh machine")
+        from fm_ddr.parse import _is_fmsonar_db
+        self.assertTrue(_is_fmsonar_db(target))
+
     def test_build_refuses_to_clobber_non_fmsonar_file(self):
         target = os.path.join(self.tmp, "notes.md")
         with open(target, "w") as f:
