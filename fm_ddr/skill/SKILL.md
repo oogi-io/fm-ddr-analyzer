@@ -47,7 +47,10 @@ The SQL surface: `entities` (every named thing; steps carry `step_type`,
 `seq` = order within script, full text via
 `json_extract(extra_json,'$.step_text')`), `refs` (source USES target;
 `context` says how), and the views - **`v_usage`** (readable edges),
-`v_unused_fields`, `v_orphan_scripts`, `v_unresolved`, `v_ambiguous`.
+`v_unused_fields`, `v_orphan_scripts`, `v_unresolved`, `v_ambiguous`,
+`v_dangling` (the defects the DDR marks: deleted fields/scripts/layouts/TOs
+still referenced, broken calcs, TOs on a missing data source; v1.13.0),
+`v_data_sources` (which file each external data source points at; v1.13.0).
 
 Key contexts: `step_target` = the field a step acts on (Set Field's write
 target - combine with `step_type='Set Field'` for true writers, but note a
@@ -154,8 +157,9 @@ order, 'check'-tier ops), not on the graph walk.
   Present candidates, run the FTS check, state the caveats.
 - Unresolved refs are usually legitimate (other files, calculated
   destinations, unbound globals) - check `v_unresolved` before calling
-  anything broken. `ambiguous=1` = the resolver guessed among same-named
-  candidates; say so when it matters.
+  anything broken, and the marked defects are in `v_dangling`.
+  `ambiguous=1` = the resolver guessed among same-named candidates; say so
+  when it matters.
 - Read-only: never modify a DB; rebuild from the DDR instead.
 
 ## 5. Extras

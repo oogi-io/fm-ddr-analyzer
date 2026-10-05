@@ -186,7 +186,8 @@ exports side by side; today `build` always writes a fresh single-snapshot DB
 | `refs` | Every "source **uses** target" edge; `target_entity_id` resolved after load |
 | `text_index` | FTS5 mirror of names + calcs + step text (catch-all search) |
 | `v_usage` | Friendly view over `refs` with readable source/target names |
-| `v_unused_fields`, `v_orphan_scripts`, `v_unresolved` | Health hints |
+| `v_unused_fields`, `v_orphan_scripts`, `v_unresolved`, `v_dangling` (DDR-marked defects, v1.13.0) | Health hints |
+| `v_data_sources` | Which file each external data source name points at (v1.13.0) |
 
 **Entity kinds:** `base_table`, `field`, `table_occurrence`, `relationship`,
 `layout`, `layout_group`, `script`, `script_group`, `script_step`,

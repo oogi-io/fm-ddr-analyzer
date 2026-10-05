@@ -30,7 +30,8 @@ multi-file build (missing sibling XMLs), not a broken solution.
   `name, parent_entity_id` (step→script, field→base_table), `base_table`
   (for fields/TOs), `data_type, field_type` (fields), `calc_text`,
   `step_type`, `seq` (step order within its script) + `json_extract(extra_json,'$.step_text')` (steps), `grp`
-  (script/layout group), `ext_file` (TO whose base table lives in another file).
+  (script/layout group), `ext_file` (TO whose base table lives in another file;
+  `<unknown>` = that data source no longer exists).
 - **`refs`** — every "source USES target" edge:
   `source_entity_id, context, target_kind, target_name, target_to_name,
   target_raw, target_file, target_entity_id` (NULL = unresolved),
@@ -54,6 +55,12 @@ multi-file build (missing sibling XMLs), not a broken solution.
   guardrails); `only_disabled_refs = 1` means the only references left are in
   commented-out steps.
 - **`v_unresolved`** — unresolved refs grouped; **`v_ambiguous`** — flagged picks.
+- **`v_dangling`** (v1.13.0): the defects the DDR itself marks: deleted
+  fields, scripts, layouts and TOs still referenced (`<unknown>`,
+  `<Table Missing>`, `<Field Missing>`), calculations carrying a marker
+  (`context = 'broken_calc'`), TOs on a missing data source. One row per defect,
+  `disabled` flag included. **`v_data_sources`** (v1.13.0): which file each
+  external data source name points at (catalog link, then name).
 
 Canonical recipes live in **QUERIES.md** — read it before writing ad-hoc SQL.
 
@@ -90,7 +97,8 @@ index before crediting them in the merge.
   and still present results as "candidates to review". Full matrix: COVERAGE.md.
 - **Unresolved refs are usually legitimate**, not broken: scripts in files not
   present in the DB (`target_file` set), calculated layout destinations,
-  unbound globals. Check `v_unresolved` shape before calling anything broken.
+  unbound globals. Check `v_unresolved` shape before calling anything broken,
+  and the marked defects are in `v_dangling`.
 - **`ambiguous=1` means the resolver guessed** among same-named candidates —
   say so when those rows matter to the answer.
 - Built-in FileMaker functions are deliberately NOT edges; find them via FTS.

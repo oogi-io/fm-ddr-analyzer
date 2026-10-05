@@ -44,8 +44,11 @@ CREATE TABLE IF NOT EXISTS entities (
     seq              INTEGER,       -- ordering within parent (step order, etc.)
     grp              TEXT,          -- script/layout group path
     records          INTEGER,       -- base_table record count
-    ext_file         TEXT,          -- table_occurrence: external file its base table lives in
-    extra_json       TEXT,          -- kind-specific leftovers
+    ext_file         TEXT,          -- table_occurrence: external data source NAME its base table
+                                    -- lives in (v_data_sources maps it to a file); '<unknown>' =
+                                    -- the data source no longer exists (v1.13.0)
+    extra_json       TEXT,          -- kind-specific leftovers; external_data_source (file kind):
+                                    -- {file: true, link: "X_fmp12.xml"} (v1.13.0)
     -- field storage & auto-enter (v1.9.0; NULL for non-fields and pre-1.9 builds)
     stored           INTEGER,       -- 0 = unstored calc (storeCalculationResults="False"), 1 = stored
     indexed          TEXT,          -- index setting: None | Minimal | All
@@ -75,8 +78,12 @@ CREATE TABLE IF NOT EXISTS refs (
     target_fm_id     TEXT,
     target_name      TEXT,              -- field name (leaf) or object name
     target_to_name   TEXT,              -- for fields referenced as TO::Field, the TO part
-    target_raw       TEXT,              -- original raw string as seen (e.g. "TO::Field")
-    target_file      TEXT,              -- external target: FileMaker file named by a FileReference marker
+    target_raw       TEXT,              -- original raw string as seen (e.g. "TO::Field"); may carry a
+                                        -- marker (v1.13.0): '<unknown>', '<Table Missing>',
+                                        -- 'TO::<Field Missing>' = a deleted target, listed by v_dangling
+    target_file      TEXT,              -- external target: data source NAME from a FileReference marker
+                                        -- (v_data_sources maps it to a file); '<unknown>' = that data
+                                        -- source no longer exists (v1.13.0)
     target_entity_id INTEGER REFERENCES entities(entity_id),  -- filled by resolve step
     ambiguous        INTEGER DEFAULT 0, -- 1 = several candidates matched; pick is deterministic but uncertain
     disabled         INTEGER DEFAULT 0, -- 1 = emitted from a disabled (enable="False") script step OR from a

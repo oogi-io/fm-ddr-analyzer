@@ -323,8 +323,48 @@ be run from a menu/button/external, so verify):
 SELECT grp, name FROM v_orphan_scripts ORDER BY grp, name;
 ```
 
+**Dangling references (DDR-marked defects, v1.13.0+):** deleted fields,
+scripts, layouts and table occurrences that the DDR still references
+(`<unknown>`, `<Table Missing>`, `<Field Missing>`), calculations that carry
+a marker, and TOs on a data source that no longer exists. One row per defect:
+
+```sql
+SELECT context, marker, COUNT(*) FROM v_dangling GROUP BY 1, 2 ORDER BY 3 DESC;
+
+-- per script: which steps are broken
+SELECT source_parent_name AS script, step_type, marker, disabled
+FROM v_dangling
+WHERE source_kind = 'script_step' AND source_parent_name LIKE 'Invoice%'
+ORDER BY script, step_type;
+-- source_kind = 'layout_object' rows are button steps (step_type NULL,
+-- source_parent_name = the layout or enclosing object); context =
+-- 'broken_calc' rows are entities whose calc text carries a marker.
+```
+
+Markers the DDR writes only in a step's TEXT (no reference element, so no
+row above): `Add Account [ ...; Privilege Set: <unknown> ]`, Go to Related
+Record `From table: <unknown>`:
+
+```sql
+SELECT scr.name AS script, s.step_type, json_extract(s.extra_json,'$.step_text')
+FROM entities s JOIN entities scr ON scr.entity_id = s.parent_entity_id
+WHERE s.kind = 'script_step'
+  AND json_extract(s.extra_json,'$.step_text') LIKE '%<unknown>%';
+```
+
+**Which file does a data source point to** (v1.13.0+; by catalog link, then
+name; NULL = no such file in this DB):
+
+```sql
+SELECT f.name AS file, d.ds_name, d.link, d.target_file_name
+FROM v_data_sources d JOIN files f ON f.file_id = d.file_id
+ORDER BY f.name, d.ds_name;
+```
+
 **Table occurrences** never used as a layout context (v1.12.0+), in a
-relationship, by a TO reference, or as the TO of a `TO::Field` reference:
+relationship, by a TO reference, or as the TO of a `TO::Field` reference
+(an external TO resolves its fields through its data source, v1.13.0+, so a
+TO on another file counts as used when its fields are):
 
 ```sql
 SELECT t.name FROM entities t
@@ -347,7 +387,8 @@ WHERE r.target_kind='field'
 GROUP BY te.entity_id ORDER BY uses DESC LIMIT 25;
 ```
 
-Unresolved references (external files, calculated destinations — a health signal):
+Unresolved references (external files, calculated destinations, and the marked
+defects of `v_dangling`: a health signal):
 
 ```sql
 SELECT * FROM v_unresolved;
