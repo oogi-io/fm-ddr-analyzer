@@ -30,3 +30,6 @@ build/
 # Local Claude Code tooling (personal skills, launch configs)
 .claude/
 dist/
+
+# Private design docs (client data): never committed to the public repo
+docs/design/
