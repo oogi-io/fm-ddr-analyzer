@@ -137,6 +137,19 @@
 			</SecondaryField>
 			<ShowRelated value="False"/>
 		</ValueList>
+		<ValueList id="2" name="VL C Custom">
+			<Source value="Custom"/>
+			<PrimaryField show="True" sort="True">
+				<Field table="" id="5" name=""/>
+			</PrimaryField>
+			<SecondaryField show="False" sort="False">
+				<Field table="" id="0" name=""/>
+			</SecondaryField>
+			<CustomValues>
+				<Text>one
+two</Text>
+			</CustomValues>
+		</ValueList>
 	</ValueListCatalog>
 	<ScriptCatalog>
 		<Script includeInMenu="True" id="1" name="C One">

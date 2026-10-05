@@ -143,16 +143,18 @@ DDR's marker arrives as `target_name = '<unknown>'`, fmsonar's rewrite leaves
 One rule for every reference slot, in both parsers: **an empty or missing name
 on a required slot is `<unknown>`; an empty name on an optional slot emits
 nothing.** The optional slots, each identified by the DDR's own convention, are
-exactly these four:
+exactly these five:
 
 1. a value list's `SecondaryField` (an unset second display field; the id is
    non-zero and plays no part);
-2. a step `<Field>` with **no `id` attribute** (a target that was never set:
+2. any field slot of a value list whose `Source` is not `Field` (a Custom or
+   "all values" list keeps stale field ids that mean nothing);
+3. a step `<Field>` with **no `id` attribute** (a target that was never set:
    Insert Text, Insert from URL, Execute FileMaker Data API, Open Data File,
    Insert Calculated Result, Get File Exists, Read from Data File, Get File
    Size, Write to Data File);
-3. `<Script id="0" name=""/>` under a trigger (an unset trigger script);
-4. a `<Layout>` whose step's `LayoutDestination` is `OriginalLayout`,
+4. `<Script id="0" name=""/>` under a trigger (an unset trigger script);
+5. a `<Layout>` whose step's `LayoutDestination` is `OriginalLayout`,
    `CurrentLayout`, `LayoutNameByCalc` or `LayoutNumberByCalc` (a runtime
    destination; the by-calc `<Calculation>` still lands in the step's
    `calc_text`).

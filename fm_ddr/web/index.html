@@ -459,11 +459,15 @@ function onStart(tag,a){
     const nm=a.name, tbl=a.table;
     if(nm) emitRef(ctx,'field',{fm:a.id,name:nm,to:tbl,raw:(tbl||'')+'::'+nm});
     // v1.13.0: empty name. Optional slots emit nothing (value list SecondaryField,
-    // step <Field> with NO id attribute); everything else is a deleted field.
+    // any slot of a value list whose Source is not "Field", step <Field> with NO
+    // id attribute); everything else is a deleted field.
+    else if(ctx==='value_list_field' && (parent==='SecondaryField'
+            || (H.estack.length && H.estack[H.estack.length-1].k==='value_list'
+                && H.estack[H.estack.length-1]._vlSrc!=='Field'))){ }
     else if(tbl){
       const marker=(H.stepText && H.stepText.indexOf(tbl+'::'+FIELD_MISSING)!==-1)?FIELD_MISSING:UNKNOWN;
       emitRef(ctx,'field',{fm:a.id,name:null,to:tbl,raw:tbl+'::'+marker}); }
-    else if(!((ctx==='value_list_field' && parent==='SecondaryField') || (parent==='Step' && !('id' in a)))){
+    else if(!(parent==='Step' && !('id' in a))){
       const marker=(H.stepText && H.stepText.indexOf(TABLE_MISSING)!==-1)?TABLE_MISSING:UNKNOWN;
       emitRef(ctx,'field',{fm:a.id,name:null,to:null,raw:marker}); }
     const qn=(tbl||'')+'::'+(nm||'');

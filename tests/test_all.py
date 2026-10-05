@@ -1161,7 +1161,8 @@ class TestDangling(unittest.TestCase):
         # the unset trigger slot <Script id="0" name=""/>
         self.assertEqual(self.conn.execute(
             "SELECT COUNT(*) FROM refs WHERE context='trigger'").fetchone()[0], 0)
-        # the value list's unset SecondaryField
+        # the value list's unset SecondaryField, and both stale slots of the
+        # Custom-source list (its field ids mean nothing)
         self.assertEqual(self.conn.execute(
             "SELECT target_raw FROM refs WHERE context='value_list_field'").fetchall(),
             [("CTC::email",)])

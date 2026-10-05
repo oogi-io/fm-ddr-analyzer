@@ -432,20 +432,27 @@ class DDRHandler(xml.sax.ContentHandler):
             if nm:
                 self.emit_ref(ctx, "field", fm_id=a.get("id"), name=nm,
                               to_name=tbl, raw=(tbl or "") + "::" + nm)
-            # v1.13.0: an empty name. Two slots are optional and emit nothing:
-            # a value list's SecondaryField (unset second display field) and a
+            # v1.13.0: an empty name. Three slots are optional and emit nothing:
+            # a value list's SecondaryField (unset second display field), any
+            # slot of a value list whose Source is not "Field" (a Custom or
+            # "all values" list keeps stale field ids that mean nothing) and a
             # step <Field> with NO id attribute (a target never set: Insert
             # Text, Insert from URL, ...). Everything else is a deleted field:
             # the ref carries the DDR's own marker from the step text when it
             # is there, else '<unknown>', and stays unresolved (name NULL).
+            elif ctx == "value_list_field" and (
+                    parent == "SecondaryField"
+                    or (self.entity_stack
+                        and self.entity_stack[-1]["kind"] == "value_list"
+                        and self.entity_stack[-1].get("_vl_source") != "Field")):
+                pass
             elif tbl:
                 marker = (FIELD_MISSING if self._step_text_cur
                           and (tbl + "::" + FIELD_MISSING) in self._step_text_cur
                           else UNKNOWN)
                 self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
                               to_name=tbl, raw=tbl + "::" + marker)
-            elif not ((ctx == "value_list_field" and parent == "SecondaryField")
-                      or (parent == "Step" and "id" not in a)):
+            elif not (parent == "Step" and "id" not in a):
                 marker = (TABLE_MISSING if self._step_text_cur
                           and TABLE_MISSING in self._step_text_cur else UNKNOWN)
                 self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
