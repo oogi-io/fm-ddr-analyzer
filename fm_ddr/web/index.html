@@ -293,6 +293,12 @@ const SOURCE_KINDS = new Set(["field","custom_function","script_step","relations
   "layout","layout_object","value_list","privilege_set","custom_menu"]);
 // Text = value-list custom values; Data = layout text-object character runs
 const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name","Text","Data"]);
+// v1.13.0: markers (see parse.py). The DDR's own: <Table Missing>, <Field Missing>,
+// <Function Missing>, name="<unknown>"; fmsonar's own: '<unknown>' in target_raw,
+// ext_file or target_file wherever a REQUIRED name is empty or missing.
+const UNKNOWN='<unknown>', TABLE_MISSING='<Table Missing>', FIELD_MISSING='<Field Missing>';
+// runtime layout destinations: an empty <Layout> under one of these is no reference
+const RUNTIME_LAYOUT_DESTS=new Set(["OriginalLayout","CurrentLayout","LayoutNameByCalc","LayoutNumberByCalc"]);
 
 function dec(s){
   if(s.indexOf('&')===-1) return s;
@@ -312,6 +318,8 @@ const H={
   entities:[], edges:[], fileNames:[], ver:null, label:'',
   cap:null, capAttrs:null, buf:[],
   trigEv:[], deadAE:false,
+  // v1.13.0: per-step state (reset on ANY <Step>, cleared when it closes)
+  stepText:null, layoutDest:null,
 };
 function ptag(){ return H.tagstack.length>=2?H.tagstack[H.tagstack.length-2]:''; }
 function anc(t){ for(let k=0;k<H.tagstack.length-1;k++) if(H.tagstack[k]===t) return true; return false; }
@@ -364,14 +372,19 @@ function onStart(tag,a){
     if((parent==='LayoutCatalog'||parent==='Group') && anc('LayoutCatalog')){
       if((a.name||'').trim()!=='-') newEntity('layout',a);  // "-" = layout-menu separator
     }
-    else emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
+    else if(a.name) emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
+    // v1.13.0: empty name = runtime destination (nothing) or a deleted layout (<unknown>)
+    else if(!RUNTIME_LAYOUT_DESTS.has(H.layoutDest)) emitRef('go_to_layout','layout',{fm:a.id,name:null,raw:UNKNOWN});
     return; }
   // v1.12.0: a layout's own context TO (first child <Table id name/>). An empty
   // name means the TO is gone: keep the fm id, leave the ref unresolved.
   if(tag==='Table' && parent==='Layout' && H.estack.length && H.estack[H.estack.length-1].k==='layout'){
     const nm=a.name||null;
-    if(nm || (a.id!=null && a.id!=='0')) emitRef('layout_context','table_occurrence',{fm:a.id,name:nm,raw:a.name});
+    if(nm || (a.id!=null && a.id!=='0')) emitRef('layout_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
     return; }
+  // v1.13.0: per-step state; every <Step> (StepList, ButtonObj, GroupButtonObj, MenuItem) resets it
+  if(tag==='Step'){ H.stepText=null; H.layoutDest=null; }
+  if(tag==='LayoutDestination'){ H.layoutDest=a.value!=null?a.value:null; return; }
   if(tag==='Step' && parent==='StepList'){
     let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
     let ordinal=null;
@@ -405,16 +418,21 @@ function onStart(tag,a){
   if(tag==='CustomMenuSet' && parent==='CustomMenuSetCatalog'){ newEntity('custom_menu_set',a); return; }
   if(tag==='Theme' && parent==='ThemeCatalog'){ newEntity('theme',a); return; }
   if(tag==='OdbcDataSource'){ newEntity('external_data_source',a); return; }
+  // v1.13.0: file data sources ({file:true, link}); the catalog sits at the END of
+  // the file, so resolution happens in resolve(), never here
+  if(tag==='FileReference' && parent==='ExternalDataSourcesCatalog'){
+    const e=newEntity('external_data_source',a); e._ds={file:true}; if(a.link!=null) e._ds.link=a.link; return; }
 
   // reference edges
   // External-target marker: FileReference inside a step means the step's
   // Script/Layout ref lives in another FILE (never resolve locally).
+  // v1.13.0: an empty name is a data source that no longer exists -> '<unknown>'
   if(tag==='FileReference' && parent==='Step'){
-    const src=curSource(); if(src && a.name) src._extFile=a.name; return; }
+    const src=curSource(); if(src) src._extFile=a.name||UNKNOWN; return; }
   // FileReference inside a Table occurrence: its base table lives in another file
   if(tag==='FileReference' && parent==='Table'){
     const top=H.estack[H.estack.length-1];
-    if(top && top.k==='table_occurrence' && a.name) top.ef=a.name; return; }
+    if(top && top.k==='table_occurrence') top.ef=a.name||UNKNOWN; return; }
 
   if(tag==='FieldReference'){ const [to,leaf]=splitQ(a.name);
     emitRef(anc('Layout')?'layout_object':'field_reference','field',{fm:a.id,name:leaf,to:to,raw:a.name}); return; }
@@ -438,8 +456,17 @@ function onStart(tag,a){
     else if(parent==='PrimaryField'||parent==='SecondaryField')
       ctx=anc('ValueList')?'value_list_field':'sort';
     else ctx='join_predicate';
-    emitRef(ctx,'field',{fm:a.id,name:a.name,to:a.table,raw:(a.table||'')+'::'+(a.name||'')});
-    const qn=(a.table||'')+'::'+(a.name||'');
+    const nm=a.name, tbl=a.table;
+    if(nm) emitRef(ctx,'field',{fm:a.id,name:nm,to:tbl,raw:(tbl||'')+'::'+nm});
+    // v1.13.0: empty name. Optional slots emit nothing (value list SecondaryField,
+    // step <Field> with NO id attribute); everything else is a deleted field.
+    else if(tbl){
+      const marker=(H.stepText && H.stepText.indexOf(tbl+'::'+FIELD_MISSING)!==-1)?FIELD_MISSING:UNKNOWN;
+      emitRef(ctx,'field',{fm:a.id,name:null,to:tbl,raw:tbl+'::'+marker}); }
+    else if(!((ctx==='value_list_field' && parent==='SecondaryField') || (parent==='Step' && !('id' in a)))){
+      const marker=(H.stepText && H.stepText.indexOf(TABLE_MISSING)!==-1)?TABLE_MISSING:UNKNOWN;
+      emitRef(ctx,'field',{fm:a.id,name:null,to:null,raw:marker}); }
+    const qn=(tbl||'')+'::'+(nm||'');
     if(ctx==='join_predicate'){
       for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){
         (H.estack[k]._predF=H.estack[k]._predF||[]).push([parent,qn]); break; } }
@@ -471,14 +498,15 @@ function onStart(tag,a){
     return; }
   if(tag==='Script' && parent!=='Group' && parent!=='ScriptCatalog'){
     const fm=a.id, nm=a.name;
-    if((fm!=null&&fm!=='0')||nm){
+    // <Script id="0" name=""/> is the unset trigger slot: nothing. v1.13.0: any other
+    // id with an empty or missing name is a deleted script -> '<unknown>', name null.
+    if(nm||(fm!=null&&fm!=='0')){
       // File-level triggers (<WindowTriggers>) carry the event as the WRAPPER
       // TAG (<OnFirstWindowOpen><Script/>), not an attribute.
       const inWin=anc('WindowTriggers');
       const ctx=(inWin||anc('ScriptTriggers')||parent==='Trigger')?'trigger':'perform_script';
-      if(nm||(fm&&fm!=='0')){
-        const ev=ctx!=='trigger'?null:(inWin?parent:(H.trigEv.length?H.trigEv[H.trigEv.length-1]:null));
-        emitRef(ctx,'script',{fm:fm,name:nm,raw:nm,ev:ev}); } } return; }
+      const ev=ctx!=='trigger'?null:(inWin?parent:(H.trigEv.length?H.trigEv[H.trigEv.length-1]:null));
+      emitRef(ctx,'script',{fm:fm,name:nm||null,raw:nm||UNKNOWN,ev:ev}); } return; }
 
   // text capture
   if(CAPTURE_TAGS.has(tag)){ H.cap=tag; H.capAttrs=a; H.buf=[]; }
@@ -510,7 +538,7 @@ function joinBuf(){
 function onEnd(tag){
   if(H.cap===tag){ consumeText(tag,H.capAttrs,joinBuf().trim()); H.cap=null; H.buf=[]; }
   if(H.pushed.length && H.pushed.pop()) finalize(H.estack.pop());
-  if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; }
+  if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; H.stepText=null; H.layoutDest=null; }
   if(tag==='AutoEnter') H.deadAE=false;
   else if(tag==='Trigger' && H.trigEv.length) H.trigEv.pop();
   if(H.tagstack.length) H.tagstack.pop();
@@ -523,7 +551,7 @@ function consumeText(tag,attrs,text){
     if(src.k==='field'&&anc('AutoEnter')) (src._aec=src._aec||[]).push(text);
     else if(src.k==='field'&&anc('Validation')) (src._vc=src._vc||[]).push(text);
     else src._calc.push(text); } }
-  else if(tag==='StepText'){ if(src) src._step=text; }
+  else if(tag==='StepText'){ H.stepText=text; if(src) src._step=text; }
   else if(tag==='Text'){
     // value-list custom values (one Text block, newline-separated)
     if(ptag()==='CustomValues' && H.estack.length
@@ -572,6 +600,7 @@ function finalize(e){
     }
   }
   if(e.k==='layout_object' && e._txt) tx=e._txt.join(' ').slice(0,2000);
+  if(e.k==='external_data_source' && e._ds) ex=e._ds;   // v1.13.0: {file, link}
   e._ex=ex; e._tx=tx;
   // field storage + auto-enter capture (v1.9.0, mirrors parse.py)
   let sto=null, idx=null, glb=null, ae=null;
@@ -769,7 +798,7 @@ async function run(input){
   const resolved=H.edges.reduce((n,r)=>n+(r.t!=null?1:0),0);
   // shrink edges to the fields the viewer needs
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0,ev:r.ev||null}));
-  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,c:e.c,ot:e.ot,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
+  const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,ef:e.ef,c:e.c,ot:e.ot,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
   postMessage({type:'done', data:{
     meta:{label:H.label, ddr_version:H.ver},
     files:H.fileNames,

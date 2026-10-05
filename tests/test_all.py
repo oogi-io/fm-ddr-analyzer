@@ -29,6 +29,7 @@ from fm_ddr.parse import build  # noqa: E402
 
 FIXTURE = os.path.join(ROOT, "tests", "fixtures", "micro_ddr.xml")
 FIXTURE_B = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_b.xml")
+FIXTURE_C = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_c.xml")
 SNAPSHOT = os.path.join(ROOT, "tests", "expected_snapshot.json")
 JS_RUNNER = os.path.join(ROOT, "tests", "parity", "run_js.mjs")
 WEB_APP = os.path.join(ROOT, "fm_ddr", "web", "index.html")
@@ -61,7 +62,10 @@ def normalize(entities, refs):
          e.get("indexed") or "",
          "" if e.get("is_global") is None else str(e["is_global"]),
          _canon_ae(e.get("auto_enter")),
-         _canon_v10(e.get("v10"))]
+         _canon_v10(e.get("v10")),
+         # v1.13.0: the external data source a TO points at ('<unknown>' when
+         # the source is gone) must agree between the parsers
+         e.get("ext_file") or ""]
         for e in entities
     )
     ref_rows = sorted(
@@ -74,6 +78,9 @@ def normalize(entities, refs):
             r["ambiguous"],
             r.get("disabled", 0),
             r.get("trigger_event") or "",
+            # v1.13.0: the FileReference marker ('<unknown>' when the file is
+            # gone): a sentinel that changes no resolution still fails parity
+            r.get("target_file") or "",
         ]
         for r in refs
     )
@@ -93,12 +100,14 @@ def _canon_ae(ae):
 # layout-object text) — the keys both parsers must agree on.
 V10_KEYS = ("sides", "predicates", "source", "show_related", "primary",
             "secondary", "custom_values", "text")
+# v1.13.0: external data source entities carry {file, link}
+EXTRA_KEYS = V10_KEYS + ("file", "link")
 
 
 def _canon_v10(v10):
     if not v10:
         return ""
-    d = {k: v for k, v in v10.items() if k in V10_KEYS and v is not None}
+    d = {k: v for k, v in v10.items() if k in EXTRA_KEYS and v is not None}
     return json.dumps(d, sort_keys=True, ensure_ascii=False) if d else ""
 
 
@@ -107,18 +116,20 @@ def read_sqlite(db_path):
     entities = [
         {"id": i, "kind": k, "name": n, "parent_id": p, "base_table": bt, "grp": g,
          "stored": st, "indexed": ix, "is_global": ig, "auto_enter": ae,
-         "v10": (json.loads(ex) if ex and k in ("relationship", "value_list",
-                                                "layout_object") else None)}
-        for i, k, n, p, bt, g, st, ix, ig, ae, ex in conn.execute(
+         "ext_file": ef,
+         # every kind: _canon_v10 keeps only the keys both parsers must agree on
+         "v10": (json.loads(ex) if ex else None)}
+        for i, k, n, p, bt, g, st, ix, ig, ae, ef, ex in conn.execute(
             "SELECT entity_id,kind,name,parent_entity_id,base_table,grp,"
-            "stored,indexed,is_global,auto_enter,extra_json FROM entities")
+            "stored,indexed,is_global,auto_enter,ext_file,extra_json FROM entities")
     ]
     refs = [
         {"source_id": s, "context": c, "target_kind": tk, "target_raw": tr,
-         "target_id": t, "ambiguous": a or 0, "disabled": d or 0, "trigger_event": ev}
-        for s, c, tk, tr, t, a, d, ev in conn.execute(
+         "target_id": t, "ambiguous": a or 0, "disabled": d or 0, "trigger_event": ev,
+         "target_file": tf}
+        for s, c, tk, tr, t, a, d, ev, tf in conn.execute(
             "SELECT source_entity_id,context,target_kind,target_raw,target_entity_id,"
-            "ambiguous,disabled,trigger_event FROM refs")
+            "ambiguous,disabled,trigger_event,target_file FROM refs")
     ]
     conn.close()
     return entities, refs
@@ -130,6 +141,7 @@ def read_js(js_json):
          "base_table": e["bt"], "grp": e["g"],
          "stored": e.get("sto"), "indexed": e.get("idx"),
          "is_global": e.get("glb"), "auto_enter": e.get("ae"),
+         "ext_file": e.get("ef"),
          "v10": (dict(e["ex"] or {}, **({"text": e["tx"]} if e.get("tx") else {}))
                  if (e.get("ex") or e.get("tx")) else None)}
         for e in js_json["entities"]
@@ -137,7 +149,8 @@ def read_js(js_json):
     refs = [
         {"source_id": r["s"], "context": r["c"], "target_kind": r["tk"],
          "target_raw": r["tr"], "target_id": r["t"], "ambiguous": r.get("a", 0),
-         "disabled": r.get("dis", 0), "trigger_event": r.get("ev")}
+         "disabled": r.get("dis", 0), "trigger_event": r.get("ev"),
+         "target_file": r.get("tf")}
         for r in js_json["edges"]
     ]
     return entities, refs
@@ -687,6 +700,20 @@ class TestJSParity(unittest.TestCase):
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_B], 13))
 
+    def test_parity_three_files_data_sources(self):
+        # v1.13.0: external data sources resolved by catalog link, then name
+        db = os.path.join(self.tmp, "three_parity.db")
+        build([FIXTURE, FIXTURE_B, FIXTURE_C], db, label="three")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_B, FIXTURE_C], 13))
+
+    def test_parity_dangling_fixture_alone(self):
+        # v1.13.0: every emit-nothing and marker case, edge by edge
+        db = os.path.join(self.tmp, "c_parity.db")
+        build(FIXTURE_C, db, label="c")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([FIXTURE_C], 13))
+
 
 class TestV19Capture(unittest.TestCase):
     """v1.9.0: field storage, auto-enter (active vs dead residue), validation
@@ -992,6 +1019,135 @@ class TestLayoutContext(unittest.TestCase):
         text = out.getvalue()
         self.assertIn("layout_context", text)
         self.assertIn("Contacts", text)
+
+
+class TestDangling(unittest.TestCase):
+    """v1.13.0: the DDR's own markers and the LayoutDestination decide what an
+    empty reference element is. An unset optional slot emits nothing; a deleted
+    target emits an unresolved ref carrying '<unknown>' or the DDR's marker,
+    listed by v_dangling. Single-file build of micro_ddr_c.xml."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v113_")
+        cls.db = build_fixture_db(cls.tmp, src=FIXTURE_C)
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def step_refs(self, step_type, context=None):
+        """(target_raw, target_fm_id, target_name, target_file, disabled) per
+        ref sourced from a script step of that type."""
+        where = "AND r.context = ?" if context else ""
+        return self.conn.execute(f"""
+            SELECT r.target_raw, r.target_fm_id, r.target_name, r.target_file,
+                   r.disabled
+            FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id
+            WHERE s.kind = 'script_step' AND s.step_type = ? {where}
+            ORDER BY r.ref_id""", (step_type,) + ((context,) if context else ())
+        ).fetchall()
+
+    def test_total_ref_count(self):
+        # 4 calc + 4 join predicate + 2 layout context + 2 on-layout + 1 value
+        # list + 4 Calls + 8 Defects + 1 menu; every optional slot dropped
+        n = self.conn.execute("SELECT COUNT(*) FROM refs").fetchone()[0]
+        self.assertEqual(n, 26)
+
+    def test_optional_slots_emit_nothing(self):
+        # step <Field> with no id (Insert Text), OriginalLayout, the two by-calc
+        # layouts (New Window has a <Layout> with neither id nor name), the
+        # Add Account marker in text only, the empty Open File marker
+        for st in ("Insert Text", "New Window", "Add Account", "Open File"):
+            self.assertEqual(self.step_refs(st), [], st)
+        self.assertEqual(len(self.step_refs("Go to Layout", "go_to_layout")), 2)
+        # the unset trigger slot <Script id="0" name=""/>
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context='trigger'").fetchone()[0], 0)
+        # the value list's unset SecondaryField
+        self.assertEqual(self.conn.execute(
+            "SELECT target_raw FROM refs WHERE context='value_list_field'").fetchall(),
+            [("CTC::email",)])
+        # the separator layout's <Table id="0" name=""/>
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context='layout_context' "
+            "AND target_fm_id='0'").fetchone()[0], 0)
+
+    def test_by_calc_layout_keeps_its_calc(self):
+        calcs = {r[0]: r[1] for r in self.conn.execute(
+            "SELECT json_extract(extra_json,'$.step_text'), calc_text FROM entities "
+            "WHERE kind='script_step' AND step_type IN ('Go to Layout','New Window')")}
+        self.assertEqual(calcs['Go to Layout [ "C Main" ]'], '"C Main"')
+        self.assertEqual(calcs["New Window [ Style: Card; Using layout: $lay ]"], "$lay")
+
+    def test_deleted_layout_targets(self):
+        rows = self.step_refs("Go to Layout", "go_to_layout")
+        # SelectedLayout with id 0 and with id 1: both '<unknown>', name NULL;
+        # id 1 exists as a layout but must never resolve
+        self.assertEqual(rows, [("<unknown>", "0", None, None, 0),
+                                ("<unknown>", "1", None, None, 0)])
+        # the Go to Related Record behind an empty FileReference
+        self.assertEqual(self.step_refs("Go to Related Record"),
+                         [("<unknown>", "0", None, "<unknown>", 0)])
+        # the button's Go to Layout [ <unknown> ] on the layout
+        row = self.conn.execute("""
+            SELECT source_kind, target_raw, target_fm_id, target_name
+            FROM refs WHERE context='go_to_layout' AND source_kind='layout_object'
+        """).fetchall()
+        self.assertEqual(row, [("layout_object", "<unknown>", "324", None)])
+
+    def test_deleted_field_targets_carry_the_ddr_marker(self):
+        self.assertEqual(self.step_refs("Set Field"), [
+            ("<Table Missing>", "0", None, None, 0),
+            ("CTC::<Field Missing>", "13", None, None, 0),
+            ("<Table Missing>", "0", None, None, 1),      # the disabled one
+        ])
+        # the empty sort criterion is '<unknown>' next to its real sibling
+        self.assertEqual(self.step_refs("Sort Records"), [
+            ("CTC::email", "1", "email", None, 0),
+            ("<unknown>", "11", None, None, 0),
+        ])
+        # the relationship's RightField with a table and no name
+        self.assertEqual(self.conn.execute(
+            "SELECT target_raw, target_entity_id IS NULL FROM refs "
+            "WHERE context='join_predicate' AND target_kind='field' "
+            "ORDER BY ref_id").fetchall(), [("CTC::email", 0), ("CTC::<unknown>", 1)])
+
+    def test_missing_layout_context_to(self):
+        rows = self.conn.execute(
+            "SELECT l.name, r.target_raw, r.target_fm_id, r.target_name FROM refs r "
+            "JOIN entities l ON l.entity_id = r.source_entity_id "
+            "WHERE r.context='layout_context' ORDER BY r.ref_id").fetchall()
+        self.assertEqual(rows, [("C Main", "CTC", "1", "CTC"),
+                                ("C Lost", "<unknown>", "7", None)])
+
+    def test_deleted_script_targets(self):
+        rows = self.step_refs("Perform Script")
+        self.assertEqual(rows, [
+            ("Main Script", "1", "Main Script", "Main", 0),   # other file
+            ("<unknown>", "2", None, "<unknown>", 0),         # <Script id="2"/>, file gone
+            ("<unknown>", "2", None, None, 0),                # <Script id="2"/>, no marker
+            ("<unknown>", "0", "<unknown>", None, 0),         # the DDR's own marker
+        ])
+        # the custom menu's step performs the DDR's '<unknown>' script
+        self.assertEqual(self.conn.execute(
+            "SELECT source_kind, target_raw, target_name FROM refs "
+            "WHERE source_kind='custom_menu'").fetchall(),
+            [("custom_menu", "<unknown>", "<unknown>")])
+
+    def test_data_source_catalog_and_markers(self):
+        rows = self.conn.execute(
+            "SELECT name, json_extract(extra_json,'$.file'), json_extract(extra_json,'$.link') "
+            "FROM entities WHERE kind='external_data_source' ORDER BY entity_id").fetchall()
+        self.assertEqual(rows, [("Main", 1, "MicroTest_fmp12.xml"), ("MicroB", 1, None),
+                                ("Gone", 1, None), ("Self", 1, "MicroC_fmp12.xml")])
+        ext = dict(self.conn.execute(
+            "SELECT name, ext_file FROM entities WHERE kind='table_occurrence'").fetchall())
+        self.assertEqual(ext, {"CTC": None, "main_CTC": "Main", "gone_X": "Gone",
+                               "self_CTC": "Self", "b_LOG": "MicroB",
+                               "lost_Y": "<unknown>"})
 
 
 class TestRobustness(unittest.TestCase):

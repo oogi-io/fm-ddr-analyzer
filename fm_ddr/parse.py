@@ -35,6 +35,21 @@ def _parser_version():
 
 BATCH = 4000
 
+# v1.13.0: markers. The DDR's own are <Table Missing>, <Field Missing> and
+# <Function Missing> in calculation and step text (and name="<unknown>" on a
+# script); fmsonar's own is '<unknown>', written into target_raw, ext_file or
+# target_file wherever the DDR left a REQUIRED name empty or missing. The two
+# are told apart by target_name: the DDR's arrives as target_name='<unknown>',
+# fmsonar's rewrite leaves target_name NULL.
+UNKNOWN = "<unknown>"
+TABLE_MISSING = "<Table Missing>"
+FIELD_MISSING = "<Field Missing>"
+# Layout destinations that are decided at runtime: an empty <Layout> under one
+# of these is not a reference to anything (the by-calc <Calculation> child still
+# reaches the step's calc_text through the normal capture).
+RUNTIME_LAYOUT_DESTS = ("OriginalLayout", "CurrentLayout",
+                        "LayoutNameByCalc", "LayoutNumberByCalc")
+
 
 class DDRHandler(xml.sax.ContentHandler):
     def __init__(self, conn: sqlite3.Connection, run_id: int):
@@ -55,6 +70,11 @@ class DDRHandler(xml.sax.ContentHandler):
 
         self._trig_events: list = []           # <Trigger event=...> ancestry
         self._in_dead_ae = False               # inside an AutoEnter whose calc option is OFF
+        # v1.13.0: per-step state for the dangling-reference rules. Reset when
+        # ANY <Step> opens (script steps, button steps, custom-menu steps) and
+        # cleared when it closes; steps never nest, so one pair serves all.
+        self._step_text_cur = None             # the current step's StepText
+        self._layout_dest_cur = None           # <LayoutDestination value>
 
         self.ent_rows: list[tuple] = []
         self.ref_rows: list[tuple] = []
@@ -191,8 +211,16 @@ class DDRHandler(xml.sax.ContentHandler):
                 if (a.get("name") or "").strip() != "-":   # "-" = layout-menu separator
                     self.new_entity("layout", a)
             else:
-                self.emit_ref("go_to_layout", "layout", fm_id=a.get("id"),
-                              name=a.get("name"), raw=a.get("name"))
+                nm = a.get("name")
+                if nm:
+                    self.emit_ref("go_to_layout", "layout", fm_id=a.get("id"),
+                                  name=nm, raw=nm)
+                # v1.13.0: an empty name is either a runtime destination (by
+                # calc, original or current layout: nothing to reference) or
+                # a deleted layout (<unknown> in the step text): a defect.
+                elif self._layout_dest_cur not in RUNTIME_LAYOUT_DESTS:
+                    self.emit_ref("go_to_layout", "layout", fm_id=a.get("id"),
+                                  name=None, raw=UNKNOWN)
             return
 
         # v1.12.0: a layout's own context TO is its first child <Table id name/>.
@@ -206,7 +234,16 @@ class DDRHandler(xml.sax.ContentHandler):
             fmid, nm = a.get("id"), a.get("name") or None
             if nm or fmid not in (None, "0"):
                 self.emit_ref("layout_context", "table_occurrence", fm_id=fmid,
-                              name=nm, raw=a.get("name"))
+                              name=nm, raw=nm or UNKNOWN)
+            return
+
+        # v1.13.0: per-step state. Every <Step> (StepList, ButtonObj,
+        # GroupButtonObj, MenuItem) resets it; the rules below read it.
+        if tag == "Step":
+            self._step_text_cur = None
+            self._layout_dest_cur = None
+        if tag == "LayoutDestination":
+            self._layout_dest_cur = a.get("value")
             return
 
         if tag == "Step" and parent == "StepList":
@@ -306,24 +343,34 @@ class DDRHandler(xml.sax.ContentHandler):
         if tag == "OdbcDataSource":
             self.new_entity("external_data_source", a)
             return
+        # v1.13.0: the file data sources. `file` tells them from ODBC sources;
+        # `link` is the sibling DDR file name the resolver matches first
+        # (the DDR writes X_fmp12.xml for X.fmp12). The catalog sits at the
+        # END of the file, so resolution happens in SQL, never at parse time.
+        if tag == "FileReference" and parent == "ExternalDataSourcesCatalog":
+            self.new_entity("external_data_source", a,
+                            extra_json=_json({"file": True, "link": a.get("link")}))
+            return
 
         # ---- reference edges ----
         # External-target marker: a FileReference inside a script step means the
         # step's Script/Layout ref points at another FILE (its ids are numbered
         # in that file, so local resolution would silently link the wrong script).
+        # v1.13.0: an empty name is a data source that no longer exists; the
+        # marker becomes '<unknown>' so the step's script/layout ref never
+        # resolves locally by id (Perform Script [ <unknown> from file: "" ]).
         if tag == "FileReference" and parent == "Step":
             src = self.current_source()
-            if src is not None and a.get("name"):
-                src["_ext_file"] = a["name"]
+            if src is not None:
+                src["_ext_file"] = a.get("name") or UNKNOWN
             return
 
         # A FileReference inside a Table occurrence marks its base table as
         # living in another file (external data source) — field refs through
         # this TO must resolve against that file.
         if tag == "FileReference" and parent == "Table":
-            if (self.entity_stack and a.get("name")
-                    and self.entity_stack[-1]["kind"] == "table_occurrence"):
-                self.entity_stack[-1]["ext_file"] = a["name"]
+            if self.entity_stack and self.entity_stack[-1]["kind"] == "table_occurrence":
+                self.entity_stack[-1]["ext_file"] = a.get("name") or UNKNOWN
             return
 
         if tag == "FieldReference":
@@ -381,10 +428,29 @@ class DDRHandler(xml.sax.ContentHandler):
                 ctx = "value_list_field" if self.has_ancestor("ValueList") else "sort"
             else:
                 ctx = "join_predicate"
-            self.emit_ref(ctx, "field", fm_id=a.get("id"),
-                          name=a.get("name"), to_name=a.get("table"),
-                          raw=(a.get("table", "") + "::" + a.get("name", "")))
-            qname = a.get("table", "") + "::" + a.get("name", "")
+            nm, tbl = a.get("name"), a.get("table")
+            if nm:
+                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=nm,
+                              to_name=tbl, raw=(tbl or "") + "::" + nm)
+            # v1.13.0: an empty name. Two slots are optional and emit nothing:
+            # a value list's SecondaryField (unset second display field) and a
+            # step <Field> with NO id attribute (a target never set: Insert
+            # Text, Insert from URL, ...). Everything else is a deleted field:
+            # the ref carries the DDR's own marker from the step text when it
+            # is there, else '<unknown>', and stays unresolved (name NULL).
+            elif tbl:
+                marker = (FIELD_MISSING if self._step_text_cur
+                          and (tbl + "::" + FIELD_MISSING) in self._step_text_cur
+                          else UNKNOWN)
+                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
+                              to_name=tbl, raw=tbl + "::" + marker)
+            elif not ((ctx == "value_list_field" and parent == "SecondaryField")
+                      or (parent == "Step" and "id" not in a)):
+                marker = (TABLE_MISSING if self._step_text_cur
+                          and TABLE_MISSING in self._step_text_cur else UNKNOWN)
+                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
+                              to_name=None, raw=marker)
+            qname = (tbl or "") + "::" + (nm or "")
             if ctx == "join_predicate":
                 # v1.10.0: record the predicate field pair on the relationship
                 rel = next((e for e in reversed(self.entity_stack)
@@ -440,21 +506,25 @@ class DDRHandler(xml.sax.ContentHandler):
         # script reference (Perform Script, triggers) — NOT a definition
         if tag == "Script" and parent not in ("Group", "ScriptCatalog"):
             fmid, nm = a.get("id"), a.get("name")
-            if fmid not in (None, "0") or (nm or ""):
+            # <Script id="0" name=""/> is the DDR's unset trigger slot: nothing.
+            # v1.13.0: any other id with an empty or missing name is a deleted
+            # script (<Script id="N"/> behind an empty FileReference): the ref
+            # carries '<unknown>' and stays unresolved. name="<unknown>" is the
+            # DDR's own marker and arrives as target_name = '<unknown>'.
+            if nm or fmid not in (None, "0"):
                 # File-level triggers (<WindowTriggers>) carry the event as the
                 # WRAPPER TAG (<OnFirstWindowOpen><Script/>), not an attribute.
                 in_window = self.has_ancestor("WindowTriggers")
                 ctx = ("trigger" if in_window or self.has_ancestor("ScriptTriggers")
                        or parent == "Trigger" else "perform_script")
-                if nm or (fmid and fmid != "0"):
-                    if ctx != "trigger":
-                        ev = None
-                    elif in_window:
-                        ev = parent   # OnFirstWindowOpen, OnLastWindowClose, ...
-                    else:
-                        ev = self._trig_events[-1] if self._trig_events else None
-                    self.emit_ref(ctx, "script", fm_id=fmid, name=nm, raw=nm,
-                                  trigger_event=ev)
+                if ctx != "trigger":
+                    ev = None
+                elif in_window:
+                    ev = parent   # OnFirstWindowOpen, OnLastWindowClose, ...
+                else:
+                    ev = self._trig_events[-1] if self._trig_events else None
+                self.emit_ref(ctx, "script", fm_id=fmid, name=nm or None,
+                              raw=nm or UNKNOWN, trigger_event=ev)
             return
 
         # ---- text capture ----
@@ -485,6 +555,8 @@ class DDRHandler(xml.sax.ContentHandler):
             src = self.current_source()
             if src is not None:
                 src.pop("_ext_file", None)
+            self._step_text_cur = None
+            self._layout_dest_cur = None
 
         if tag == "AutoEnter":
             self._in_dead_ae = False
@@ -514,6 +586,7 @@ class DDRHandler(xml.sax.ContentHandler):
                 else:
                     src.setdefault("_calc_parts", []).append(text)
         elif tag == "StepText":
+            self._step_text_cur = text
             if src is not None:
                 src["_step_text"] = text
         elif tag == "Text":
