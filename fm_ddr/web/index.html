@@ -1062,7 +1062,8 @@ function initViewer(DATA){
   const CTXL={perform_script:'perform script',trigger:'trigger',calc:'in calculation',
     field_reference:'set field / reference',go_to_layout:'go to layout',layout_object:'on layout',
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
-    to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order'};
+    to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order',
+    step_table:'step table',portal:'portal',value_list_context:'value list context'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can
