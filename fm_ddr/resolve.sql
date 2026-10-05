@@ -3,7 +3,63 @@
 -- All picks are deterministic (ORDER BY entity_id); where several candidates
 -- matched, refs.ambiguous is set so the uncertainty stays visible.
 
+-- External data sources (v1.13.0): which file does a data source NAME point
+-- at? One row per (file, distinct LOWER(name)) a file uses: the catalog's file
+-- sources (extra_json {file: true, link}), the ext_file of its TOs and the
+-- target_file of its refs ('<unknown>', a source that no longer exists, never
+-- gets a row). target_file_id is the first of: (a) the catalog link minus a
+-- trailing _fmp12.xml (the DDR writes X_fmp12.xml for X.fmp12), (b) the name
+-- itself; both compared case-insensitively to files.name minus .fmp12, within
+-- the same run. A source may name its own file. No match: NULL target.
+DROP VIEW IF EXISTS v_data_sources;
+CREATE VIEW v_data_sources AS
+WITH names(file_id, ds_name, link, pri) AS (
+    SELECT file_id, name, json_extract(extra_json, '$.link'), 0
+    FROM entities
+    WHERE kind = 'external_data_source' AND json_extract(extra_json, '$.file') = 1
+      AND name IS NOT NULL AND name <> ''
+    UNION ALL
+    SELECT file_id, ext_file, NULL, 1 FROM entities
+    WHERE kind = 'table_occurrence' AND ext_file IS NOT NULL AND ext_file <> '<unknown>'
+    UNION ALL
+    SELECT file_id, target_file, NULL, 1 FROM refs
+    WHERE target_file IS NOT NULL AND target_file <> '<unknown>'
+),
+keyed AS (
+    SELECT file_id, LOWER(ds_name) AS key,
+           (SELECT n2.ds_name FROM names n2
+            WHERE n2.file_id = n.file_id AND LOWER(n2.ds_name) = LOWER(n.ds_name)
+            ORDER BY n2.pri, n2.ds_name LIMIT 1) AS ds_name,
+           MAX(link) AS link
+    FROM names n GROUP BY file_id, LOWER(ds_name)
+),
+resolved AS (
+    SELECT k.file_id, k.ds_name, k.link,
+           COALESCE(
+             (SELECT fl.file_id FROM files fl JOIN files me ON me.run_id = fl.run_id
+              WHERE me.file_id = k.file_id AND k.link IS NOT NULL
+                AND LOWER(REPLACE(fl.name, '.fmp12', ''))
+                    = LOWER(REPLACE(k.link, '_fmp12.xml', ''))
+              ORDER BY fl.file_id LIMIT 1),
+             (SELECT fl.file_id FROM files fl JOIN files me ON me.run_id = fl.run_id
+              WHERE me.file_id = k.file_id
+                AND LOWER(REPLACE(fl.name, '.fmp12', '')) = k.key
+              ORDER BY fl.file_id LIMIT 1)
+           ) AS target_file_id
+    FROM keyed k
+)
+SELECT r.file_id, r.ds_name, r.link, r.target_file_id,
+       (SELECT name FROM files WHERE file_id = r.target_file_id) AS target_file_name
+FROM resolved r;
+
+-- The resolver's copy, computed once from the same definition (a TEMP table
+-- lives on the build connection only; parse.py is the one place this runs).
+DROP TABLE IF EXISTS temp.ds_file;
+CREATE TEMP TABLE ds_file AS SELECT * FROM v_data_sources;
+
 -- Fields: match by leaf name, disambiguated by the base table behind the TO.
+-- A TO on an external data source (ext_file set) never resolves locally, even
+-- when a local base table carries the same name (v1.13.0).
 UPDATE refs
 SET target_entity_id = (
     SELECT f.entity_id FROM entities f
@@ -14,18 +70,19 @@ SET target_entity_id = (
         OR f.base_table = (
             SELECT t.base_table FROM entities t
             WHERE t.file_id = refs.file_id AND t.kind = 'table_occurrence'
-              AND t.name = refs.target_to_name LIMIT 1)
+              AND t.name = refs.target_to_name AND t.ext_file IS NULL LIMIT 1)
       )
     ORDER BY f.entity_id LIMIT 1)
 WHERE target_kind = 'field' AND target_entity_id IS NULL;
 
--- Fields reached through an EXTERNAL table occurrence (its FileReference names
--- the file that owns the base table) resolve against that file's fields.
+-- Fields reached through an EXTERNAL table occurrence resolve against the
+-- file its data source points at (ds_file: catalog link, then name).
 UPDATE refs
 SET target_entity_id = (
     SELECT fld.entity_id FROM entities t
-    JOIN files fl ON LOWER(REPLACE(fl.name, '.fmp12', '')) = LOWER(t.ext_file)
-    JOIN entities fld ON fld.file_id = fl.file_id AND fld.kind = 'field'
+    JOIN ds_file d ON d.file_id = t.file_id AND LOWER(d.ds_name) = LOWER(t.ext_file)
+         AND d.target_file_id IS NOT NULL
+    JOIN entities fld ON fld.file_id = d.target_file_id AND fld.kind = 'field'
          AND fld.base_table = t.base_table AND fld.name = refs.target_name
     WHERE t.file_id = refs.file_id AND t.kind = 'table_occurrence'
       AND t.name = refs.target_to_name AND t.ext_file IS NOT NULL
@@ -62,13 +119,14 @@ SET target_entity_id = (
 WHERE target_kind = 'table_occurrence' AND target_entity_id IS NULL;
 
 -- Scripts: prefer FileMaker id, then fall back to name (external-file calls stay NULL).
+-- A '<unknown>' raw is a deleted script (v1.13.0): the id alone never resolves it.
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
     WHERE e.file_id = refs.file_id AND e.kind = 'script'
       AND e.fm_id = refs.target_fm_id ORDER BY e.entity_id LIMIT 1)
 WHERE target_kind = 'script' AND target_entity_id IS NULL AND target_fm_id IS NOT NULL
-  AND target_file IS NULL;
+  AND target_file IS NULL AND target_raw IS NOT '<unknown>';
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
@@ -81,14 +139,14 @@ SET target_entity_id = (
 WHERE target_kind = 'script' AND target_entity_id IS NULL AND target_name IS NOT NULL
   AND target_file IS NULL;
 
--- Layouts: id then name (same ambiguity rule as scripts).
+-- Layouts: id then name (same ambiguity rule as scripts; same '<unknown>' guard).
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
     WHERE e.file_id = refs.file_id AND e.kind = 'layout'
       AND e.fm_id = refs.target_fm_id ORDER BY e.entity_id LIMIT 1)
 WHERE target_kind = 'layout' AND target_entity_id IS NULL AND target_fm_id IS NOT NULL
-  AND target_file IS NULL;
+  AND target_file IS NULL AND target_raw IS NOT '<unknown>';
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
@@ -118,14 +176,16 @@ SET target_entity_id = (
 WHERE target_kind = 'custom_function' AND target_entity_id IS NULL;
 
 -- Cross-file: refs carrying a FileReference marker resolve ONLY against the
--- named file (matched on files.name minus .fmp12, case-insensitive). If that
--- file is not in this DB, the ref stays NULL — never mis-linked locally.
+-- file the data source points at (ds_file: catalog link, then name). If that
+-- file is not in this DB, or the marker is '<unknown>' (no ds_file row), the
+-- ref stays NULL: never mis-linked locally.
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
-    JOIN files fl ON fl.file_id = e.file_id
+    JOIN ds_file d ON d.file_id = refs.file_id
+         AND LOWER(d.ds_name) = LOWER(refs.target_file)
+         AND d.target_file_id = e.file_id
     WHERE e.kind = refs.target_kind
-      AND LOWER(REPLACE(fl.name, '.fmp12', '')) = LOWER(refs.target_file)
       AND e.fm_id = refs.target_fm_id
     ORDER BY e.entity_id LIMIT 1)
 WHERE target_file IS NOT NULL AND target_entity_id IS NULL
@@ -133,9 +193,10 @@ WHERE target_file IS NOT NULL AND target_entity_id IS NULL
 UPDATE refs
 SET target_entity_id = (
     SELECT e.entity_id FROM entities e
-    JOIN files fl ON fl.file_id = e.file_id
+    JOIN ds_file d ON d.file_id = refs.file_id
+         AND LOWER(d.ds_name) = LOWER(refs.target_file)
+         AND d.target_file_id = e.file_id
     WHERE e.kind = refs.target_kind
-      AND LOWER(REPLACE(fl.name, '.fmp12', '')) = LOWER(refs.target_file)
       AND e.name = refs.target_name
     ORDER BY e.entity_id LIMIT 1)
 WHERE target_file IS NOT NULL AND target_entity_id IS NULL
@@ -281,3 +342,54 @@ GROUP BY target_kind, context ORDER BY n DESC;
 DROP VIEW IF EXISTS v_ambiguous;
 CREATE VIEW v_ambiguous AS
 SELECT * FROM v_usage WHERE ambiguous = 1;
+
+-- Dangling references (v1.13.0): one row per defect the DDR itself marks.
+-- Three branches: (1) unresolved refs whose target_raw carries a marker
+-- (fmsonar's '<unknown>' or the DDR's <Table Missing> / <Field Missing>) or
+-- whose target_file is '<unknown>'; (2) broken calculations, one row per
+-- (entity, marker) for <Table Missing>, <Field Missing> and <Function Missing>
+-- in calc_text, the auto-enter calc, the validation calc, a hide calc or a
+-- tooltip calc; (3) table occurrences on a data source that no longer exists.
+-- Disabled rows are included with the flag, never filtered. step_type is NULL
+-- for a button step (layout objects are the source, their steps are not
+-- entities). source_parent_name is the owning script for a step and the
+-- enclosing object or layout for a layout object.
+DROP VIEW IF EXISTS v_dangling;
+CREATE VIEW v_dangling AS
+SELECT r.ref_id, r.file_id, r.context, r.source_kind,
+       se.name      AS source_name,
+       sp.name      AS source_parent_name,
+       se.step_type AS step_type,
+       r.target_kind,
+       r.target_raw AS marker,
+       CASE WHEN r.target_raw LIKE '%<Field Missing>%' THEN '<Field Missing>'
+            WHEN r.target_raw LIKE '%<Table Missing>%' THEN '<Table Missing>'
+            ELSE '<unknown>' END AS marker_class,
+       r.target_fm_id, r.disabled
+FROM refs r
+LEFT JOIN entities se ON se.entity_id = r.source_entity_id
+LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
+WHERE r.target_entity_id IS NULL
+  AND (r.target_raw LIKE '%<unknown>%'
+       OR r.target_raw LIKE '%<Table Missing>%'
+       OR r.target_raw LIKE '%<Field Missing>%'
+       OR r.target_file = '<unknown>')
+UNION ALL
+SELECT NULL, e.file_id, 'broken_calc', e.kind, e.name, sp.name, e.step_type, NULL,
+       m.marker, m.marker, NULL,
+       COALESCE(json_extract(e.extra_json, '$.disabled'), 0)
+FROM entities e
+JOIN (SELECT '<Table Missing>' AS marker
+      UNION ALL SELECT '<Field Missing>'
+      UNION ALL SELECT '<Function Missing>') m
+LEFT JOIN entities sp ON sp.entity_id = e.parent_entity_id
+WHERE e.calc_text LIKE '%' || m.marker || '%'
+   OR json_extract(e.auto_enter, '$.calc') LIKE '%' || m.marker || '%'
+   OR json_extract(e.extra_json, '$.validation_calc') LIKE '%' || m.marker || '%'
+   OR json_extract(e.extra_json, '$.hide_calc') LIKE '%' || m.marker || '%'
+   OR json_extract(e.extra_json, '$.tooltip_calc') LIKE '%' || m.marker || '%'
+UNION ALL
+SELECT NULL, t.file_id, 'missing_data_source', 'table_occurrence', t.name, NULL, NULL,
+       NULL, '<unknown>', '<unknown>', NULL, 0
+FROM entities t
+WHERE t.kind = 'table_occurrence' AND t.ext_file = '<unknown>';

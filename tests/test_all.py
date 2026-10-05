@@ -1021,6 +1021,101 @@ class TestLayoutContext(unittest.TestCase):
         self.assertIn("Contacts", text)
 
 
+class TestExternalDataSources(unittest.TestCase):
+    """v1.13.0: a reference through a TO on an external data source, or a
+    step behind a FileReference marker, resolves to the file the data source
+    points at: by the catalog's link, then by name (v_data_sources). An
+    external TO never resolves to a local field with the same base table."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_ds_")
+        cls.multi = os.path.join(cls.tmp, "three.db")
+        build([FIXTURE, FIXTURE_B, FIXTURE_C], cls.multi, label="three")
+        cls.conn = sqlite3.connect(cls.multi)
+        cls.single = build_fixture_db(cls.tmp, src=FIXTURE_C)
+        cls.sconn = sqlite3.connect(cls.single)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        cls.sconn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def target(self, conn, raw):
+        """(field name, base table, file) the calc ref with that raw resolved to."""
+        return conn.execute("""
+            SELECT te.name, te.base_table, fl.name FROM refs r
+            LEFT JOIN entities te ON te.entity_id = r.target_entity_id
+            LEFT JOIN files fl ON fl.file_id = te.file_id
+            WHERE r.context = 'calc' AND r.target_raw = ?""", (raw,)).fetchone()
+
+    def test_external_to_resolves_by_catalog_link(self):
+        # the data source is named "Main" but links MicroTest_fmp12.xml: only
+        # the link can find it. MicroC has its own CTC::email; it must lose.
+        self.assertEqual(self.target(self.conn, "main_CTC::email"),
+                         ("email", "CTC", "MicroTest.fmp12"))
+
+    def test_external_to_resolves_by_name(self):
+        self.assertEqual(self.target(self.conn, "b_LOG::message"),
+                         ("message", "LOG", "MicroB.fmp12"))
+
+    def test_self_referencing_source_resolves_to_own_file(self):
+        self.assertEqual(self.target(self.conn, "self_CTC::email"),
+                         ("email", "CTC", "MicroC.fmp12"))
+
+    def test_source_without_a_file_stays_unresolved(self):
+        self.assertEqual(self.target(self.conn, "gone_X::email"), (None, None, None))
+
+    def test_external_script_call_resolves_in_the_linked_file(self):
+        # Script id 1 exists in MicroC too ("C One"); the call must land on
+        # MicroTest's script 1
+        row = self.conn.execute("""
+            SELECT te.name, fl.name FROM refs r
+            JOIN entities te ON te.entity_id = r.target_entity_id
+            JOIN files fl ON fl.file_id = te.file_id
+            WHERE r.target_raw = 'Main Script' AND r.target_file = 'Main'""").fetchone()
+        self.assertEqual(row, ("Main Script", "MicroTest.fmp12"))
+        # the two <Script id="2"/> calls stay unresolved, the first with the
+        # '<unknown>' file marker
+        rows = self.conn.execute("""
+            SELECT r.target_file, r.target_entity_id FROM refs r
+            JOIN entities s ON s.entity_id = r.source_entity_id
+            JOIN entities scr ON scr.entity_id = s.parent_entity_id
+            WHERE scr.name = 'Calls' AND r.target_fm_id = '2' ORDER BY r.ref_id""").fetchall()
+        self.assertEqual(rows, [("<unknown>", None), (None, None)])
+
+    def test_v_data_sources(self):
+        rows = self.conn.execute("""
+            SELECT ds_name, link, target_file_name FROM v_data_sources d
+            JOIN files f ON f.file_id = d.file_id
+            WHERE f.name = 'MicroC.fmp12' ORDER BY ds_name""").fetchall()
+        self.assertEqual(rows, [("Gone", None, None),
+                                ("Main", "MicroTest_fmp12.xml", "MicroTest.fmp12"),
+                                ("MicroB", None, "MicroB.fmp12"),
+                                ("Self", "MicroC_fmp12.xml", "MicroC.fmp12")])
+        # a file without a catalog still gets rows for the names it uses
+        rows = self.conn.execute("""
+            SELECT ds_name, target_file_name FROM v_data_sources d
+            JOIN files f ON f.file_id = d.file_id
+            WHERE f.name = 'MicroTest.fmp12'""").fetchall()
+        self.assertEqual(rows, [("MicroB", "MicroB.fmp12")])
+
+    def test_missing_source_marked_on_the_to(self):
+        self.assertEqual(self.conn.execute(
+            "SELECT ext_file FROM entities WHERE kind='table_occurrence' AND name='lost_Y'"
+        ).fetchone()[0], "<unknown>")
+
+    def test_single_file_build_never_links_externals_locally(self):
+        # without MicroTest and MicroB in the DB the refs through main_CTC,
+        # gone_X and b_LOG stay NULL (never the local CTC::email); only the
+        # self-referencing source resolves, to this file's own field
+        for raw in ("main_CTC::email", "gone_X::email", "b_LOG::message"):
+            self.assertEqual(self.target(self.sconn, raw), (None, None, None), raw)
+        self.assertEqual(self.target(self.sconn, "self_CTC::email"),
+                         ("email", "CTC", "MicroC.fmp12"))
+
+
 class TestDangling(unittest.TestCase):
     """v1.13.0: the DDR's own markers and the LayoutDestination decide what an
     empty reference element is. An unset optional slot emits nothing; a deleted
@@ -1136,6 +1231,66 @@ class TestDangling(unittest.TestCase):
             "SELECT source_kind, target_raw, target_name FROM refs "
             "WHERE source_kind='custom_menu'").fetchall(),
             [("custom_menu", "<unknown>", "<unknown>")])
+
+    def test_markers_never_resolve(self):
+        # the two "id exists but name is empty" cases: layout 1 ("C Main") and
+        # script 2 ("C Two") exist, the refs must not land on them
+        n = self.conn.execute("""
+            SELECT COUNT(*) FROM refs r JOIN entities t ON t.entity_id = r.target_entity_id
+            WHERE t.name IN ('C Main', 'C Two')""").fetchone()[0]
+        self.assertEqual(n, 0)
+        n = self.conn.execute("""
+            SELECT COUNT(*) FROM refs WHERE target_entity_id IS NOT NULL
+              AND (target_raw LIKE '%<unknown>%' OR target_raw LIKE '%Missing>%'
+                   OR target_file = '<unknown>')""").fetchone()[0]
+        self.assertEqual(n, 0)
+        # the real sort criterion next to the empty one resolves
+        self.assertEqual(self.conn.execute("""
+            SELECT te.name FROM refs r JOIN entities te ON te.entity_id = r.target_entity_id
+            WHERE r.context = 'sort'""").fetchall(), [("email",)])
+
+    def test_v_dangling_refs(self):
+        rows = self.conn.execute("""
+            SELECT context, source_kind, source_parent_name, step_type, marker,
+                   marker_class, disabled
+            FROM v_dangling WHERE ref_id IS NOT NULL ORDER BY ref_id""").fetchall()
+        self.assertEqual(rows, [
+            ("join_predicate", "relationship", None, None, "CTC::<unknown>", "<unknown>", 0),
+            ("go_to_layout", "layout_object", "C Main", None, "<unknown>", "<unknown>", 0),
+            ("layout_context", "layout", None, None, "<unknown>", "<unknown>", 0),
+            ("perform_script", "script_step", "Calls", "Perform Script", "<unknown>", "<unknown>", 0),
+            ("perform_script", "script_step", "Calls", "Perform Script", "<unknown>", "<unknown>", 0),
+            ("perform_script", "script_step", "Calls", "Perform Script", "<unknown>", "<unknown>", 0),
+            ("go_to_layout", "script_step", "Defects", "Go to Layout", "<unknown>", "<unknown>", 0),
+            ("go_to_layout", "script_step", "Defects", "Go to Layout", "<unknown>", "<unknown>", 0),
+            ("step_target", "script_step", "Defects", "Set Field", "<Table Missing>", "<Table Missing>", 0),
+            ("step_target", "script_step", "Defects", "Set Field", "CTC::<Field Missing>", "<Field Missing>", 0),
+            ("sort", "script_step", "Defects", "Sort Records", "<unknown>", "<unknown>", 0),
+            ("step_target", "script_step", "Defects", "Set Field", "<Table Missing>", "<Table Missing>", 1),
+            ("go_to_layout", "script_step", "Defects", "Go to Related Record", "<unknown>", "<unknown>", 0),
+            ("perform_script", "custom_menu", None, None, "<unknown>", "<unknown>", 0),
+        ])
+        # the Add Account and Open File steps have no row (text-only markers)
+        self.assertEqual(self.conn.execute("""
+            SELECT COUNT(*) FROM v_dangling
+            WHERE step_type IN ('Add Account', 'Open File')""").fetchone()[0], 0)
+
+    def test_v_dangling_broken_calcs_and_missing_source(self):
+        rows = self.conn.execute("""
+            SELECT context, source_kind, source_name, marker, disabled
+            FROM v_dangling WHERE ref_id IS NULL ORDER BY context, source_kind, marker""").fetchall()
+        self.assertEqual(rows, [
+            ("broken_calc", "custom_function", "BrokenCF", "<Function Missing>", 0),
+            ("broken_calc", "field", "broken_c", "<Field Missing>", 0),
+            ("broken_calc", "field", "broken_c", "<Table Missing>", 0),
+            ("broken_calc", "layout_object", None, "<Field Missing>", 0),   # the hide calc
+            ("broken_calc", "layout_object", None, "<Table Missing>", 0),
+            ("missing_data_source", "table_occurrence", "lost_Y", "<unknown>", 0),
+        ])
+
+    def test_v_unresolved_keeps_three_columns(self):
+        cols = [c[1] for c in self.conn.execute("PRAGMA table_info(v_unresolved)")]
+        self.assertEqual(cols, ["target_kind", "context", "n"])
 
     def test_data_source_catalog_and_markers(self):
         rows = self.conn.execute(

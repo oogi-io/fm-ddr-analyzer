@@ -690,11 +690,27 @@ function resolve(){
   // normalized file name -> fileIdx (for cross-file FileReference targets)
   const fileByName={};
   H.fileNames.forEach((n,idx)=>{ fileByName[(n||'').toLowerCase().replace(/\.fmp12$/,'')]=idx; });
+  // v1.13.0: data sources (mirrors v_data_sources / ds_file in resolve.sql).
+  // dsFile[K(fileIdx, dsNameLower)] -> fileIdx: (a) the catalog link minus a
+  // trailing _fmp12.xml, then (b) the name itself; '<unknown>' never gets a row.
+  const dsFile={};
+  const dsByName=(nm)=>fileByName[nm.toLowerCase()];
+  for(const e of H.entities) if(e.k==='external_data_source' && e.ex && e.ex.file && e.n){
+    const key=K(e.f,e.n.toLowerCase()); if(key in dsFile) continue;
+    let t=null;
+    if(e.ex.link!=null) t=fileByName[e.ex.link.toLowerCase().replace(/_fmp12\.xml$/,'')] ?? null;
+    if(t==null) t=dsByName(e.n) ?? null;
+    if(t!=null) dsFile[key]=t;
+  }
+  const dsSeen=(f,nm)=>{ if(nm==null||nm===UNKNOWN) return; const key=K(f,nm.toLowerCase());
+    if(key in dsFile) return; const t=dsByName(nm); if(t!=null) dsFile[key]=t; };
+  for(const e of H.entities) if(e.k==='table_occurrence' && e.ef!=null) dsSeen(e.f,e.ef);
+  for(const r of H.edges) if(r.tf!=null) dsSeen(r.f,r.tf);
   for(const r of H.edges){
     const f=r.f; let id=null, amb=0;
     if(r.tf!=null){
-      // external target: resolve ONLY against the named file; else stay null
-      const tfIdx=fileByName[r.tf.toLowerCase()];
+      // external target: resolve ONLY against the file its data source points at
+      const tfIdx=r.tf===UNKNOWN?null:dsFile[K(f,r.tf.toLowerCase())];
       if(tfIdx!=null){
         if(r.tk==='script')
           id=(r.fm!=null?scriptByFm[K(tfIdx,r.fm)]:null) ?? scriptByName[K(tfIdx,r.name)] ?? null;
@@ -706,27 +722,28 @@ function resolve(){
     }
     if(r.tk==='field'){
       if(r.to!=null){
-        const bt=toBase[K(f,r.to)];
-        if(bt!=null){
-          id=fieldByBtName[K(f,bt+SEP1+r.name)];
-          if(id==null && toExt[K(f,r.to)]!=null){
-            // external TO: its base table's fields live in the named file
-            const efIdx=fileByName[toExt[K(f,r.to)].toLowerCase()];
+        const bt=toBase[K(f,r.to)], ef=toExt[K(f,r.to)];
+        if(bt!=null && r.name!=null){
+          if(ef!=null){
+            // external TO: ONLY the file its data source points at, never local
+            const efIdx=ef===UNKNOWN?null:dsFile[K(f,ef.toLowerCase())];
             if(efIdx!=null) id=fieldByBtName[K(efIdx,bt+SEP1+r.name)] ?? null;
           }
+          else id=fieldByBtName[K(f,bt+SEP1+r.name)] ?? null;
         }
       }
-      else { id=fieldByName[K(f,r.name)]; if(id!=null&&fieldNameCount[K(f,r.name)]>1) amb=1; }
+      else if(r.name!=null){ id=fieldByName[K(f,r.name)]; if(id!=null&&fieldNameCount[K(f,r.name)]>1) amb=1; }
     } else if(r.tk==='table_occurrence'){
       // layout context: (file, fm id) first; fm ids collide across files
       if(r.c==='layout_context' && r.fm!=null) id=toByFm[K(f,r.fm)] ?? null;
       if(id==null && r.name!=null) id=toByName[K(f,r.name)] ?? null; }
     else if(r.tk==='script'){
-      if(r.fm!=null&&scriptByFm[K(f,r.fm)]!=null) id=scriptByFm[K(f,r.fm)];
-      else { id=scriptByName[K(f,r.name)]; if(id!=null&&scriptNameCount[K(f,r.name)]>1) amb=1; } }
+      // a '<unknown>' raw is a deleted script: the id alone never resolves it (v1.13.0)
+      if(r.fm!=null&&r.tr!==UNKNOWN&&scriptByFm[K(f,r.fm)]!=null) id=scriptByFm[K(f,r.fm)];
+      else if(r.name!=null){ id=scriptByName[K(f,r.name)]; if(id!=null&&scriptNameCount[K(f,r.name)]>1) amb=1; } }
     else if(r.tk==='layout'){
-      if(r.fm!=null&&layoutByFm[K(f,r.fm)]!=null) id=layoutByFm[K(f,r.fm)];
-      else { id=layoutByName[K(f,r.name)]; if(id!=null&&layoutNameCount[K(f,r.name)]>1) amb=1; } }
+      if(r.fm!=null&&r.tr!==UNKNOWN&&layoutByFm[K(f,r.fm)]!=null) id=layoutByFm[K(f,r.fm)];
+      else if(r.name!=null){ id=layoutByName[K(f,r.name)]; if(id!=null&&layoutNameCount[K(f,r.name)]>1) amb=1; } }
     else if(r.tk==='value_list'){ id=vlByName[K(f,r.name)]; }
     else if(r.tk==='custom_function'){ id=cfByName[K(f,r.name)]; }
     if(id!=null) r.t=id;
