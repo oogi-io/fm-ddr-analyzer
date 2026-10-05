@@ -195,6 +195,20 @@ class DDRHandler(xml.sax.ContentHandler):
                               name=a.get("name"), raw=a.get("name"))
             return
 
+        # v1.12.0: a layout's own context TO is its first child <Table id name/>.
+        # Without this edge a TO used only as a layout context looked unused.
+        # An empty name (seen in real DDRs) means the TO no longer exists: the
+        # ref keeps the fm_id and stays unresolved, so it is findable as a defect.
+        # The top-of-stack guard skips "-" separators (no entity opened) and the
+        # <Table> inside steps (Go to Related Record, New Window).
+        if (tag == "Table" and parent == "Layout" and self.entity_stack
+                and self.entity_stack[-1]["kind"] == "layout"):
+            fmid, nm = a.get("id"), a.get("name") or None
+            if nm or fmid not in (None, "0"):
+                self.emit_ref("layout_context", "table_occurrence", fm_id=fmid,
+                              name=nm, raw=a.get("name"))
+            return
+
         if tag == "Step" and parent == "StepList":
             owner = next((e for e in reversed(self.entity_stack)
                           if e["kind"] == "script"), None)

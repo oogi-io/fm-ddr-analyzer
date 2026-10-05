@@ -42,6 +42,17 @@ WHERE target_kind = 'field' AND target_entity_id IS NOT NULL
        WHERE f.file_id = refs.file_id AND f.kind = 'field'
          AND f.name = refs.target_name) > 1;
 
+-- Layout context TOs (v1.12.0): by FileMaker id within the SAME file first.
+-- fm_id collides across files of a multi-file solution, so file_id is part of
+-- the key. A layout's TO always lives in the layout's own file's graph.
+UPDATE refs
+SET target_entity_id = (
+    SELECT e.entity_id FROM entities e
+    WHERE e.file_id = refs.file_id AND e.kind = 'table_occurrence'
+      AND e.fm_id = refs.target_fm_id ORDER BY e.entity_id LIMIT 1)
+WHERE target_kind = 'table_occurrence' AND context = 'layout_context'
+  AND target_entity_id IS NULL AND target_fm_id IS NOT NULL;
+
 -- Table occurrences: by name (unique per file in FileMaker).
 UPDATE refs
 SET target_entity_id = (

@@ -366,6 +366,12 @@ function onStart(tag,a){
     }
     else emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
     return; }
+  // v1.12.0: a layout's own context TO (first child <Table id name/>). An empty
+  // name means the TO is gone: keep the fm id, leave the ref unresolved.
+  if(tag==='Table' && parent==='Layout' && H.estack.length && H.estack[H.estack.length-1].k==='layout'){
+    const nm=a.name||null;
+    if(nm || (a.id!=null && a.id!=='0')) emitRef('layout_context','table_occurrence',{fm:a.id,name:nm,raw:a.name});
+    return; }
   if(tag==='Step' && parent==='StepList'){
     let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
     let ordinal=null;
@@ -633,11 +639,12 @@ function feed(buffer){
 function resolve(){
   const SEP1=String.fromCharCode(1);
   const K=(f,x)=>f+SEP1+x;
-  const toBase={}, toByName={}, toExt={}, fieldByBtName={}, fieldByName={}, fieldNameCount={},
+  const toBase={}, toByName={}, toByFm={}, toExt={}, fieldByBtName={}, fieldByName={}, fieldNameCount={},
         scriptByFm={}, scriptByName={}, scriptNameCount={},
         layoutByFm={}, layoutByName={}, layoutNameCount={}, vlByName={}, cfByName={};
   for(const e of H.entities){
     if(e.k==='table_occurrence'){ toBase[K(e.f,e.n)]=e.bt; toByName[K(e.f,e.n)]=e.id;
+      if(e.fm!=null && !(K(e.f,e.fm) in toByFm)) toByFm[K(e.f,e.fm)]=e.id;
       if(e.ef!=null) toExt[K(e.f,e.n)]=e.ef; }
     else if(e.k==='field'){ fieldByBtName[K(e.f,e.bt+SEP1+e.n)]=e.id;
       const k=K(e.f,e.n); if(!(k in fieldByName)) fieldByName[k]=e.id;
@@ -681,7 +688,10 @@ function resolve(){
         }
       }
       else { id=fieldByName[K(f,r.name)]; if(id!=null&&fieldNameCount[K(f,r.name)]>1) amb=1; }
-    } else if(r.tk==='table_occurrence'){ id=toByName[K(f,r.name)]; }
+    } else if(r.tk==='table_occurrence'){
+      // layout context: (file, fm id) first; fm ids collide across files
+      if(r.c==='layout_context' && r.fm!=null) id=toByFm[K(f,r.fm)] ?? null;
+      if(id==null && r.name!=null) id=toByName[K(f,r.name)] ?? null; }
     else if(r.tk==='script'){
       if(r.fm!=null&&scriptByFm[K(f,r.fm)]!=null) id=scriptByFm[K(f,r.fm)];
       else { id=scriptByName[K(f,r.name)]; if(id!=null&&scriptNameCount[K(f,r.name)]>1) amb=1; } }
@@ -974,7 +984,7 @@ function initViewer(DATA){
   const CTXL={perform_script:'perform script',trigger:'trigger',calc:'in calculation',
     field_reference:'set field / reference',go_to_layout:'go to layout',layout_object:'on layout',
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
-    to_reference:'TO reference',value_list_field:'value list source',sort:'sort order'};
+    to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can

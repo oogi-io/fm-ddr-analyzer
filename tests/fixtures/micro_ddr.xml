@@ -154,6 +154,7 @@
 	<LayoutCatalog>
 		<Group groupCollapsed="False" includeInMenu="True" id="1" name="Interfaces">
 			<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Contacts">
+				<Table id="1" name="CTC"/>
 				<Object type="Field" key="10" LabelKey="0" flags="0" rotation="0">
 					<ScriptTriggers>
 						<Trigger event="OnObjectEnter" id="1" triggerFlags="1">
@@ -205,8 +206,10 @@
 				</Object>
 			</Layout>
 			<Layout width="640" quickFind="True" includeInMenu="True" id="2" name="Invoices">
+				<Table id="9" name=""/>
 			</Layout>
 			<Layout width="640" quickFind="False" includeInMenu="False" id="3" name="-">
+				<Table id="0" name=""/>
 			</Layout>
 		</Group>
 	</LayoutCatalog>

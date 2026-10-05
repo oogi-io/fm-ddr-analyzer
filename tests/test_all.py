@@ -920,6 +920,80 @@ class TestV110Capture(unittest.TestCase):
         self.assertIn("value_list", kinds)
 
 
+class TestLayoutContext(unittest.TestCase):
+    """v1.12.0: each layout's own context TO is a layout_context ref, resolved
+    by (file_id, fm_id); an empty <Table name=""/> is a missing TO."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v112_")
+        cls.db = build_fixture_db(cls.tmp)
+        cls.conn = sqlite3.connect(cls.db)
+        cls.multi = os.path.join(cls.tmp, "multi.db")
+        build([FIXTURE, FIXTURE_B], cls.multi, label="multi")
+        cls.mconn = sqlite3.connect(cls.multi)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        cls.mconn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def ctx_rows(self, conn):
+        return {lay: (fmid, tname, te_name, te_file)
+                for lay, fmid, tname, te_name, te_file in conn.execute("""
+            SELECT lay.name, r.target_fm_id, r.target_name, te.name, fl.name
+            FROM refs r
+            JOIN entities lay ON lay.entity_id = r.source_entity_id
+            LEFT JOIN entities te ON te.entity_id = r.target_entity_id
+            LEFT JOIN files fl ON fl.file_id = te.file_id
+            WHERE r.context = 'layout_context'""")}
+
+    def test_named_context_to_resolves(self):
+        rows = self.ctx_rows(self.conn)
+        self.assertEqual(rows["Contacts"], ("1", "CTC", "CTC", "MicroTest.fmp12"))
+        src_kind, tk = self.conn.execute(
+            "SELECT source_kind, target_kind FROM refs "
+            "WHERE context='layout_context' AND target_name='CTC'").fetchone()
+        self.assertEqual((src_kind, tk), ("layout", "table_occurrence"))
+
+    def test_empty_name_is_unresolved_and_findable(self):
+        # <Table id="9" name=""/>: no TO with fm_id 9 exists -> missing TO
+        rows = self.ctx_rows(self.conn)
+        self.assertEqual(rows["Invoices"], ("9", None, None, None))
+        missing = [r[0] for r in self.conn.execute("""
+            SELECT lay.name FROM refs r
+            JOIN entities lay ON lay.entity_id = r.source_entity_id
+            WHERE r.context='layout_context' AND r.target_entity_id IS NULL""")]
+        self.assertEqual(missing, ["Invoices"])
+
+    def test_separator_layout_emits_nothing(self):
+        # the "-" menu separator carries <Table id="0" name=""/>: no layout, no ref
+        n = self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context='layout_context'").fetchone()[0]
+        self.assertEqual(n, 2)
+
+    def test_multifile_fm_id_collision_keys_on_file(self):
+        # MicroB's layout "Log" points at TO id 1 (LOG); MicroTest also has a
+        # TO id 1 (CTC). It must resolve inside its own file.
+        rows = self.ctx_rows(self.mconn)
+        self.assertEqual(rows["Log"], ("1", "LOG", "LOG", "MicroB.fmp12"))
+        self.assertEqual(rows["Contacts"], ("1", "CTC", "CTC", "MicroTest.fmp12"))
+        # "Log Orphan" names TO id 3, which exists only in MicroTest (ctc_INV):
+        # it must stay unresolved, never cross-link to the other file
+        self.assertEqual(rows["Log Orphan"], ("3", None, None, None))
+
+    def test_where_shows_layout_context(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["where", self.db, "CTC"])
+        text = out.getvalue()
+        self.assertIn("layout_context", text)
+        self.assertIn("Contacts", text)
+
+
 class TestRobustness(unittest.TestCase):
     """Hostile-input and error-path behavior (v1.10.0 hardening round)."""
 

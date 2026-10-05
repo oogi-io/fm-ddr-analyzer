@@ -803,6 +803,26 @@
    ""
   ],
   [
+   "layout|Contacts|layout_group|Interfaces||0|0",
+   "layout_context",
+   "table_occurrence",
+   "CTC",
+   "table_occurrence|CTC||0",
+   0,
+   0,
+   ""
+  ],
+  [
+   "layout|Invoices|layout_group|Interfaces||0|0",
+   "layout_context",
+   "table_occurrence",
+   "",
+   "",
+   0,
+   0,
+   ""
+  ],
+  [
    "relationship|CTC :: ctc_INV||0",
    "join_predicate",
    "field",

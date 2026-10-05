@@ -10,6 +10,21 @@
 			</FieldCatalog>
 		</BaseTable>
 	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="LOG" name="LOG"/>
+		</TableList>
+		<RelationshipList>
+		</RelationshipList>
+	</RelationshipGraph>
+	<LayoutCatalog>
+		<Layout width="640" quickFind="True" includeInMenu="True" id="1" name="Log">
+			<Table id="1" name="LOG"/>
+		</Layout>
+		<Layout width="640" quickFind="True" includeInMenu="True" id="2" name="Log Orphan">
+			<Table id="3" name=""/>
+		</Layout>
+	</LayoutCatalog>
 	<ScriptCatalog>
 		<Group groupCollapsed="False" includeInMenu="True" id="1" name="API">
 			<Script includeInMenu="True" id="2" name="Remote Helper">
