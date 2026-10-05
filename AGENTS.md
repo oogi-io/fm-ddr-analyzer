@@ -38,7 +38,8 @@ multi-file build (missing sibling XMLs), not a broken solution.
   Contexts: `calc, step_target` (field a step acts on — Set Field target etc.),
   `join_predicate, perform_script, go_to_layout, trigger, layout_object,
   field_reference, value_list_source, value_list_field, sort, to_reference,
-  function_ref`.
+  function_ref, layout_context` (a layout's own context TO; unresolved =
+  the TO was deleted).
 - **`files`** — one row per FileMaker file in a multi-file solution.
 - **`text_index`** — FTS5 over every name, calculation, and step text.
 

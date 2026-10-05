@@ -196,7 +196,8 @@ exports side by side; today `build` always writes a fresh single-snapshot DB
 **Reference contexts** (`refs.context`): `calc`, `step_target` (the field a step
 writes to — e.g. Set Field), `join_predicate`, `perform_script`, `go_to_layout`,
 `trigger`, `layout_object`, `field_reference`, `value_list_source`,
-`value_list_field`, `sort`, `to_reference`, `function_ref`.
+`value_list_field`, `sort`, `to_reference`, `function_ref`, `layout_context`
+(a layout's own context table occurrence, v1.12.0).
 
 ### How references resolve
 
@@ -206,7 +207,9 @@ solutions ~98% resolve; the rest are genuinely unresolvable and expected:
 
 - `perform_script` to scripts in **other files** (external),
 - `go_to_layout` with a **calculated** destination,
-- `layout_object` fields that are **globals / unbound**.
+- `layout_object` fields that are **globals / unbound**,
+- `layout_context` refs of layouts whose table occurrence was **deleted** (the
+  DDR writes an empty TO name; a real defect, reported as unresolved).
 
 Built-in FileMaker functions are intentionally *not* stored as edges (only
 `CustomFunctionRef` chunks become `custom_function` edges); use FTS to find

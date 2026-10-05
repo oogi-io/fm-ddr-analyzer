@@ -110,6 +110,28 @@ SELECT context, source_kind, source_parent_name, source_name
 FROM v_usage WHERE target_kind = 'table_occurrence' AND target_name = 'contact_INT';
 ```
 
+**Layouts based on** a table occurrence (its layout context, v1.12.0+):
+
+```sql
+SELECT source_name AS layout
+FROM v_usage
+WHERE context = 'layout_context' AND target_kind = 'table_occurrence'
+  AND target_name = 'contact_INT'
+ORDER BY layout;
+```
+
+**Layouts whose context TO is missing** (the DDR writes `name=""` and no TO
+with that id exists in the file: the layout's TO was deleted, a real defect):
+
+```sql
+SELECT f.name AS file, lay.name AS layout, r.target_fm_id AS missing_to_id
+FROM refs r
+JOIN entities lay ON lay.entity_id = r.source_entity_id
+JOIN files f ON f.file_id = r.file_id
+WHERE r.context = 'layout_context' AND r.target_entity_id IS NULL
+ORDER BY f.name, lay.name;
+```
+
 Where is a **custom function** called?
 
 ```sql
@@ -301,12 +323,19 @@ be run from a menu/button/external, so verify):
 SELECT grp, name FROM v_orphan_scripts ORDER BY grp, name;
 ```
 
-**Table occurrences** never used on a layout or in a relationship:
+**Table occurrences** never used as a layout context (v1.12.0+), in a
+relationship, by a TO reference, or as the TO of a `TO::Field` reference:
 
 ```sql
 SELECT t.name FROM entities t
 WHERE t.kind='table_occurrence'
-  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = t.entity_id);
+  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = t.entity_id
+                  AND r.disabled = 0)
+  AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.file_id = t.file_id
+                  AND r.target_kind = 'field' AND r.target_to_name = t.name
+                  AND r.disabled = 0);
+-- An index built before v1.12.0 has no layout_context refs: there, a TO used
+-- only as a layout's context wrongly lands in this list. Rebuild first.
 ```
 
 **Most-referenced fields** (schema hotspots):

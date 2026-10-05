@@ -26,12 +26,22 @@ outputs as review lists, never as delete lists.
 | `trigger` | Script attached to a script trigger; `refs.trigger_event` records the firing event (OnRecordCommit, OnObjectSave, ...) (v1.9.0). **Trigger refs are sourced from layouts/layout objects, not scripts** — query them via `v_triggers`, never via a script-parent join. v1.9.1 adds **file-level triggers** (`WindowTriggers`: OnFirstWindowOpen, OnLastWindowClose, OnWindowClose — the startup/shutdown scripts); they appear in `v_triggers` with `layout_name IS NULL` | `Script` inside `ScriptTriggers` (event from the enclosing `Trigger`) or inside `WindowTriggers` (event = wrapper tag) |
 | `go_to_layout` | Layout targeted by a Go to Layout step/button | `Layout` reference elements |
 | `to_reference` | Table occurrence referenced directly | `TableOccurrenceReference` |
+| `layout_context` (v1.12.0) | A layout's own context table occurrence ("Show records from"). Source = the layout, target_kind = `table_occurrence`. A TO used only as a layout context is no longer "unused". Resolved by (file, FileMaker id), then name. An **empty** `name` means the TO no longer exists: the ref keeps `target_fm_id` and stays unresolved, a real defect worth reporting (QUERIES.md: "layouts whose context TO is missing") | The `<Table id name/>` that is the direct child of a layout definition |
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
 possible. Unresolvable targets stay `NULL` — usually **legitimately**:
 scripts in other files, calculated layout destinations, unbound globals.
 Ambiguous picks (several same-named candidates, no qualifier) are flagged
 `ambiguous = 1` (see `v_ambiguous`); the pick is deterministic but uncertain.
+
+**Layout context TO (v1.12.0):** every layout definition emits exactly one
+`layout_context` ref to its context TO (menu separators named "-" emit none).
+FileMaker ids collide across the files of a multi-file solution, so the
+resolver keys on the layout's own file plus the TO's FileMaker id, never the id
+alone. A DDR writes `<Table id="..." name=""/>` when the layout's TO was
+deleted; such refs stay unresolved (`target_entity_id IS NULL`, `target_fm_id`
+kept). The `<Table>` inside Go to Related Record or New Window steps is not a
+layout context and is not captured by this rule.
 
 **Disabled steps (v1.6.1):** the DDR includes commented-out (`enable="False"`,
 `//`-prefixed) script steps, and their references used to count as live usage.
