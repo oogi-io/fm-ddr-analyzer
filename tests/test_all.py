@@ -1288,6 +1288,29 @@ class TestDangling(unittest.TestCase):
             ("missing_data_source", "table_occurrence", "lost_Y", "<unknown>", 0),
         ])
 
+    def test_stats_prints_dangling_block(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["stats", self.db])
+        text = out.getvalue()
+        self.assertIn("# Dangling references (defects the DDR marks)", text)
+        self.assertRegex(text, r"step_target\s+<Table Missing>\s+1\s+1")
+        self.assertRegex(text, r"broken_calc\s+<Function Missing>\s+1\s+0")
+        # an index without the view gets the one-line hint and stats continues
+        old = os.path.join(self.tmp, "old.db")
+        shutil.copyfile(self.db, old)
+        c = sqlite3.connect(old)
+        c.execute("DROP VIEW v_dangling"); c.commit(); c.close()
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["stats", old])          # must not raise SystemExit
+        text = out.getvalue()
+        self.assertIn("v_dangling: not in this index (built with parser < 1.13.0); "
+                      "rebuild to get it", text)
+        self.assertIn("# Unresolved by kind/context", text)
+
     def test_v_unresolved_keeps_three_columns(self):
         cols = [c[1] for c in self.conn.execute("PRAGMA table_info(v_unresolved)")]
         self.assertEqual(cols, ["target_kind", "context", "n"])

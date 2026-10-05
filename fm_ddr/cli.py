@@ -1046,6 +1046,21 @@ def cmd_stats(args):
     print("\n# Unresolved by kind/context (external / built-in / broken)")
     _, rows = _rows(conn, "SELECT * FROM v_unresolved")
     _print_table(["target_kind", "context", "n"], rows)
+    # v1.13.0: the defects the DDR itself marks. A missing view is a soft
+    # hint here, never an exit: stats summarizes many things and one missing
+    # view must not hide the rest (cascades exits because the view IS its output).
+    print("\n# Dangling references (defects the DDR marks)")
+    if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='v_dangling'").fetchone():
+        print("  v_dangling: not in this index (built with parser < 1.13.0); rebuild to get it")
+    else:
+        _, rows = _rows(conn, """SELECT context, marker_class,
+                                        SUM(disabled = 0) AS live, SUM(disabled = 1) AS disabled
+                                 FROM v_dangling GROUP BY context, marker_class
+                                 ORDER BY context, marker_class""")
+        if rows:
+            _print_table(["context", "marker_class", "live", "disabled"], rows)
+        else:
+            print("  (none)")
 
 
 def _banner(stream=None):
