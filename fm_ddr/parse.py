@@ -25,8 +25,12 @@ SOURCE_KINDS = {
 
 # Leaf text elements whose character data we accumulate.
 # Text = value-list custom values; Data = layout text-object character runs
-# (both consumed only under their specific ancestors).
-CAPTURE_TAGS = {"Calculation", "StepText", "Chunk", "Name", "Text", "Data"}
+# (both consumed only under their specific ancestors). TableAliasKey (v1.14.0)
+# = the TO a portal shows; it and an empty FieldObj Name are decided at the
+# END of the element (endElement), because _consume_text returns on empty text
+# and the empty key is the case that matters.
+CAPTURE_TAGS = {"Calculation", "StepText", "Chunk", "Name", "Text", "Data",
+                "TableAliasKey"}
 
 def _parser_version():
     from fm_ddr import __version__
@@ -185,11 +189,13 @@ class DDRHandler(xml.sax.ContentHandler):
             self.new_entity("relationship", a, name=None)
             return
 
+        # v1.14.0: script and layout folders carry the raw "Include in menu"
+        # flag ({"in_menu": true} when set; no key when not).
         if tag == "Group" and self.has_ancestor("ScriptCatalog"):
-            self.new_entity("script_group", a)
+            self.new_entity("script_group", a, extra_json=_menu_flags(a))
             return
         if tag == "Group" and self.has_ancestor("LayoutCatalog"):
-            self.new_entity("layout_group", a)
+            self.new_entity("layout_group", a, extra_json=_menu_flags(a))
             return
 
         # A script definition sits directly under ScriptCatalog or a script Group
@@ -199,8 +205,10 @@ class DDRHandler(xml.sax.ContentHandler):
         if tag == "Script" and parent in ("Group", "ScriptCatalog") and self.has_ancestor("ScriptCatalog"):
             # A script named "-" is a FileMaker script-menu separator (empty
             # StepList), not a script — skip it (never fall through to the ref).
+            # v1.14.0: the raw flags {"in_menu", "run_full_access"}, keys
+            # only when true; the separator is skipped before they are read.
             if (a.get("name") or "").strip() != "-":
-                self.new_entity("script", a)
+                self.new_entity("script", a, extra_json=_menu_flags(a, script=True))
             return
 
         if tag == "Layout":
@@ -209,7 +217,7 @@ class DDRHandler(xml.sax.ContentHandler):
             # happens to live on a layout) is a reference.
             if parent in ("LayoutCatalog", "Group") and self.has_ancestor("LayoutCatalog"):
                 if (a.get("name") or "").strip() != "-":   # "-" = layout-menu separator
-                    self.new_entity("layout", a)
+                    self.new_entity("layout", a, extra_json=_menu_flags(a))
             else:
                 nm = a.get("name")
                 if nm:
@@ -226,15 +234,38 @@ class DDRHandler(xml.sax.ContentHandler):
         # v1.12.0: a layout's own context TO is its first child <Table id name/>.
         # Without this edge a TO used only as a layout context looked unused.
         # An empty name (seen in real DDRs) means the TO no longer exists: the
-        # ref keeps the fm_id and stays unresolved, so it is findable as a defect.
-        # The top-of-stack guard skips "-" separators (no entity opened) and the
-        # <Table> inside steps (Go to Related Record, New Window).
+        # ref keeps the fm_id and stays unresolved, so it is findable as a defect
+        # (v1.14.0: whatever the id; the old id-0 exception never fired, a
+        # separator opens no entity). The top-of-stack guard skips "-"
+        # separators (no entity opened); the <Table> inside a step (Go to
+        # Related Record, Import Records) is the step_table rule below.
         if (tag == "Table" and parent == "Layout" and self.entity_stack
                 and self.entity_stack[-1]["kind"] == "layout"):
-            fmid, nm = a.get("id"), a.get("name") or None
-            if nm or fmid not in (None, "0"):
-                self.emit_ref("layout_context", "table_occurrence", fm_id=fmid,
-                              name=nm, raw=nm or UNKNOWN)
+            nm = a.get("name") or None
+            self.emit_ref("layout_context", "table_occurrence", fm_id=a.get("id"),
+                          name=nm, raw=nm or UNKNOWN)
+            return
+
+        # v1.14.0: the TO a step acts on: Go to Related Record ("From table")
+        # and Import Records (the target table); no other step carries the
+        # element. Source = the step, or the layout object / custom menu of a
+        # button or menu step; a disabled step's refs inherit disabled=1. An
+        # empty name is a deleted TO (the step text reads "From table:
+        # <unknown>"): '<unknown>', id kept, unresolved, in v_dangling.
+        if tag == "Table" and parent == "Step":
+            nm = a.get("name") or None
+            self.emit_ref("step_table", "table_occurrence", fm_id=a.get("id"),
+                          name=nm, raw=nm or UNKNOWN)
+            return
+
+        # v1.14.0: the "starting from" TO of a related-values value list
+        # (<ShowRelated value="True"><Table id name/>). An empty name is a TO
+        # the file does not have (a cloned list): '<unknown>', in v_dangling.
+        if (tag == "Table" and parent == "ShowRelated" and self.entity_stack
+                and self.entity_stack[-1]["kind"] == "value_list"):
+            nm = a.get("name") or None
+            self.emit_ref("value_list_context", "table_occurrence", fm_id=a.get("id"),
+                          name=nm, raw=nm or UNKNOWN)
             return
 
         # v1.13.0: per-step state. Every <Step> (StepList, ButtonObj,
@@ -548,7 +579,23 @@ class DDRHandler(xml.sax.ContentHandler):
         # finish text capture
         if self._cap_tag == tag:
             text = "".join(self._buf).strip()
-            self._consume_text(tag, self._cap_attrs, text)
+            # v1.14.0: two slots decided at the END of the element, because
+            # _consume_text returns on empty text and the empty text is the
+            # case that matters. (1) The TO a portal shows: an empty key is a
+            # portal whose TO was deleted. (2) A field object whose <Name> is
+            # empty: its field or TO is gone (1.13.0 dropped these silently).
+            # Both read '<unknown>', unresolved, in v_dangling.
+            if tag == "TableAliasKey":
+                src = self.current_source()
+                if (self.parent_tag() == "PortalObj" and src is not None
+                        and src["kind"] == "layout_object"):
+                    self.emit_ref("portal", "table_occurrence",
+                                  name=text or None, raw=text or UNKNOWN)
+            elif tag == "Name" and not text and self.parent_tag() == "FieldObj":
+                self.emit_ref("layout_object", "field", name=None, to_name=None,
+                              raw=UNKNOWN)
+            else:
+                self._consume_text(tag, self._cap_attrs, text)
             self._cap_tag = None
             self._buf = []
 
@@ -805,6 +852,19 @@ def _json(d):
     import json
     d = {k: v for k, v in d.items() if v is not None}
     return json.dumps(d) if d else None
+
+
+def _menu_flags(a, script=False):
+    """v1.14.0: the raw menu flags of a script, script folder, layout or
+    layout folder as extra_json: {"in_menu": true} when includeInMenu="True",
+    plus {"run_full_access": true} on a script when runFullAccess="True".
+    No key when a flag is off or missing; None when neither is set."""
+    d = {}
+    if a.get("includeInMenu") == "True":
+        d["in_menu"] = True
+    if script and a.get("runFullAccess") == "True":
+        d["run_full_access"] = True
+    return _json(d)
 
 
 def _merge_extra(extra_json, step_text):

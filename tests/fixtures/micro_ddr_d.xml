@@ -1,0 +1,185 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-07-07" type="Report" version="99.9.9">
+<File name="MicroD.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="2" name="ORD">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="id">
+					<Comment/>
+				</Field>
+				<Field id="2" dataType="Number" fieldType="Normal" name="amount">
+					<Comment>Placed in the live portal and shown by VL Related</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="ORD" name="ORD"/>
+			<Table id="2" color="#CCBBAA" baseTableId="1" baseTable="ORD" name="ORD_lines"/>
+			<Table id="3" color="#778899" baseTableId="1" baseTable="ORD" name="CTC"/>
+		</TableList>
+		<RelationshipList/>
+	</RelationshipGraph>
+	<LayoutCatalog>
+		<Group groupCollapsed="False" includeInMenu="True" id="1" name="Shown">
+			<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Orders">
+				<Table id="1" name="ORD"/>
+				<Object type="Portal" key="10" LabelKey="0" name="portalLines" flags="0" rotation="0">
+					<Bounds top="10" left="10" bottom="110" right="400"/>
+					<PortalObj portalFlags="17" numOfRows="3" initialRow="1">
+						<TableAliasKey>ORD_lines</TableAliasKey>
+						<FieldList><Field table="ORD_lines" id="2" name="amount"></Field></FieldList>
+						<Object type="Field" key="11" LabelKey="0" flags="0" rotation="0">
+							<Bounds top="12" left="12" bottom="30" right="200"/>
+							<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="2" tableViewVisibility="0" quickFind="0" pictFormat="5">
+								<Name>ORD_lines::amount</Name>
+							</FieldObj>
+						</Object>
+					</PortalObj>
+				</Object>
+				<Object type="Portal" key="12" LabelKey="0" name="portalLost" flags="0" rotation="0">
+					<Bounds top="120" left="10" bottom="220" right="400"/>
+					<PortalObj portalFlags="25" numOfRows="3" initialRow="1">
+						<TableAliasKey></TableAliasKey>
+						<FieldList><Field table="" id="0" name=""></Field></FieldList>
+						<Object type="Field" key="13" LabelKey="0" flags="0" rotation="0">
+							<Bounds top="122" left="12" bottom="140" right="200"/>
+							<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="2" tableViewVisibility="0" quickFind="0" pictFormat="5">
+								<Name></Name>
+							</FieldObj>
+						</Object>
+					</PortalObj>
+				</Object>
+				<Object type="Field" key="14" LabelKey="0" flags="0" rotation="0">
+					<Bounds top="230" left="10" bottom="250" right="200"/>
+					<FieldObj numOfReps="1" flags="0" inputMode="0" keyboardType="1" displayType="0" tableViewVisibility="0" quickFind="0" pictFormat="5">
+						<Name></Name>
+					</FieldObj>
+				</Object>
+				<Object type="Button" key="15" LabelKey="0" name="btnLines" flags="0" rotation="0">
+					<Bounds top="260" left="10" bottom="280" right="120"/>
+					<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
+						<Step enable="True" id="74" name="Go to Related Record">
+							<StepText>Go to Related Record [ Show only related records; From table: &#8220;ORD_lines&#8221;; Using layout: &#8220;Orders&#8221; (ORD) ]</StepText>
+							<Option state="False"></Option>
+							<MatchAllRecords state="False"></MatchAllRecords>
+							<ShowInNewWindow state="False"></ShowInNewWindow>
+							<Restore state="False"></Restore>
+							<LayoutDestination value="SelectedLayout"></LayoutDestination>
+							<Table id="2" name="ORD_lines"></Table>
+							<Layout id="1" name="Orders"></Layout>
+						</Step>
+					</ButtonObj>
+				</Object>
+				<Object type="Portal" key="16" LabelKey="0" name="portalCTC" flags="0" rotation="0">
+					<Bounds top="290" left="10" bottom="390" right="400"/>
+					<PortalObj portalFlags="17" numOfRows="3" initialRow="1">
+						<TableAliasKey>CTC</TableAliasKey>
+						<FieldList/>
+					</PortalObj>
+				</Object>
+			</Layout>
+		</Group>
+		<Group groupCollapsed="False" includeInMenu="False" id="2" name="Admin">
+			<Layout width="640" quickFind="True" includeInMenu="True" id="2" name="Hidden">
+				<Table id="1" name="ORD"/>
+			</Layout>
+		</Group>
+	</LayoutCatalog>
+	<ValueListCatalog>
+		<ValueList id="1" name="VL Related">
+			<Source value="Field"/>
+			<PrimaryField show="True" sort="True">
+				<Field table="ORD_lines" id="2" name="amount"/>
+			</PrimaryField>
+			<ShowRelated value="True">
+				<Table id="2" name="ORD_lines"/>
+			</ShowRelated>
+		</ValueList>
+		<ValueList id="2" name="VL Lost">
+			<Source value="Field"/>
+			<PrimaryField show="True" sort="True">
+				<Field table="ORD" id="2" name="amount"/>
+			</PrimaryField>
+			<ShowRelated value="True">
+				<Table id="0" name=""/>
+			</ShowRelated>
+		</ValueList>
+		<ValueList id="3" name="VL Flat">
+			<Source value="Field"/>
+			<PrimaryField show="True" sort="True">
+				<Field table="ORD" id="1" name="id"/>
+			</PrimaryField>
+			<ShowRelated value="False"/>
+		</ValueList>
+	</ValueListCatalog>
+	<ScriptCatalog>
+		<Group groupCollapsed="False" includeInMenu="True" id="1" name="Public">
+			<Group groupCollapsed="False" includeInMenu="True" id="2" name="Deep">
+				<Script includeInMenu="True" runFullAccess="False" id="1" name="Visible">
+					<StepList>
+						<Step enable="True" id="86" name="Show Custom Dialog">
+							<StepText>Show Custom Dialog [ "visible" ]</StepText>
+						</Step>
+					</StepList>
+				</Script>
+			</Group>
+		</Group>
+		<Group groupCollapsed="False" includeInMenu="False" id="3" name="Utility">
+			<Script includeInMenu="True" runFullAccess="True" id="2" name="Navigate">
+				<StepList>
+					<Step enable="True" id="74" name="Go to Related Record">
+						<StepText>Go to Related Record [ Show only related records; From table: &#8220;ORD_lines&#8221;; Using layout: &#8220;Orders&#8221; (ORD) ]</StepText>
+						<Option state="False"></Option>
+						<MatchAllRecords state="False"></MatchAllRecords>
+						<ShowInNewWindow state="False"></ShowInNewWindow>
+						<Restore state="False"></Restore>
+						<LayoutDestination value="SelectedLayout"></LayoutDestination>
+						<Table id="2" name="ORD_lines"></Table>
+						<Layout id="1" name="Orders"></Layout>
+					</Step>
+					<Step enable="True" id="74" name="Go to Related Record">
+						<StepText>Go to Related Record [ From table: &lt;unknown&gt;; Using layout: &lt;unknown&gt; ]</StepText>
+						<Option state="False"></Option>
+						<MatchAllRecords state="False"></MatchAllRecords>
+						<ShowInNewWindow state="False"></ShowInNewWindow>
+						<Restore state="False"></Restore>
+						<LayoutDestination value="SelectedLayout"></LayoutDestination>
+						<Table id="0" name=""></Table>
+						<Layout id="0" name=""></Layout>
+					</Step>
+					<Step enable="True" id="74" name="Go to Related Record">
+						<StepText>Go to Related Record [ From table: &lt;unknown&gt;; Using layout: &lt;unknown&gt; ]</StepText>
+						<Option state="False"></Option>
+						<MatchAllRecords state="False"></MatchAllRecords>
+						<ShowInNewWindow state="False"></ShowInNewWindow>
+						<Restore state="False"></Restore>
+						<LayoutDestination value="SelectedLayout"></LayoutDestination>
+						<Table id="9" name=""></Table>
+						<Layout id="0" name=""></Layout>
+					</Step>
+					<Step enable="True" id="35" name="Import Records">
+						<StepText>Import Records [ With dialog: Off; Source: &#8220;orders.csv&#8221;; Target: &#8220;ORD&#8221;; Add; Windows ANSI ]</StepText>
+						<Table id="1" name="ORD"></Table>
+					</Step>
+				</StepList>
+			</Script>
+		</Group>
+		<Script includeInMenu="False" runFullAccess="False" id="3" name="Plain">
+			<StepList>
+				<Step enable="True" id="86" name="Show Custom Dialog">
+					<StepText>Show Custom Dialog [ "plain" ]</StepText>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" id="4" name="Loose">
+			<StepList>
+				<Step enable="True" id="86" name="Show Custom Dialog">
+					<StepText>Show Custom Dialog [ "loose" ]</StepText>
+				</Step>
+			</StepList>
+		</Script>
+	</ScriptCatalog>
+</File>
+</FMPReport>

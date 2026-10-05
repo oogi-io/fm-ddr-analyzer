@@ -30,6 +30,7 @@ from fm_ddr.parse import build  # noqa: E402
 FIXTURE = os.path.join(ROOT, "tests", "fixtures", "micro_ddr.xml")
 FIXTURE_B = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_b.xml")
 FIXTURE_C = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_c.xml")
+FIXTURE_D = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_d.xml")
 SNAPSHOT = os.path.join(ROOT, "tests", "expected_snapshot.json")
 JS_RUNNER = os.path.join(ROOT, "tests", "parity", "run_js.mjs")
 WEB_APP = os.path.join(ROOT, "fm_ddr", "web", "index.html")
@@ -101,7 +102,8 @@ def _canon_ae(ae):
 V10_KEYS = ("sides", "predicates", "source", "show_related", "primary",
             "secondary", "custom_values", "text")
 # v1.13.0: external data source entities carry {file, link}
-EXTRA_KEYS = V10_KEYS + ("file", "link")
+# v1.14.0: scripts, layouts and their folders carry the raw menu flags
+EXTRA_KEYS = V10_KEYS + ("file", "link", "in_menu", "run_full_access")
 
 
 def _canon_v10(v10):
@@ -714,6 +716,22 @@ class TestJSParity(unittest.TestCase):
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE_C], 13))
 
+    def test_parity_table_contexts_fixture_alone(self):
+        # v1.14.0: step_table, portal, value_list_context, the empty field
+        # objects and the menu flags, edge by edge
+        db = os.path.join(self.tmp, "d_parity.db")
+        build(FIXTURE_D, db, label="d")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([FIXTURE_D], 13))
+
+    def test_parity_table_contexts_two_files(self):
+        # v1.14.0: the portal on TO "CTC" must resolve inside MicroD, never
+        # to MicroTest's TO of the same name
+        db = os.path.join(self.tmp, "ad_parity.db")
+        build([FIXTURE, FIXTURE_D], db, label="ad")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_D], 13))
+
 
 class TestV19Capture(unittest.TestCase):
     """v1.9.0: field storage, auto-enter (active vs dead residue), validation
@@ -1147,9 +1165,10 @@ class TestDangling(unittest.TestCase):
 
     def test_total_ref_count(self):
         # 4 calc + 4 join predicate + 2 layout context + 2 on-layout + 1 value
-        # list + 4 Calls + 8 Defects + 1 menu; every optional slot dropped
+        # list + 4 Calls + 9 Defects (8 + the Go to Related Record's step
+        # table, v1.14.0) + 1 menu; every optional slot dropped
         n = self.conn.execute("SELECT COUNT(*) FROM refs").fetchone()[0]
-        self.assertEqual(n, 26)
+        self.assertEqual(n, 27)
 
     def test_optional_slots_emit_nothing(self):
         # step <Field> with no id (Insert Text), OriginalLayout, the two by-calc
@@ -1184,9 +1203,11 @@ class TestDangling(unittest.TestCase):
         # id 1 exists as a layout but must never resolve
         self.assertEqual(rows, [("<unknown>", "0", None, None, 0),
                                 ("<unknown>", "1", None, None, 0)])
-        # the Go to Related Record behind an empty FileReference
+        # the Go to Related Record behind an empty FileReference: its step
+        # table (v1.14.0) resolves locally, the marker only guards the layout
         self.assertEqual(self.step_refs("Go to Related Record"),
-                         [("<unknown>", "0", None, "<unknown>", 0)])
+                         [("self_CTC", "4", "self_CTC", None, 0),
+                          ("<unknown>", "0", None, "<unknown>", 0)])
         # the button's Go to Layout [ <unknown> ] on the layout
         row = self.conn.execute("""
             SELECT source_kind, target_raw, target_fm_id, target_name
@@ -1327,6 +1348,205 @@ class TestDangling(unittest.TestCase):
         self.assertEqual(ext, {"CTC": None, "main_CTC": "Main", "gone_X": "Gone",
                                "self_CTC": "Self", "b_LOG": "MicroB",
                                "lost_Y": "<unknown>"})
+
+
+class TestTableContexts(unittest.TestCase):
+    """v1.14.0: the TO a step acts on (step_table), the TO a portal shows
+    (portal), the "starting from" TO of a related-values list
+    (value_list_context), field objects whose field is gone (layout_object
+    field refs reading '<unknown>') and the raw menu flags. Single-file build
+    of micro_ddr_d.xml plus a two-file build with micro_ddr.xml, whose TO
+    "CTC" shares its name with MicroD's."""
+
+    # QUERIES.md: scripts reachable from the Scripts menu if folders hide
+    # their contents (the help's inference, unverified in FileMaker Pro)
+    MENU_WALK = """
+        WITH RECURSIVE up(script_id, eid) AS (
+            SELECT entity_id, parent_entity_id FROM entities WHERE kind = 'script'
+            UNION ALL
+            SELECT up.script_id, g.parent_entity_id FROM up
+            JOIN entities g ON g.entity_id = up.eid AND g.kind = 'script_group'
+        )
+        SELECT s.name FROM entities s
+        WHERE s.kind = 'script' AND json_extract(s.extra_json, '$.in_menu') = 1
+          AND NOT EXISTS (
+            SELECT 1 FROM up JOIN entities g ON g.entity_id = up.eid
+            WHERE up.script_id = s.entity_id AND g.kind = 'script_group'
+              AND COALESCE(json_extract(g.extra_json, '$.in_menu'), 0) = 0)
+        ORDER BY s.name"""
+
+    # QUERIES.md: table occurrences with no live reference
+    UNUSED_TO = """
+        SELECT t.name FROM entities t
+        WHERE t.kind = 'table_occurrence'
+          AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.target_entity_id = t.entity_id
+                          AND r.disabled = 0)
+          AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.file_id = t.file_id
+                          AND r.target_kind = 'field' AND r.target_to_name = t.name
+                          AND r.disabled = 0)"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_v114_")
+        cls.db = build_fixture_db(cls.tmp, src=FIXTURE_D)
+        cls.conn = sqlite3.connect(cls.db)
+        cls.multi = os.path.join(cls.tmp, "multi.db")
+        build([FIXTURE, FIXTURE_D], cls.multi, label="multi")
+        cls.mconn = sqlite3.connect(cls.multi)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        cls.mconn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def ctx_rows(self, context, conn=None):
+        """(source_kind, source_name, step_type, target_raw, target_fm_id,
+        resolved target name, disabled) per ref of that context."""
+        return (conn or self.conn).execute("""
+            SELECT r.source_kind, se.name, se.step_type, r.target_raw, r.target_fm_id,
+                   te.name, r.disabled
+            FROM refs r
+            LEFT JOIN entities se ON se.entity_id = r.source_entity_id
+            LEFT JOIN entities te ON te.entity_id = r.target_entity_id
+            WHERE r.context = ? ORDER BY r.ref_id""", (context,)).fetchall()
+
+    def dangling(self, context):
+        return self.conn.execute("""
+            SELECT source_kind, source_name, source_parent_name, step_type, marker,
+                   target_fm_id, disabled
+            FROM v_dangling WHERE context = ? ORDER BY ref_id""", (context,)).fetchall()
+
+    def test_step_table(self):
+        self.assertEqual(self.ctx_rows("step_table"), [
+            ("layout_object", "btnLines", None, "ORD_lines", "2", "ORD_lines", 0),
+            ("script_step", "Go to Related Record", "Go to Related Record",
+             "ORD_lines", "2", "ORD_lines", 0),
+            ("script_step", "Go to Related Record", "Go to Related Record",
+             "<unknown>", "0", None, 0),
+            ("script_step", "Go to Related Record", "Go to Related Record",
+             "<unknown>", "9", None, 0),
+            ("script_step", "Import Records", "Import Records", "ORD", "1", "ORD", 0),
+        ])
+        self.assertEqual(self.dangling("step_table"), [
+            ("script_step", "Go to Related Record", "Navigate", "Go to Related Record",
+             "<unknown>", "0", 0),
+            ("script_step", "Go to Related Record", "Navigate", "Go to Related Record",
+             "<unknown>", "9", 0),
+        ])
+
+    def test_portal(self):
+        self.assertEqual(self.ctx_rows("portal"), [
+            ("layout_object", "portalLines", None, "ORD_lines", None, "ORD_lines", 0),
+            ("layout_object", "portalLost", None, "<unknown>", None, None, 0),
+            ("layout_object", "portalCTC", None, "CTC", None, "CTC", 0),
+        ])
+        self.assertEqual(self.dangling("portal"), [
+            ("layout_object", "portalLost", "Orders", None, "<unknown>", None, 0),
+        ])
+
+    def test_portal_resolves_inside_its_own_file(self):
+        # MicroTest's TO "CTC" has id 1 and MicroD's has id 3: the name rule
+        # keys on the file, so the portal lands on MicroD's
+        rows = self.mconn.execute("""
+            SELECT se.name, te.name, te.fm_id, fl.name
+            FROM refs r
+            JOIN entities se ON se.entity_id = r.source_entity_id
+            JOIN entities te ON te.entity_id = r.target_entity_id
+            JOIN files fl ON fl.file_id = te.file_id
+            WHERE r.context = 'portal' AND r.target_raw = 'CTC'""").fetchall()
+        self.assertEqual(rows, [("portalCTC", "CTC", "3", "MicroD.fmp12")])
+
+    def test_value_list_context(self):
+        self.assertEqual(self.ctx_rows("value_list_context"), [
+            ("value_list", "VL Related", None, "ORD_lines", "2", "ORD_lines", 0),
+            ("value_list", "VL Lost", None, "<unknown>", "0", None, 0),
+        ])
+        # VL Flat (ShowRelated False) emits none; show_related is still recorded
+        self.assertEqual(self.conn.execute("""
+            SELECT name, json_extract(extra_json, '$.show_related') FROM entities
+            WHERE kind = 'value_list' ORDER BY entity_id""").fetchall(),
+            [("VL Related", 1), ("VL Lost", 1), ("VL Flat", 0)])
+        self.assertEqual(self.dangling("value_list_context"), [
+            ("value_list", "VL Lost", None, None, "<unknown>", "0", 0),
+        ])
+
+    def test_field_objects_whose_field_is_gone(self):
+        rows = self.conn.execute("""
+            SELECT r.target_raw, r.target_name, r.target_to_name, r.target_entity_id IS NULL,
+                   sp.name
+            FROM refs r
+            JOIN entities se ON se.entity_id = r.source_entity_id
+            LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
+            WHERE r.context = 'layout_object' AND r.target_kind = 'field'
+            ORDER BY r.ref_id""").fetchall()
+        self.assertEqual(rows, [
+            ("ORD_lines::amount", "amount", "ORD_lines", 0, "portalLines"),
+            ("<unknown>", None, None, 1, "portalLost"),
+            ("<unknown>", None, None, 1, "Orders"),
+        ])
+        self.assertEqual(self.dangling("layout_object"), [
+            ("layout_object", None, "portalLost", None, "<unknown>", None, 0),
+            ("layout_object", None, "Orders", None, "<unknown>", None, 0),
+        ])
+
+    def test_menu_flags(self):
+        flags = {name: (kind, json.loads(ex) if ex else {}) for kind, name, ex in
+                 self.conn.execute("""
+            SELECT kind, name, extra_json FROM entities
+            WHERE kind IN ('script', 'script_group', 'layout', 'layout_group')""")}
+        self.assertEqual(flags["Navigate"], ("script", {"in_menu": True, "run_full_access": True}))
+        self.assertEqual(flags["Visible"], ("script", {"in_menu": True}))
+        self.assertEqual(flags["Loose"], ("script", {"in_menu": True}))
+        self.assertEqual(flags["Plain"], ("script", {}))
+        self.assertEqual(flags["Orders"], ("layout", {"in_menu": True}))
+        self.assertEqual(flags["Hidden"], ("layout", {"in_menu": True}))
+        self.assertEqual(flags["Shown"], ("layout_group", {"in_menu": True}))
+        self.assertEqual(flags["Admin"], ("layout_group", {}))
+        self.assertEqual(flags["Public"], ("script_group", {"in_menu": True}))
+        self.assertEqual(flags["Deep"], ("script_group", {"in_menu": True}))
+        self.assertEqual(flags["Utility"], ("script_group", {}))
+        # no flag key is ever written false
+        self.assertEqual(self.conn.execute("""
+            SELECT COUNT(*) FROM entities
+            WHERE json_extract(extra_json, '$.in_menu') = 0
+               OR json_extract(extra_json, '$.run_full_access') = 0""").fetchone()[0], 0)
+
+    def test_menu_walk_recipe(self):
+        # Navigate is flagged but sits in the cleared folder Utility; Visible
+        # sits under two flagged folders; Loose is in no folder
+        self.assertEqual([r[0] for r in self.conn.execute(self.MENU_WALK)],
+                         ["Loose", "Visible"])
+        # all four scripts are orphans by call graph; the flag is the only hint
+        self.assertEqual(sorted(r[0] for r in self.conn.execute(
+            "SELECT name FROM v_orphan_scripts")), ["Loose", "Navigate", "Plain", "Visible"])
+
+    def test_no_unused_to(self):
+        # ORD: layout context + Import Records; ORD_lines: step table, portal,
+        # value list context; CTC: portal only
+        self.assertEqual(self.conn.execute(self.UNUSED_TO).fetchall(), [])
+
+    def test_where_shows_the_contexts(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["where", self.db, "ORD_lines"])
+        text = out.getvalue()
+        for ctx in ("step_table", "portal", "value_list_context"):
+            self.assertIn(ctx, text)
+
+    def test_stats_prints_the_new_contexts(self):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["stats", self.db])
+        text = out.getvalue()
+        self.assertRegex(text, r"step_table\s+<unknown>\s+2\s+0")
+        self.assertRegex(text, r"portal\s+<unknown>\s+1\s+0")
+        self.assertRegex(text, r"value_list_context\s+<unknown>\s+1\s+0")
+        self.assertRegex(text, r"layout_object\s+<unknown>\s+2\s+0")
 
 
 class TestRobustness(unittest.TestCase):

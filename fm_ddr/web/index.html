@@ -291,8 +291,9 @@ button.btn:hover{border-color:var(--accent);color:var(--accent)}
 
 const SOURCE_KINDS = new Set(["field","custom_function","script_step","relationship",
   "layout","layout_object","value_list","privilege_set","custom_menu"]);
-// Text = value-list custom values; Data = layout text-object character runs
-const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name","Text","Data"]);
+// Text = value-list custom values; Data = layout text-object character runs;
+// TableAliasKey (v1.14.0) = the TO a portal shows, decided at the END of the element
+const CAPTURE_TAGS = new Set(["Calculation","StepText","Chunk","Name","Text","Data","TableAliasKey"]);
 // v1.13.0: markers (see parse.py). The DDR's own: <Table Missing>, <Field Missing>,
 // <Function Missing>, name="<unknown>"; fmsonar's own: '<unknown>' in target_raw,
 // ext_file or target_file wherever a REQUIRED name is empty or missing.
@@ -311,6 +312,11 @@ function dec(s){
 }
 function splitQ(q){ if(q==null) return [null,null]; const i=q.indexOf('::');
   return i===-1?[null,q]:[q.slice(0,i),q.slice(i+2)]; }
+// v1.14.0: raw menu flags ({in_menu, run_full_access}, keys only when true; null when none)
+function menuFlags(a,script){ const d={};
+  if(a.includeInMenu==='True') d.in_menu=true;
+  if(script && a.runFullAccess==='True') d.run_full_access=true;
+  return Object.keys(d).length?d:null; }
 
 // ---- handler state ----
 const H={
@@ -363,24 +369,35 @@ function onStart(tag,a){
     newEntity('field',a,{bt:bt}); return; }
   if(tag==='Table' && anc('RelationshipGraph')){ newEntity('table_occurrence',a,{bt:a.baseTable||null}); return; }
   if(tag==='Relationship'){ newEntity('relationship',a,{name:null}); return; }
-  if(tag==='Group' && anc('ScriptCatalog')){ newEntity('script_group',a); return; }
-  if(tag==='Group' && anc('LayoutCatalog')){ newEntity('layout_group',a); return; }
+  // v1.14.0: script/layout folders, scripts and layouts carry the raw menu flags (_flags -> ex in finalize)
+  if(tag==='Group' && anc('ScriptCatalog')){ newEntity('script_group',a)._flags=menuFlags(a,false); return; }
+  if(tag==='Group' && anc('LayoutCatalog')){ newEntity('layout_group',a)._flags=menuFlags(a,false); return; }
   if(tag==='Script' && (parent==='Group'||parent==='ScriptCatalog') && anc('ScriptCatalog')){
-    if((a.name||'').trim()!=='-') newEntity('script',a);  // "-" = script-menu separator, not a script
+    if((a.name||'').trim()!=='-') newEntity('script',a)._flags=menuFlags(a,true);  // "-" = script-menu separator, not a script
     return; }
   if(tag==='Layout'){
     if((parent==='LayoutCatalog'||parent==='Group') && anc('LayoutCatalog')){
-      if((a.name||'').trim()!=='-') newEntity('layout',a);  // "-" = layout-menu separator
+      if((a.name||'').trim()!=='-') newEntity('layout',a)._flags=menuFlags(a,false);  // "-" = layout-menu separator
     }
     else if(a.name) emitRef('go_to_layout','layout',{fm:a.id,name:a.name,raw:a.name});
     // v1.13.0: empty name = runtime destination (nothing) or a deleted layout (<unknown>)
     else if(!RUNTIME_LAYOUT_DESTS.has(H.layoutDest)) emitRef('go_to_layout','layout',{fm:a.id,name:null,raw:UNKNOWN});
     return; }
   // v1.12.0: a layout's own context TO (first child <Table id name/>). An empty
-  // name means the TO is gone: keep the fm id, leave the ref unresolved.
+  // name means the TO is gone: keep the fm id, leave the ref unresolved (v1.14.0: whatever the id).
   if(tag==='Table' && parent==='Layout' && H.estack.length && H.estack[H.estack.length-1].k==='layout'){
     const nm=a.name||null;
-    if(nm || (a.id!=null && a.id!=='0')) emitRef('layout_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
+    emitRef('layout_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
+    return; }
+  // v1.14.0: the TO a step acts on (Go to Related Record, Import Records); empty name = deleted TO
+  if(tag==='Table' && parent==='Step'){
+    const nm=a.name||null;
+    emitRef('step_table','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
+    return; }
+  // v1.14.0: the "starting from" TO of a related-values value list; empty name = a TO this file lacks
+  if(tag==='Table' && parent==='ShowRelated' && H.estack.length && H.estack[H.estack.length-1].k==='value_list'){
+    const nm=a.name||null;
+    emitRef('value_list_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
     return; }
   // v1.13.0: per-step state; every <Step> (StepList, ButtonObj, GroupButtonObj, MenuItem) resets it
   if(tag==='Step'){ H.stepText=null; H.layoutDest=null; }
@@ -540,7 +557,17 @@ function joinBuf(){
 }
 
 function onEnd(tag){
-  if(H.cap===tag){ consumeText(tag,H.capAttrs,joinBuf().trim()); H.cap=null; H.buf=[]; }
+  if(H.cap===tag){ const text=joinBuf().trim();
+    // v1.14.0: two slots decided at the END of the element (consumeText returns on
+    // empty text): the TO a portal shows (empty key = deleted TO) and a field object
+    // whose <Name> is empty (its field or TO is gone). Both '<unknown>', unresolved.
+    if(tag==='TableAliasKey'){ const src=curSource();
+      if(ptag()==='PortalObj' && src && src.k==='layout_object')
+        emitRef('portal','table_occurrence',{name:text||null,raw:text||UNKNOWN}); }
+    else if(tag==='Name' && !text && ptag()==='FieldObj')
+      emitRef('layout_object','field',{name:null,to:null,raw:UNKNOWN});
+    else consumeText(tag,H.capAttrs,text);
+    H.cap=null; H.buf=[]; }
   if(H.pushed.length && H.pushed.pop()) finalize(H.estack.pop());
   if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; H.stepText=null; H.layoutDest=null; }
   if(tag==='AutoEnter') H.deadAE=false;
@@ -605,6 +632,7 @@ function finalize(e){
   }
   if(e.k==='layout_object' && e._txt) tx=e._txt.join(' ').slice(0,2000);
   if(e.k==='external_data_source' && e._ds) ex=e._ds;   // v1.13.0: {file, link}
+  if(e._flags) ex=e._flags;   // v1.14.0: {in_menu, run_full_access} on scripts, layouts and their folders
   e._ex=ex; e._tx=tx;
   // field storage + auto-enter capture (v1.9.0, mirrors parse.py)
   let sto=null, idx=null, glb=null, ae=null;
