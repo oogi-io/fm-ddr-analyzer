@@ -31,7 +31,11 @@ multi-file build (missing sibling XMLs), not a broken solution.
   (for fields/TOs), `data_type, field_type` (fields), `calc_text`,
   `step_type`, `seq` (step order within its script) + `json_extract(extra_json,'$.step_text')` (steps), `grp`
   (script/layout group), `ext_file` (TO whose base table lives in another file;
-  `<unknown>` = that data source no longer exists).
+  `<unknown>` = that data source no longer exists). Scripts, script groups,
+  layouts and layout groups carry `json_extract(extra_json,'$.in_menu')` (1 when
+  "Include in menu" is on, NULL when off) and scripts
+  `json_extract(extra_json,'$.run_full_access')` (v1.14.0): the raw flags, not
+  menu reachability (QUERIES.md has the folder walk, labelled as inference).
 - **`refs`** — every "source USES target" edge:
   `source_entity_id, context, target_kind, target_name, target_to_name,
   target_raw, target_file, target_entity_id` (NULL = unresolved),
@@ -40,7 +44,11 @@ multi-file build (missing sibling XMLs), not a broken solution.
   `join_predicate, perform_script, go_to_layout, trigger, layout_object,
   field_reference, value_list_source, value_list_field, sort, to_reference,
   function_ref, layout_context` (a layout's own context TO; unresolved =
-  the TO was deleted).
+  the TO was deleted), and since v1.14.0 `step_table` (the TO a Go to Related
+  Record or Import Records step acts on), `portal` (the TO a portal shows) and
+  `value_list_context` (the "starting from" TO of a related-values list); an
+  empty name on any of these is `<unknown>` in `v_dangling`, as is a layout
+  field object whose field is gone (`layout_object` to `field`, `<unknown>`).
 - **`files`** — one row per FileMaker file in a multi-file solution.
 - **`text_index`** — FTS5 over every name, calculation, and step text.
 

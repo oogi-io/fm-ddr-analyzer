@@ -27,6 +27,9 @@ outputs as review lists, never as delete lists.
 | `go_to_layout` | Layout targeted by a Go to Layout step/button | `Layout` reference elements |
 | `to_reference` | Table occurrence referenced directly | `TableOccurrenceReference` |
 | `layout_context` (v1.12.0) | A layout's own context table occurrence ("Show records from"). Source = the layout, target_kind = `table_occurrence`. A TO used only as a layout context is no longer "unused". Resolved by (file, FileMaker id), then name. An **empty** `name` means the TO no longer exists: the ref keeps `target_fm_id` and stays unresolved, a real defect worth reporting (QUERIES.md: "layouts whose context TO is missing") | The `<Table id name/>` that is the direct child of a layout definition |
+| `step_table` (v1.14.0) | The table occurrence a step acts on: Go to Related Record ("From table") and Import Records (the target table); no other step carries the element. Source = the script step, or the layout object / custom menu of a button or menu step; a disabled step's ref is `disabled = 1`. Resolved by name within the file (`target_fm_id` kept). An empty name is `<unknown>`, see Dangling references | The `<Table id name/>` that is a direct child of `<Step>` |
+| `portal` (v1.14.0) | The table occurrence a portal shows. Source = the portal's layout object. Resolved by name within the file (the element carries no id). An empty key is a portal whose TO was deleted: `<unknown>`, see Dangling references | `TableAliasKey` under `PortalObj` |
+| `value_list_context` (v1.14.0) | The "starting from" table occurrence of a related-values value list. Source = the value list (`extra_json.show_related` stays as it was). Resolved by name within the file (`target_fm_id` kept). An empty name is `<unknown>`, see Dangling references | The `<Table id name/>` under `<ShowRelated value="True">` in the catalog |
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
 possible. Unresolvable targets stay `NULL` — usually **legitimately**:
@@ -45,8 +48,20 @@ FileMaker ids collide across the files of a multi-file solution, so the
 resolver keys on the layout's own file plus the TO's FileMaker id, never the id
 alone. A DDR writes `<Table id="..." name=""/>` when the layout's TO was
 deleted; such refs stay unresolved (`target_entity_id IS NULL`, `target_fm_id`
-kept). The `<Table>` inside Go to Related Record or New Window steps is not a
-layout context and is not captured by this rule.
+kept). The `<Table>` inside a Go to Related Record or Import Records step is
+not a layout context: it is the `step_table` context (v1.14.0). New Window
+carries no `<Table>`; its layout is a `go_to_layout` ref.
+
+**Menu flags (v1.14.0):** scripts, script folders, layouts and layout folders
+carry `extra_json.in_menu = true` when their "Include in menu" checkbox is on
+(no key when it is off); scripts also carry `extra_json.run_full_access = true`
+when "Run script with full access privileges" is on. These are the DDR's raw
+attributes (`includeInMenu`, `runFullAccess`), nothing more. Whether a flagged
+script inside a cleared folder is reachable from the Scripts menu is the
+help's inference (a folder "appears as a submenu"; clearing its checkbox
+removes it), unverified in FileMaker Pro: QUERIES.md carries the folder walk
+as a recipe labelled as such, and `v_orphan_scripts` has no menu column. The
+web viewer's orphan panel does not show the flag; the SQL does.
 
 **Disabled steps (v1.6.1):** the DDR includes commented-out (`enable="False"`,
 `//`-prefixed) script steps, and their references used to count as live usage.
@@ -94,6 +109,7 @@ auto-enter calcs: `lookup_active=false`, ref `disabled=1`.
 | Fields/scripts named in **any calculated string** (`GetField`, `Evaluate`, script names built at runtime) | Same: text, not structure | `search` |
 | **Built-in function** usage as edges | Deliberately excluded (tens of thousands of `Get()` edges would drown the graph) | `search db "ExecuteSQL"` |
 | **Import/export field orders** | Not yet mapped | `search` |
+| The **table occurrence of a lookup** (`<Table>` under `<Lookup>`) as a TO reference | Only the source field is captured (`lookup` context, whose `target_to_name` keeps the TO off the unused list); `where <TO>` does not show the lookup | `search` |
 
 **Captured but easy to miss** (verified against a real solution, v1.9.1): conditional-formatting
 condition calcs, placeholder-text calcs, and tooltip/hide calcs all emit `calc`-context refs
@@ -166,9 +182,23 @@ table and no name reads `TO::<Field Missing>` when the step text carries that
 literal, else `TO::<unknown>` (sort criteria in steps, portals and
 relationships, join predicates); a `<Layout>` with any other destination reads
 `<unknown>`; a `<Script>` with a non-zero id and no name reads `<unknown>`; a
-layout's context `<Table>` with a non-zero id and no name reads `<unknown>`.
-Ids never decide: an id that happens to exist is never resolved behind a
-marker.
+table occurrence slot with no name reads `<unknown>` **whatever the id**: a
+layout's context `<Table>`, a step's `<Table>` (the step text says `From
+table: <unknown>`, with id 0 or not), a portal's `TableAliasKey` (no id at
+all) and a related-values list's `<Table>` (v1.14.0; the 1.12.0 exception
+that dropped a layout context with id 0 is gone, it never fired on a real
+DDR). A layout field object whose `<Name>` is empty is a required slot too:
+its field or table occurrence is gone, the DDR writes the name empty with no
+other marker, and the ref reads `<unknown>` (`layout_object` context, name
+and TO NULL); 1.13.0 dropped these silently. Ids never decide: an id that
+happens to exist is never resolved behind a marker.
+
+A value list cloned into a file that lacks its table occurrence (the usual
+satellite-file case) is one dead list with several slots: its
+`value_list_field` rows and its `value_list_context` row each read
+`<unknown>`, one row per slot, not one finding. Import Records into a "New
+Table" was not seen in any DDR at hand: if FileMaker writes it as an empty
+`<Table>`, that step would read `<unknown>` too (unverified).
 
 **`v_dangling`** lists every marked defect, one row each, with `context`,
 `marker` (the raw text), `marker_class` (`<unknown>`, `<Table Missing>`,
@@ -182,11 +212,11 @@ occurrences on a missing data source (`context = 'missing_data_source'`).
 
 Blind spots: a marker the DDR writes only in a step's TEXT, with no reference
 element, has no ref and no row: `Add Account [ ...; Privilege Set: <unknown> ]`,
-Go to Related Record `From table: <unknown>` (until a `step_table` context
-exists), an `Open File` whose file marker is empty. Find those with
+an `Open File` whose file marker is empty. Find those with
 `json_extract(extra_json,'$.step_text') LIKE '%<unknown>%'` on `script_step`
-rows (QUERIES.md). A real layout whose context `<Table>` has id 0 and no name
-is dropped like a separator (none seen in a real DDR).
+rows (QUERIES.md). Go to Related Record `From table: <unknown>` has a row
+since 1.14.0 (`step_table`); its "Using layout: <unknown>" twin is the
+`go_to_layout` row of the same step.
 
 An unresolved ref is therefore one of three things: a marked defect
 (`v_dangling`), an external target whose file is not in the DB
@@ -196,7 +226,8 @@ An unresolved ref is therefore one of three things: a marked defect
 
 FileMaker stores structural references by id and re-points them when you
 rename a field, script or layout: a Set Field target, a Perform Script call, a
-relationship predicate, a layout object binding all survive a rename. What
+relationship predicate, a layout object binding, a step's table, a portal's
+table occurrence and a value list's context all survive a rename. What
 breaks is TEXT: `ExecuteSQL` strings, `GetField` / `Evaluate` arguments,
 script and layout names built at runtime (`Perform Script [ By name ]`,
 `Go to Layout [ By name ]`), and callers outside the file (other FileMaker
@@ -213,7 +244,9 @@ value and asks for a rebuild when it is older; the `fmsonar` CLI prints the
 rebuild hint itself when a view is missing (`cascades` exits on it, `stats`
 prints one line and continues). Views added per version: `v_cascades`
 (1.10.0), `v_triggers` (1.9.0), `layout_context` refs (1.12.0),
-`v_data_sources` and `v_dangling` (1.13.0). For 1.15.0: a `text_mention`
+`v_data_sources` and `v_dangling` (1.13.0), `step_table`, `portal` and
+`value_list_context` refs, the `<unknown>` field objects and the menu flags
+(1.14.0). For 1.15.0: a `text_mention`
 ref counts as a use only when `target_entity_id IS NOT NULL`; an unresolved
 mention never does.
 

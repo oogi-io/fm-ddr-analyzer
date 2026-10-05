@@ -48,7 +48,10 @@ CREATE TABLE IF NOT EXISTS entities (
                                     -- lives in (v_data_sources maps it to a file); '<unknown>' =
                                     -- the data source no longer exists (v1.13.0)
     extra_json       TEXT,          -- kind-specific leftovers; external_data_source (file kind):
-                                    -- {file: true, link: "X_fmp12.xml"} (v1.13.0)
+                                    -- {file: true, link: "X_fmp12.xml"} (v1.13.0); script,
+                                    -- script_group, layout, layout_group: {in_menu: true} and
+                                    -- script {run_full_access: true}, keys only when the DDR
+                                    -- flag is True (v1.14.0)
     -- field storage & auto-enter (v1.9.0; NULL for non-fields and pre-1.9 builds)
     stored           INTEGER,       -- 0 = unstored calc (storeCalculationResults="False"), 1 = stored
     indexed          TEXT,          -- index setting: None | Minimal | All
@@ -65,6 +68,10 @@ CREATE TABLE IF NOT EXISTS entities (
 --          | perform_script | go_to_layout | trigger | layout_object
 --          | value_list_source | field_reference | to_reference | function_ref
 --          | layout_context (a layout's own context TO; v1.12.0)
+--          | step_table (the TO a Go to Related Record / Import Records step
+--            acts on) | portal (the TO a portal shows) | value_list_context
+--            (the "starting from" TO of a related-values list) (v1.14.0; all
+--            three resolve by name within the file, an empty name is '<unknown>')
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
 --  lookup = the source field a looked-up value copies FROM; a field's full
 --  dependency set is context IN ('calc','auto_enter','validation','lookup'))

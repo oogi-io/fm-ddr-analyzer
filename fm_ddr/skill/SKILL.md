@@ -57,7 +57,13 @@ target - combine with `step_type='Set Field'` for true writers, but note a
 Set Field between Enter Find Mode and Perform Find is a find criterion, not a
 write). `calc` = used in a calculation. `perform_script`/`trigger` = script
 calls. `layout_context` = a layout's own table occurrence (source = the
-layout; unresolved = the TO was deleted, a real defect). Full recipes: QUERIES.md, installed next to this file (also in the
+layout; unresolved = the TO was deleted, a real defect). `step_table` = the TO
+a Go to Related Record or Import Records step acts on, `portal` = the TO a
+portal shows, `value_list_context` = the "starting from" TO of a related-values
+list (v1.14.0; an empty name on any of them is `<unknown>` in `v_dangling`, as
+is a layout field object whose field is gone). Scripts, layouts and their
+folders carry the raw menu flags `extra_json.in_menu` / `run_full_access`
+(v1.14.0; a flag, not menu reachability). Full recipes: QUERIES.md, installed next to this file (also in the
 repo, with COVERAGE.md stating exactly what the index does not capture). **Read QUERIES.md's Investigation protocol and recipes BEFORE writing ad-hoc SQL** — it pre-answers the schema gotchas rather than making you rediscover them by trial-and-error (triggers only via `v_triggers`; `perform_script` target names carry the parameter signature, so match with `LIKE`; `entities` has no source-parent name — use `v_usage`; `entities` and `files` both have a `name` column, so qualify every column when you join them). Also holds when you query the cached DB directly with `sqlite3` instead of the CLI.
 
 ## 3. The investigation loop

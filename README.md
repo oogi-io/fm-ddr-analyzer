@@ -200,7 +200,9 @@ exports side by side; today `build` always writes a fresh single-snapshot DB
 writes to — e.g. Set Field), `join_predicate`, `perform_script`, `go_to_layout`,
 `trigger`, `layout_object`, `field_reference`, `value_list_source`,
 `value_list_field`, `sort`, `to_reference`, `function_ref`, `layout_context`
-(a layout's own context table occurrence, v1.12.0).
+(a layout's own context table occurrence, v1.12.0), `step_table`, `portal`,
+`value_list_context` (the table occurrence a step acts on, a portal shows, a
+related-values list starts from, v1.14.0).
 
 ### How references resolve
 

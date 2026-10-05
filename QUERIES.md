@@ -110,6 +110,29 @@ SELECT context, source_kind, source_parent_name, source_name
 FROM v_usage WHERE target_kind = 'table_occurrence' AND target_name = 'contact_INT';
 ```
 
+**Every context of a table occurrence** (v1.14.0+: `layout_context`,
+`step_table`, `portal`, `value_list_context`, `join_predicate`,
+`to_reference`), the shape before the rows:
+
+```sql
+SELECT context, source_kind, COUNT(*) AS n
+FROM v_usage
+WHERE target_kind = 'table_occurrence' AND target_name = 'contact_INT'
+GROUP BY context, source_kind ORDER BY n DESC;
+```
+
+**Which scripts navigate into a table occurrence** (Go to Related Record) or
+import into it (Import Records), v1.14.0+:
+
+```sql
+SELECT u.source_parent_name AS script, s.step_type, s.seq
+FROM v_usage u JOIN entities s ON s.entity_id = u.source_id
+WHERE u.context = 'step_table' AND u.target_name = 'contact_INT'
+ORDER BY script, s.seq;
+-- source_kind = 'layout_object' rows are button steps (the object, not a
+-- script, is the source); a commented-out step's ref is in v_usage_disabled
+```
+
 **Layouts based on** a table occurrence (its layout context, v1.12.0+):
 
 ```sql
@@ -342,14 +365,80 @@ ORDER BY script, step_type;
 ```
 
 Markers the DDR writes only in a step's TEXT (no reference element, so no
-row above): `Add Account [ ...; Privilege Set: <unknown> ]`, Go to Related
-Record `From table: <unknown>`:
+row above): `Add Account [ ...; Privilege Set: <unknown> ]`, `Open File` with
+an empty file (Go to Related Record `From table: <unknown>` has a
+`step_table` row since v1.14.0):
 
 ```sql
 SELECT scr.name AS script, s.step_type, json_extract(s.extra_json,'$.step_text')
 FROM entities s JOIN entities scr ON scr.entity_id = s.parent_entity_id
 WHERE s.kind = 'script_step'
   AND json_extract(s.extra_json,'$.step_text') LIKE '%<unknown>%';
+```
+
+**Portals whose table occurrence is gone** (v1.14.0+; the DDR writes an empty
+`TableAliasKey`). `source_name` is the portal object's name, often empty;
+`source_parent_name` is the enclosing object (a tab or slide panel for most)
+or the layout:
+
+```sql
+SELECT f.name AS file, d.source_parent_name AS enclosing, d.source_name AS portal
+FROM v_dangling d JOIN files f ON f.file_id = d.file_id
+WHERE d.context = 'portal'
+ORDER BY f.name, enclosing, portal;
+-- the field objects inside such a portal usually have empty names too (next recipe)
+```
+
+**Field objects whose field is gone** (v1.14.0+; an empty `<Name>` on a layout
+field object: its field or table occurrence was deleted). The enclosing
+object or layout is the only handle the DDR leaves:
+
+```sql
+SELECT f.name AS file, d.source_parent_name AS enclosing, COUNT(*) AS objects
+FROM v_dangling d JOIN files f ON f.file_id = d.file_id
+WHERE d.context = 'layout_object' AND d.target_kind = 'field'
+GROUP BY f.name, enclosing ORDER BY objects DESC;
+```
+
+**Orphan scripts with their menu flag** (v1.14.0+; the raw "Include in menu"
+checkbox of the script itself, nothing about its folder):
+
+```sql
+SELECT o.grp, o.name,
+       COALESCE(json_extract(s.extra_json, '$.in_menu'), 0) AS in_menu
+FROM v_orphan_scripts o JOIN entities s ON s.entity_id = o.entity_id
+ORDER BY in_menu DESC, o.grp, o.name;
+```
+
+**Scripts reachable from the Scripts menu if folders hide their contents**
+(the help's inference, unverified in FileMaker Pro: a folder "appears as a
+submenu" and clearing its checkbox removes it, so a flagged script inside a
+cleared folder would not show). Walk the folder chain, keep the scripts whose
+own flag is on and no folder above them is off:
+
+```sql
+WITH RECURSIVE up(script_id, eid) AS (
+    SELECT entity_id, parent_entity_id FROM entities WHERE kind = 'script'
+    UNION ALL
+    SELECT up.script_id, g.parent_entity_id FROM up
+    JOIN entities g ON g.entity_id = up.eid AND g.kind = 'script_group'
+)
+SELECT s.grp, s.name FROM entities s
+WHERE s.kind = 'script' AND json_extract(s.extra_json, '$.in_menu') = 1
+  AND NOT EXISTS (
+    SELECT 1 FROM up JOIN entities g ON g.entity_id = up.eid
+    WHERE up.script_id = s.entity_id AND g.kind = 'script_group'
+      AND COALESCE(json_extract(g.extra_json, '$.in_menu'), 0) = 0)
+ORDER BY s.grp, s.name;
+-- drop the NOT EXISTS clause for the raw flag alone
+```
+
+**Scripts that run with full access privileges** (v1.14.0+):
+
+```sql
+SELECT grp, name FROM entities
+WHERE kind = 'script' AND json_extract(extra_json, '$.run_full_access') = 1
+ORDER BY grp, name;
 ```
 
 **Which file does a data source point to** (v1.13.0+; by catalog link, then
@@ -362,9 +451,11 @@ ORDER BY f.name, d.ds_name;
 ```
 
 **Table occurrences** never used as a layout context (v1.12.0+), in a
-relationship, by a TO reference, or as the TO of a `TO::Field` reference
-(an external TO resolves its fields through its data source, v1.13.0+, so a
-TO on another file counts as used when its fields are):
+relationship, by a TO reference, by a step (Go to Related Record, Import
+Records), by a portal, as a value list's context (the three v1.14.0+), or as
+the TO of a `TO::Field` reference (an external TO resolves its fields through
+its data source, v1.13.0+, so a TO on another file counts as used when its
+fields are):
 
 ```sql
 SELECT t.name FROM entities t
@@ -374,8 +465,9 @@ WHERE t.kind='table_occurrence'
   AND NOT EXISTS (SELECT 1 FROM refs r WHERE r.file_id = t.file_id
                   AND r.target_kind = 'field' AND r.target_to_name = t.name
                   AND r.disabled = 0);
--- An index built before v1.12.0 has no layout_context refs: there, a TO used
--- only as a layout's context wrongly lands in this list. Rebuild first.
+-- An index built before v1.12.0 has no layout_context refs, one built before
+-- v1.14.0 no step_table, portal or value_list_context refs: there, a TO used
+-- only that way wrongly lands in this list. Rebuild first.
 ```
 
 **Most-referenced fields** (schema hotspots):
