@@ -120,7 +120,9 @@ Because the output is plain SQLite, anything can query it — `sqlite3`,
 Datasette, DB Browser, or an AI.
 
 From a clone, without installing: replace `fmsonar` with `python3 -m fm_ddr.cli`
-in any command above.
+in any command above. For development, `python3 tools/compare_resolution.py OLD.db NEW.db`
+compares the resolved references of two indexes of the same DDR (lost, changed, gained),
+the regression check run before every parser release.
 
 ## Path 3 — Your AI assistant
 
@@ -328,6 +330,7 @@ and the losses shape the roadmap. The full story:
 fm-ddr-analyzer/
 ├── README.md
 ├── QUERIES.md          # canonical cross-reference SQL recipes (for humans + AI)
+├── tools/compare_resolution.py  # dev: resolved-reference diff of two indexes of one DDR
 └── fm_ddr/
     ├── web/index.html  # zero-install client-side web app (JS parser + viewer)
     ├── __init__.py
