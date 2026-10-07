@@ -480,6 +480,25 @@ class TestParser(unittest.TestCase):
         with self.assertRaises(ValueError):
             build(bogus, os.path.join(self.tmp, "bogus.db"))
 
+    def test_build_refuses_save_a_copy_as_xml(self):
+        # A real SaXML (FileMaker 26) crashed the DDR parser with a TypeError;
+        # it must be refused by name, with the version, before parsing.
+        saxml = os.path.join(self.tmp, "Lab_saxml.xml")
+        with open(saxml, "w") as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<FMSaveAsXML version="2.3.0.1" Source="26.1.1" File="Lab.fmp12">'
+                    '<Structure><AddAction><RelationshipCatalog><Relationship id="1">'
+                    '<LeftTable><TableOccurrenceReference id="1" name="A"/></LeftTable>'
+                    '<RightTable><TableOccurrenceReference id="2" name="B"/></RightTable>'
+                    '</Relationship></RelationshipCatalog></AddAction></Structure>'
+                    '</FMSaveAsXML>')
+        with self.assertRaises(ValueError) as cm:
+            build(saxml, os.path.join(self.tmp, "saxml.db"))
+        msg = str(cm.exception)
+        self.assertIn("Save a Copy as XML", msg)
+        self.assertIn("2.3.0.1", msg)
+        self.assertIn("26.1.1", msg)
+
     def test_build_preserves_target_on_bad_input(self):
         # A malformed DDR must not destroy whatever already sits at the -o path.
         target = os.path.join(self.tmp, "precious.db")

@@ -920,6 +920,28 @@ def _reject_dtd(path: str) -> None:
             "(a FileMaker DDR never contains one).")
 
 
+def _reject_saxml(path: str) -> None:
+    """Refuse a Save a Copy as XML export (root <FMSaveAsXML>) with a clear
+    message. Its shape differs from the DDR's (a relationship's TO name sits
+    in a nested TableOccurrenceReference, not a name attribute), so the DDR
+    parser would crash or build a wrong index from it."""
+    import re
+    with open(path, "rb") as f:
+        head = f.read(8192)
+    enc = "utf-16-le" if head[:2] == b"\xff\xfe" else "utf-8"
+    text = head.decode(enc, "replace")
+    m = re.search(r'<FMSaveAsXML\b[^>]*', text)
+    if m:
+        ver = re.search(r'\bversion="([^"]*)"', m.group(0))
+        src = re.search(r'\bSource="([^"]*)"', m.group(0))
+        raise ValueError(
+            f"{path} is a Save a Copy as XML export (FMSaveAsXML"
+            f"{' ' + ver.group(1) if ver else ''}"
+            f"{', FileMaker ' + src.group(1) if src else ''}), not a Database "
+            "Design Report. fmsonar reads the DDR only for now: generate one "
+            "via Tools > Database Design Report > XML in FileMaker Pro.")
+
+
 def _is_fmsonar_db(path: str) -> bool:
     """True if `path` looks like a database this tool produced — a SQLite file
     with a ddr_run table. Used to avoid clobbering an unrelated file at -o."""
@@ -993,6 +1015,7 @@ def build(ddr_paths, db_path: str, label: str | None = None,
         handler = DDRHandler(conn, run_id)
         for p in ddr_paths:
             _reject_dtd(p)
+            _reject_saxml(p)
             parser = xml.sax.make_parser()
             parser.setContentHandler(handler)
             # expat honors the BOM / XML declaration, so binary mode handles UTF-16-LE.
