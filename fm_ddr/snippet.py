@@ -26,7 +26,16 @@ def extract_script_xml(ddr_path: str, script_name: str,
     definition is returned (streaming stops there, which matters on huge DDRs).
     Pass script_id (FileMaker's own id) to select a specific one when the name
     is ambiguous.
+
+    Only a DDR: a Save a Copy as XML export writes steps in another shape
+    this transform does not read, and is refused by name.
     """
+    from fm_ddr import saxml
+    if saxml.sniff(ddr_path)["fmt"] == "saxml":
+        raise ValueError(
+            f"{ddr_path} is a Save a Copy as XML export; snippet reads a DDR "
+            "(its steps are in the DDR's shape). Make a DDR of the file "
+            "(Tools > Database Design Report > XML) and run snippet on it.")
     enc = "utf-16-le"
     with open(ddr_path, "rb") as f:
         if f.read(2) != b"\xff\xfe":

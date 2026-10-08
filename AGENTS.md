@@ -12,12 +12,46 @@ well.
 python3 -m fm_ddr.cli build path/to/Solution_fmp12.xml -o solution.db
 # multi-file solutions: point at the manifest - ALL files land in one DB
 python3 -m fm_ddr.cli build path/to/Summary.xml -o solution.db
+# or from Save a Copy as XML exports (FileMaker 26, made with "Include details
+# for analysis tools"; FMDeveloperTool: -include_details), one per file:
+python3 -m fm_ddr.cli build path/to/Solution_saxml.xml -o solution.db
 # then query:
 python3 -m fm_ddr.cli sql solution.db "SELECT ..."
 ```
 
-`build` warns if reference resolution lands below 95% — usually an incomplete
-multi-file build (missing sibling XMLs), not a broken solution.
+`build` warns if fewer than 95% of references resolve (on a SaXML index,
+counting only those that are not dangling and not into another file):
+usually an incomplete multi-file build (missing sibling XMLs), not a broken
+solution. Every warning
+of a build prints once, in one block, before its `Done:` line.
+
+`ddr_run.source_format` says which format built an index (`ddr` or `saxml`;
+absent = `ddr`). A SaXML index made with FMDeveloperTool is blind across files
+(building the other files' exports into the same index does not cure it):
+refs through external TOs and cross-file calls stay unresolved, and a
+calculation whose `<Field Missing>` follows an external TO is listed in
+`v_dangling` as `unverifiable_xfile`, not `broken_calc`: unverifiable, not a
+confirmed defect, and some are real cross-file defects (`build` warns with the
+count; layout field objects and script step targets through such a TO are
+listed the same way).
+A Save a Copy as XML from FileMaker Pro with every file of the solution open
+fills those slots (measured; FileMaker Server not yet measured). A SaXML index
+also has `part_break` refs (a sub-summary's break field, from the layout; a
+DDR has no layout parts), a custom menu's `step_text` with one line per item,
+and per-object change stamps that name developers (`extra_json.modified_by`;
+never in the HTML report). A non-English export builds with a warning pointing at
+the rules that read English step text (COVERAGE.md lists them). A SaXML build counts the calculations
+whose references the export does not list, one per distinct calculation
+(`build` warns, `stats` and `list` show it; mostly layout-object calculations,
+several percent of their references on a large solution); a usage inside them
+has no reference, so `where`, when it finds none, prints the name's full-text
+mentions beside the 0: run `search` before calling anything unused. A partial
+`-catalog_list` export is refused when it lacks a section every file writes
+or a catalog it refers to (scripts, value lists, custom functions, data
+sources); one that leaves out only relationships or custom menus is not
+detectable. 2.3.0.0 and 2.3.0.1 exports build together (`files.format_version`
+per file, listed by `stats`). Before comparing a SaXML index with a DDR index, read COVERAGE.md
+"SaXML next to the DDR".
 
 ## The schema (this is all of it)
 
@@ -66,7 +100,9 @@ multi-file build (missing sibling XMLs), not a broken solution.
 - **`v_dangling`** (v1.13.0): the defects the DDR itself marks: deleted
   fields, scripts, layouts and TOs still referenced (`<unknown>`,
   `<Table Missing>`, `<Field Missing>`), calculations carrying a marker
-  (`context = 'broken_calc'`), TOs on a missing data source. One row per defect,
+  (`context = 'broken_calc'`; on a SaXML index `unverifiable_xfile` when the
+  field sits in another file the export cannot see, v1.15.0), TOs on a missing
+  data source. One row per defect,
   `disabled` flag included. **`v_data_sources`** (v1.13.0): which file each
   external data source name points at (catalog link, then name).
 
@@ -117,7 +153,7 @@ index before crediting them in the merge.
 
 ## Practical notes
 
-- Read-only. Never UPDATE/DELETE these databases; rebuild from the DDR instead.
+- Read-only. Never UPDATE/DELETE these databases; rebuild from the source export instead.
 - `calc_text` is capped (4k; 64k for custom functions). Full step text:
   `json_extract(extra_json,'$.step_text')` on script_step rows.
 - Fields are duplicated by name across tables — always qualify or group by

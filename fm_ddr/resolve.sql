@@ -350,6 +350,15 @@ SELECT * FROM v_usage WHERE ambiguous = 1;
 -- (entity, marker) for <Table Missing>, <Field Missing> and <Function Missing>
 -- in calc_text, the auto-enter calc, the validation calc, a hide calc or a
 -- tooltip calc; (3) table occurrences on a data source that no longer exists.
+-- v1.15.0: a <Field Missing> row of an entity marked extra_json.xfile_marker
+-- (SaXML only: every such marker follows an empty external TO, a field in
+-- another file the export cannot see) is context 'unverifiable_xfile', not
+-- 'broken_calc'. A DDR never sets the flag, so a DDR index is unchanged.
+-- SaXML only: a field object on a layout or a script step's target field
+-- through such a TO (extra_json.external, an external TO with no data source)
+-- has no field name in the export, live or deleted alike: one
+-- 'unverifiable_xfile' row each, marker TO::<unknown>. A DDR TO never carries
+-- the flag.
 -- Disabled rows are included with the flag, never filtered. step_type is NULL
 -- for a button step (layout objects are the source, their steps are not
 -- entities). source_parent_name is the owning script for a step and the
@@ -375,7 +384,22 @@ WHERE r.target_entity_id IS NULL
        OR r.target_raw LIKE '%<Field Missing>%'
        OR r.target_file = '<unknown>')
 UNION ALL
-SELECT NULL, e.file_id, 'broken_calc', e.kind, e.name, sp.name, e.step_type, NULL,
+SELECT r.ref_id, r.file_id, 'unverifiable_xfile', r.source_kind,
+       se.name, sp.name, se.step_type, r.target_kind,
+       r.target_to_name || '::<unknown>', '<unknown>', r.target_fm_id, r.disabled
+FROM refs r
+JOIN entities t ON t.file_id = r.file_id AND t.kind = 'table_occurrence'
+     AND t.name = r.target_to_name AND json_extract(t.extra_json, '$.external') = 1
+LEFT JOIN entities se ON se.entity_id = r.source_entity_id
+LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
+WHERE r.context IN ('layout_object', 'step_target') AND r.target_kind = 'field'
+  AND r.target_entity_id IS NULL AND r.target_raw IS NULL
+UNION ALL
+SELECT NULL, e.file_id,
+       CASE WHEN m.marker = '<Field Missing>'
+                 AND json_extract(e.extra_json, '$.xfile_marker') = 1
+            THEN 'unverifiable_xfile' ELSE 'broken_calc' END,
+       e.kind, e.name, sp.name, e.step_type, NULL,
        m.marker, m.marker, NULL,
        COALESCE(json_extract(e.extra_json, '$.disabled'), 0)
 FROM entities e

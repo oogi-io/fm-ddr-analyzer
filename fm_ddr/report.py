@@ -13,6 +13,8 @@ import os
 import re
 import sqlite3
 
+from fm_ddr.saxml import unused_caveat
+
 WEB_APP = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web", "index.html")
 
 # Kinds shown in the browsable list. Others (script_step, groups) still power
@@ -55,10 +57,19 @@ def _collect(db_path):
             "a": r["ambiguous"] or 0,
         })
 
-    row = conn.execute(
-        "SELECT label, ddr_version FROM ddr_run ORDER BY run_id LIMIT 1").fetchone()
+    try:
+        row = conn.execute(
+            "SELECT label, ddr_version, source_format, source_version FROM ddr_run "
+            "ORDER BY run_id LIMIT 1").fetchone()
+    except sqlite3.OperationalError:   # index built before the source columns
+        row = conn.execute(
+            "SELECT label, ddr_version, NULL AS source_format, NULL AS source_version "
+            "FROM ddr_run ORDER BY run_id LIMIT 1").fetchone()
     meta = {"label": row["label"] if row else os.path.basename(db_path),
-            "ddr_version": row["ddr_version"] if row else ""}
+            "ddr_version": row["ddr_version"] if row else "",
+            "source_format": (row["source_format"] if row else None) or "ddr",
+            "source_version": row["source_version"] if row else None,
+            "unused_caveat": unused_caveat(conn)}
     counts = {k: n for k, n in conn.execute(
         "SELECT kind, COUNT(*) FROM entities GROUP BY kind")}
     total = conn.execute("SELECT COUNT(*) FROM refs").fetchone()[0]

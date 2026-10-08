@@ -15,6 +15,20 @@ Its guarantees and its limits:
 - **Shared reports and entity exports are self-contained HTML** carrying only
   the data you chose to include, with the same restrictive CSP.
 
+## Developer names in a SaXML-built index
+
+A Save a Copy as XML export stamps every object with its last change: a
+timestamp, a change count, and the FileMaker **user name and account name of
+the developer** who made it. A DDR carries none of this. An index built from
+a SaXML export stores those stamps per object in `entities.extra_json`
+(`modified_at`, `modified_n`, `modified_by`, `modified_account`), so anyone you
+hand the `.db` file can read who last touched what. The HTML `report` leaves
+them out: it embeds names, calculations and step text, never the change
+stamps (a test plants a name in an export and checks the report for it). To
+share an index without the names, share the report, or clear them first:
+`UPDATE entities SET extra_json = json_remove(extra_json, '$.modified_by',
+'$.modified_account')` on a copy.
+
 ## Threat model — treat DDRs as untrusted
 
 A DDR is XML from an outside party ("here's my solution, take a look"). fmsonar
@@ -23,9 +37,14 @@ is built to parse a hostile DDR safely:
 - **Output escaping** — all DDR-derived strings are HTML-escaped before entering
   the DOM, so a crafted entity name (e.g. a script named `"><img onerror=...>`)
   cannot execute script in the app or in a shared report.
-- **No entity expansion** — a DDR declaring a DTD internal subset / `<!ENTITY>`
-  is rejected, so "billion laughs" cannot exhaust memory regardless of the host
-  expat version. External entity resolution is disabled (no XXE file reads).
+- **No entity expansion:** a DDR or Save a Copy as XML export whose DOCTYPE
+  carries an internal subset, or that declares an `<!ENTITY>`, before its root
+  element is rejected (the XML parser reads the prolog up to the root, however
+  long), so "billion laughs" cannot exhaust memory regardless of the host expat
+  version. A DOCTYPE that only names an external DTD is accepted, but the DTD
+  is never fetched: external entity resolution is disabled (no XXE file reads
+  or network requests), and an entity reference such a DTD would define is
+  skipped, never expanded.
 - **No path traversal** — a `Summary.xml` manifest can only reference files
   within its own directory tree; links that escape it are ignored.
 - **Safe builds** — `build` writes to a temp file and atomically replaces the

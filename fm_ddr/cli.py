@@ -45,18 +45,14 @@ def cmd_build(args):
     out = args.out or os.path.splitext(args.ddr[0])[0] + ".db"
     print(f"Parsing {len(args.ddr)} file(s) -> {out} ...", file=sys.stderr)
     summary = build(args.ddr, out, label=args.label, force=getattr(args, "force", False))
+    # Every warning in one block, before "Done:": a caller that stops
+    # reading there has seen them all
+    warnings = summary.pop("_warnings", [])
+    if warnings:
+        print("\n" + "\n\n".join(warnings) + "\n", file=sys.stderr)
     print(f"Done: {out}")
     for k, v in sorted(summary.items(), key=lambda kv: (-kv[1], kv[0])):
         print(f"  {k:24s} {v}")
-    total, resolved = summary.get("_refs", 0), summary.get("_refs_resolved", 0)
-    if total and resolved / total < 0.95:
-        conn = sqlite3.connect(out)
-        ver = conn.execute("SELECT ddr_version FROM ddr_run LIMIT 1").fetchone()[0]
-        conn.close()
-        print(f"\nWARNING: only {100*resolved//total}% of references resolved "
-              f"(DDR version {ver}). On a healthy single-file solution expect ~98%. "
-              f"Low resolution usually means an unmapped FM-version construct or a "
-              f"multi-file solution — check `stats` / v_unresolved.", file=sys.stderr)
 
 
 def _resolve_term(conn, term):
@@ -82,6 +78,54 @@ def _resolve_term(conn, term):
 
 
 
+def _source(conn):
+    """(source_format, source_version, ddr_version) of an index. An index
+    built before the source columns has neither: it was built from a DDR."""
+    try:
+        row = conn.execute("SELECT source_format, source_version, ddr_version "
+                           "FROM ddr_run LIMIT 1").fetchone()
+    except sqlite3.OperationalError:
+        row = conn.execute("SELECT NULL, NULL, ddr_version FROM ddr_run LIMIT 1").fetchone()
+    if not row:
+        return "ddr", None, None
+    return row[0] or "ddr", row[1], row[2]
+
+
+def _source_line(conn):
+    fmt, src_ver, ver = _source(conn)
+    line = f"source: {fmt} {ver or '?'}"
+    if fmt == "saxml" and src_ver:
+        line += f" (FileMaker {src_ver})"
+    return line
+
+
+def _text_check(conn, entity_id, db_path, limit):
+    """`where` found no reference to entity_id. On a SaXML index whose export
+    left calculations without a reference list, a use inside one of them has
+    no reference: print the full-text mentions of the name beside the 0, so
+    a used object never reads as unused. Prints nothing on any other index."""
+    from fm_ddr.saxml import ddrinfo_misses
+    m = ddrinfo_misses(conn)
+    if not m or not m[2]:
+        return
+    name = conn.execute("SELECT name FROM entities WHERE entity_id = ?",
+                        (entity_id,)).fetchone()[0]
+    phrase = '"' + (name or "").replace('"', '""') + '"'
+    cols, rows = _rows(conn, """
+        SELECT ti.kind, ti.name, snippet(text_index, 4, '[', ']', '...', 12) AS match
+        FROM text_index ti
+        WHERE text_index MATCH ? AND ti.entity_id IS NOT ?
+        ORDER BY rank""", (phrase, entity_id))
+    print(f"This export has {m[2]} calculation(s) without a reference list: a use "
+          "inside one has no reference here.")
+    if not rows:
+        print(f"Full text: no text mention of '{name}' either.")
+        return
+    print(f"Full text: {len(rows)} text mention(s) of '{name}' "
+          f"(`search {db_path} '{phrase}'`):")
+    _print_table(cols, rows, limit=limit)
+
+
 def _connect(db_path):
     """Open an index and warn if it was built by an older parser than the one
     running now — a stale index silently lacks newer reference types (learned
@@ -102,7 +146,7 @@ def _connect(db_path):
     if built_with != __version__:
         print(f"WARNING: index built with fm_ddr {built_with or '<1.2.0'}, "
               f"running {__version__} — newer parsers capture more references. "
-              f"Rebuild: fm-ddr build <ddr.xml...> -o {db_path} --force",
+              f"Rebuild: fm-ddr build <ddr.xml...> -o {db_path}",
               file=sys.stderr)
     return conn
 
@@ -136,6 +180,7 @@ def cmd_where(args):
             _print_table(cols, rows, limit=args.limit)
         else:
             print("(none — but see COVERAGE.md for what references are not captured)")
+            _text_check(conn, entity_id, args.db, args.limit)
         print()
 
 
@@ -172,7 +217,7 @@ def cmd_cascades(args):
     if not conn.execute("SELECT 1 FROM sqlite_master WHERE name='v_cascades'").fetchone():
         raise SystemExit("error: this index has no v_cascades view (built with "
                          "parser < 1.10.0). Rebuild: fm-ddr build <ddr.xml...> "
-                         f"-o {args.db} --force")
+                         f"-o {args.db}")
     where, params = "", ()
     if args.table:
         where = "WHERE victim_table = ? OR victim_to = ?"
@@ -188,6 +233,23 @@ def cmd_cascades(args):
     else:
         print("(none — no relationship side has cascade delete enabled"
               + (f" for {args.table}" if args.table else "") + ")")
+    # A victim TO with no base table: an external TO whose data source the
+    # export left empty (Save a Copy as XML by FMDeveloperTool). The table it
+    # deletes into is in another file and named nowhere in this index, so
+    # it may be the one asked for: list it, never drop it silently.
+    unknown = _rows(conn,
+        """SELECT deleting_table, deleting_to, victim_table, victim_to, relationship
+           FROM v_cascades WHERE victim_table IS NULL AND victim_to IS NOT ?
+           ORDER BY victim_to, deleting_table""", (args.table,))[1]
+    if unknown:
+        print(f"\n# {len(unknown)} relationship side(s) delete into a table occurrence "
+              "whose base table this index does not know\n"
+              "# (an external table occurrence with no data source, as FMDeveloperTool "
+              "exports it)"
+              + (f"; any of them may delete into {args.table}" if args.table else "")
+              + "\n")
+        if args.table:
+            _print_table(cols, unknown, limit=args.limit)
 
 
 def cmd_valuelist(args):
@@ -467,10 +529,13 @@ def cmd_list(args):
                     "SELECT parser_version FROM ddr_run LIMIT 1").fetchone()[0]
             except sqlite3.OperationalError:
                 built_with = None  # pre-1.2.0 index
+            fmt = _source(conn)[0]
+            from fm_ddr.saxml import ddrinfo_misses
+            misses = ddrinfo_misses(conn)
             nfiles = conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
             conn.close()
         except (sqlite3.OperationalError, sqlite3.DatabaseError, TypeError):
-            rows.append([name, "(not an fmsonar database)", "", "", size, ""])
+            rows.append([name, "(not an fmsonar database)", "", "", "", size, ""])
             continue
         issues = []
         if built_with != __version__:
@@ -485,20 +550,23 @@ def cmd_list(args):
                 if os.path.exists(q):
                     seen = True
                     if os.path.getmtime(q) > built_ts:
-                        issues.append("DDR newer than index — rebuild")
+                        issues.append("source newer than index, rebuild")
                         break
             if sources and not seen:
-                issues.append("source DDR not found")
+                issues.append("source file not found")
         except (ValueError, OSError):
             pass
         built = (parsed_at or "")[:16].replace("T", " ")
-        rows.append([name, label or "", built, built_with or "<1.2.0",
-                     f"{size} · {nfiles}f", " · ".join(issues) or "ok"])
+        status = " · ".join(issues) or "ok"
+        if misses and misses[2]:
+            status += f" · {misses[2]} calculation(s) without reference list"
+        rows.append([name, label or "", built, built_with or "<1.2.0", fmt,
+                     f"{size} · {nfiles}f", status])
     if not rows:
         print(f"No databases in {d}")
         return
     print(f"# {d}\n")
-    _print_table(["db", "label", "built (UTC)", "parser", "size", "status"], rows)
+    _print_table(["db", "label", "built (UTC)", "parser", "format", "size", "status"], rows)
 
 
 
@@ -1033,6 +1101,16 @@ def cmd_report(args):
 
 def cmd_stats(args):
     conn = _connect(args.db)
+    print(_source_line(conn))
+    try:
+        per_file = conn.execute(
+            "SELECT name, format_version, source_version FROM files "
+            "WHERE format_version IS NOT NULL ORDER BY file_id").fetchall()
+    except sqlite3.OperationalError:
+        per_file = []   # an index built before the columns
+    for nm, fv, sv in per_file:
+        print(f"  {nm}: saxml {fv}" + (f" (FileMaker {sv})" if sv else ""))
+    print()
     print("# Entity counts")
     _, rows = _rows(conn, "SELECT kind, COUNT(*) n FROM entities GROUP BY kind ORDER BY n DESC")
     for kind, n in rows:
@@ -1043,6 +1121,23 @@ def cmd_stats(args):
     print(f"\n# References: {tot} total, {res} resolved ({100*res//max(tot,1)}%)")
     if dis:
         print(f"  {dis} from disabled (commented-out) steps — excluded from v_usage, see v_usage_disabled")
+    ext = conn.execute("SELECT COUNT(*) FROM entities WHERE kind = 'table_occurrence' "
+                       "AND json_extract(extra_json, '$.external') = 1").fetchone()[0]
+    if ext:
+        print(f"  {ext} external table occurrences with no data source: their field "
+              f"references stay unresolved (extra_json.external)")
+    from fm_ddr.saxml import ddrinfo_misses
+    misses = ddrinfo_misses(conn)
+    if misses and misses[2]:
+        print(f"  {misses[2]} calculation(s) without reference list (no entry in the "
+              "export's DDR_INFO): a usage inside them may be missing; "
+              "`search` finds their text")
+    if misses and misses[1]:
+        print(f"  {misses[1]} step(s) without step text (not in the export's DDR_INFO)")
+    from fm_ddr.saxml import unused_caveat
+    caveat = unused_caveat(conn)
+    if caveat:
+        print(f"  {caveat}")
     print("\n# Unresolved by kind/context (external / built-in / broken)")
     _, rows = _rows(conn, "SELECT * FROM v_unresolved")
     _print_table(["target_kind", "context", "n"], rows)
@@ -1150,9 +1245,11 @@ def main(argv=None):
     sub = p.add_subparsers(dest="cmd")
 
     b = sub.add_parser("build",
-                       help="parse DDR XML(s) or a Summary.xml manifest into SQLite")
+                       help="parse DDR XML(s), a Summary.xml manifest, or Save a Copy as XML "
+                            "export(s) made with FileMaker 26 and analysis details into SQLite")
     b.add_argument("ddr", nargs="+",
-                   help="one or more *_fmp12.xml files, or a single Summary.xml")
+                   help="one or more *_fmp12.xml DDR files, a single Summary.xml, "
+                        "or one or more Save a Copy as XML exports (one per file)")
     b.add_argument("-o", "--out")
     b.add_argument("--label")
     b.add_argument("--force", action="store_true",
@@ -1296,6 +1393,19 @@ def main(argv=None):
         args.func(args)
     except (BrokenPipeError, KeyboardInterrupt):
         raise
+    except OSError as e:
+        if args.debug:
+            raise
+        # One line, no errno: what is wrong with which path
+        name = e.filename if e.filename is not None else ""
+        if isinstance(e, IsADirectoryError):
+            msg = f"{name} is a folder, not a file"
+        elif isinstance(e, FileNotFoundError):
+            msg = f"{name}: no such file"
+        else:
+            msg = f"{name}: {e.strerror or e.__class__.__name__}"
+        print(f"error: {msg}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         if args.debug:
             raise

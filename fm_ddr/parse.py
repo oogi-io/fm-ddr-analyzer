@@ -103,9 +103,11 @@ class DDRHandler(xml.sax.ContentHandler):
                 return e["name"]
         return None
 
-    def new_entity(self, kind, attrs, **extra):
+    def new_entity(self, kind, attrs, parent_id=None, **extra):
         self.eid += 1
         parent = self.entity_stack[-1]["entity_id"] if self.entity_stack else None
+        if parent_id is not None:   # SaXML: catalog membership is by id, not nesting
+            parent = parent_id
         ent = {
             "entity_id": self.eid,
             "file_id": self.file_id,
@@ -904,44 +906,6 @@ def expand_summary(path: str) -> list[str] | None:
     return out
 
 
-def _reject_dtd(path: str) -> None:
-    """Refuse a DDR that declares a DTD internal subset. Real FileMaker DDRs
-    have none; an internal subset with <!ENTITY declarations is the entity-
-    expansion ("billion laughs") attack, which older expat (<2.6) won't stop.
-    The subset always sits in the head, before the root element."""
-    import re
-    with open(path, "rb") as f:
-        head = f.read(8192)
-    enc = "utf-16-le" if head[:2] == b"\xff\xfe" else "utf-8"
-    text = head.decode(enc, "replace")
-    if re.search(r"<!DOCTYPE[^>]*\[", text) or "<!ENTITY" in text:
-        raise ValueError(
-            f"{path} declares an XML DTD/entity subset; refusing to parse it "
-            "(a FileMaker DDR never contains one).")
-
-
-def _reject_saxml(path: str) -> None:
-    """Refuse a Save a Copy as XML export (root <FMSaveAsXML>) with a clear
-    message. Its shape differs from the DDR's (a relationship's TO name sits
-    in a nested TableOccurrenceReference, not a name attribute), so the DDR
-    parser would crash or build a wrong index from it."""
-    import re
-    with open(path, "rb") as f:
-        head = f.read(8192)
-    enc = "utf-16-le" if head[:2] == b"\xff\xfe" else "utf-8"
-    text = head.decode(enc, "replace")
-    m = re.search(r'<FMSaveAsXML\b[^>]*', text)
-    if m:
-        ver = re.search(r'\bversion="([^"]*)"', m.group(0))
-        src = re.search(r'\bSource="([^"]*)"', m.group(0))
-        raise ValueError(
-            f"{path} is a Save a Copy as XML export (FMSaveAsXML"
-            f"{' ' + ver.group(1) if ver else ''}"
-            f"{', FileMaker ' + src.group(1) if src else ''}), not a Database "
-            "Design Report. fmsonar reads the DDR only for now: generate one "
-            "via Tools > Database Design Report > XML in FileMaker Pro.")
-
-
 def _is_fmsonar_db(path: str) -> bool:
     """True if `path` looks like a database this tool produced — a SQLite file
     with a ddr_run table. Used to avoid clobbering an unrelated file at -o."""
@@ -963,7 +927,8 @@ def _is_fmsonar_db(path: str) -> bool:
 def build(ddr_paths, db_path: str, label: str | None = None,
           force: bool = False) -> dict:
     """Parse one or more DDR files (or a Summary.xml manifest) into a fresh
-    SQLite DB. Returns a summary dict.
+    SQLite DB. Returns a summary dict: entity counts per kind, _refs,
+    _refs_resolved, and _warnings (a list of warning texts, maybe empty).
 
     The DB is built into a temp file alongside the target and moved into place
     only on success, so a malformed DDR (or a typo'd -o path) never destroys an
@@ -977,6 +942,8 @@ def build(ddr_paths, db_path: str, label: str | None = None,
         linked = expand_summary(ddr_paths[0])
         if linked:
             ddr_paths = linked
+
+    from fm_ddr import saxml   # here, not at the top: saxml imports this module
 
     if os.path.exists(db_path) and not force and not _is_fmsonar_db(db_path):
         raise ValueError(
@@ -1001,29 +968,58 @@ def build(ddr_paths, db_path: str, label: str | None = None,
         # still-open source entity is inserted). Resolution happens after, in SQL.
         conn.execute("PRAGMA foreign_keys=OFF")
 
-        ver, ctime = _peek_report_meta(ddr_paths[0])
+        # Sniff every path before parsing any: one source format per index.
+        # The sniff reads the prolog to the real root and refuses a DTD
+        # internal subset (the entity-expansion attack older expat won't
+        # stop) and a root that is neither format.
+        infos = []
+        for p in ddr_paths:
+            info = saxml.sniff(p)
+            saxml.refuse_unknown_root(info, p)
+            infos.append(info)
+        sax = [p for p, i in zip(ddr_paths, infos) if i["fmt"] == "saxml"]
+        other = [p for p, i in zip(ddr_paths, infos) if i["fmt"] != "saxml"]
+        if sax and other:
+            raise ValueError(
+                f"build takes one source format per index: {other[0]} is a "
+                f"DDR, {sax[0]} is a Save a Copy as XML export.")
+        if sax:
+            for p, i in zip(ddr_paths, infos):
+                saxml.check(i, p)
+            saxml.refuse_duplicates(zip(ddr_paths, infos))
+            (ver, src_ver), ctime, fmt = saxml.run_versions(infos), None, "saxml"
+        else:
+            ver, ctime = _peek_report_meta(ddr_paths[0])
+            fmt, src_ver = "ddr", None
         cur = conn.execute(
-            "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,parser_version,label)"
-            " VALUES (?,?,?,?,?,?)",
+            "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,parser_version,"
+            "source_format,source_version,label) VALUES (?,?,?,?,?,?,?,?)",
             (";".join(os.path.abspath(p) for p in ddr_paths), ver, ctime,
-             datetime.now(timezone.utc).isoformat(), _parser_version(),
+             datetime.now(timezone.utc).isoformat(), _parser_version(), fmt, src_ver,
              label or os.path.basename(ddr_paths[0])))
         run_id = cur.lastrowid
 
         # One handler across all files: entity/ref ids stay a single space, and
-        # each <File> element opens a new row in `files`.
-        handler = DDRHandler(conn, run_id)
-        for p in ddr_paths:
-            _reject_dtd(p)
-            _reject_saxml(p)
-            parser = xml.sax.make_parser()
-            parser.setContentHandler(handler)
-            # expat honors the BOM / XML declaration, so binary mode handles UTF-16-LE.
-            with open(p, "rb") as f:
-                parser.parse(f)
+        # each <File> element (SaXML: each export's root) opens a row in `files`.
+        if sax:
+            handler = saxml.SaXMLHandler(conn, run_id)
+            for p, i in zip(ddr_paths, infos):
+                handler.parse(p, i["version"])   # pass 1 (DDR_INFO), then pass 2
+        else:
+            handler = DDRHandler(conn, run_id)
+            for p in ddr_paths:
+                parser = xml.sax.make_parser()
+                parser.setContentHandler(handler)
+                # expat honors the BOM / XML declaration, so binary mode handles UTF-16-LE.
+                with open(p, "rb") as f:
+                    parser.parse(f)
         handler.flush()
         conn.commit()
 
+        if handler.file_id is None and sax:
+            raise ValueError(
+                f"{ddr_paths[0]} holds no FMSaveAsXML root element: not a "
+                "readable Save a Copy as XML export.")
         if handler.file_id is None:
             raise ValueError(
                 f"{ddr_paths[0]} is not a FileMaker DDR (no FMPReport/File found). "
@@ -1034,6 +1030,8 @@ def build(ddr_paths, db_path: str, label: str | None = None,
             conn.executescript(f.read())
         conn.commit()
         summary = _summarize(conn)
+        warnings = _build_warnings(conn, summary, ver, saxml if sax else None,
+                                   list(zip(ddr_paths, infos)))
     except BaseException:
         conn.close()
         if os.path.exists(tmp_path):
@@ -1041,7 +1039,26 @@ def build(ddr_paths, db_path: str, label: str | None = None,
         raise
     conn.close()
     os.replace(tmp_path, db_path)  # atomic; only reached on success
+    # Every warning of the build, in one list: the CLI prints them as one
+    # block before "Done:"
+    summary["_warnings"] = warnings
     return summary
+
+
+def _build_warnings(conn, summary, ver, saxml_mod, infos) -> list:
+    """The build's warnings, from the sniffed roots and the finished index.
+    A warning never stops the build."""
+    if saxml_mod is not None:
+        return saxml_mod.build_warnings(conn, infos)
+    out = []
+    total, resolved = summary.get("_refs", 0), summary.get("_refs_resolved", 0)
+    if total and resolved / total < 0.95:
+        out.append(
+            f"WARNING: only {100 * resolved // total}% of references resolved "
+            f"(source version {ver}). On a healthy single-file solution expect ~98%.\n"
+            "  Low resolution usually means an unmapped FM-version construct or a "
+            "multi-file solution: check `stats` / v_unresolved.")
+    return out
 
 
 def _peek_report_meta(path):

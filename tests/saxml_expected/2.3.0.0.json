@@ -1,0 +1,733 @@
+{
+ "entity_counts": {
+  "account": 2,
+  "base_table": 4,
+  "custom_function": 2,
+  "extended_privilege": 11,
+  "field": 35,
+  "layout": 8,
+  "layout_group": 1,
+  "layout_object": 41,
+  "privilege_set": 3,
+  "relationship": 4,
+  "script": 11,
+  "script_group": 7,
+  "script_step": 92,
+  "table_occurrence": 8,
+  "theme": 1,
+  "value_list": 3
+ },
+ "refs": [
+  [
+   "",
+   "trigger",
+   "script",
+   "Export SaXML",
+   1,
+   0,
+   "OnFirstWindowOpen"
+  ],
+  [
+   "field|Address_CountryCode|base_table|CUS__Customer||0|0",
+   "value_list_source",
+   "value_list",
+   "CountryCode",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|Brand|base_table|WAT__Watch||0|0",
+   "value_list_source",
+   "value_list",
+   "Brand",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|Name_Full_c|base_table|CUS__Customer||0|0",
+   "calc",
+   "field",
+   "CUS__Customer::Name_First",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|Name_Full_c|base_table|CUS__Customer||0|0",
+   "calc",
+   "field",
+   "CUS__Customer::Name_Last",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|Name_Full_c|base_table|CUS__Customer||0|0",
+   "function_ref",
+   "custom_function",
+   "_Str_FullName",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|Price|base_table|SAL__Sale||0|0",
+   "lookup",
+   "field",
+   "SAL_WAT__Watch::Price",
+   1,
+   0,
+   ""
+  ],
+  [
+   "field|SaleCount_cu|base_table|WAT__Watch||0|0",
+   "calc",
+   "field",
+   "WAT_SAL__Sale::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|BTN__Sell|layout|Watch List||0|0",
+   "calc",
+   "field",
+   "WAT__Watch::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|BTN__Sell|layout|Watch List||0|0",
+   "function_ref",
+   "custom_function",
+   "_Util_Tooltip",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|BTN__Sell|layout|Watch List||0|0",
+   "perform_script",
+   "script",
+   "Sell Watch ( watchId )",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|nameFirst|layout|Lab Layout|layout_group|Lab Layouts||0|0|0",
+   "calc",
+   "field",
+   "CUS__Customer::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|nameFirst|layout|Lab Layout|layout_group|Lab Layouts||0|0|0",
+   "layout_object",
+   "field",
+   "CUS__Customer::Name_First",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object|nameFirst|layout|Lab Layout|layout_group|Lab Layouts||0|0|0",
+   "trigger",
+   "script",
+   "TRIGGER_onObjectModify",
+   1,
+   0,
+   "OnObjectModify"
+  ],
+  [
+   "layout_object||layout_object||layout|Customer Detail||0|8|0",
+   "layout_object",
+   "field",
+   "CUS_SAL__Sale::SoldOn",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout_object||layout|Customer Detail||0|8|1",
+   "layout_object",
+   "field",
+   "CUS_SAL__Sale::Price",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout_object||layout|Lab Layout|layout_group|Lab Layouts||0|0|4|0",
+   "layout_object",
+   "field",
+   "CUS_SAL__Sale::SoldOn",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Customer Detail||0|1",
+   "layout_object",
+   "field",
+   "CUS__Customer::Name_First",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Customer Detail||0|3",
+   "layout_object",
+   "field",
+   "CUS__Customer::Name_Last",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Customer Detail||0|5",
+   "layout_object",
+   "field",
+   "CUS__Customer::Name_Full_c",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Customer Detail||0|7",
+   "layout_object",
+   "field",
+   "CUS__Customer::Address_CountryCode",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Customer Detail||0|8",
+   "portal",
+   "table_occurrence",
+   "CUS_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Lab Layout|layout_group|Lab Layouts||0|0|1",
+   "layout_object",
+   "field",
+   "CUS__Customer::Phone_r[3]",
+   0,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Lab Layout|layout_group|Lab Layouts||0|0|2",
+   "perform_script",
+   "script",
+   "Target",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Lab Layout|layout_group|Lab Layouts||0|0|3",
+   "step_target",
+   "field",
+   "CUS__Customer::Name_Last",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Lab Layout|layout_group|Lab Layouts||0|0|4",
+   "portal",
+   "table_occurrence",
+   "CUS_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Sale Entry||0|1",
+   "layout_object",
+   "field",
+   "SAL__Sale::SoldOn",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Sale Entry||0|3",
+   "layout_object",
+   "field",
+   "SAL_CUS__Customer::Name_Full_c",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Sale Entry||0|5",
+   "layout_object",
+   "field",
+   "SAL_WAT__Watch::Model",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Sale Entry||0|7",
+   "layout_object",
+   "field",
+   "SAL__Sale::Price",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Watch List||0|1",
+   "layout_object",
+   "field",
+   "WAT__Watch::Brand",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Watch List||0|3",
+   "layout_object",
+   "field",
+   "WAT__Watch::Model",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout_object||layout|Watch List||0|5",
+   "layout_object",
+   "field",
+   "WAT__Watch::Price",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|CUS__Customer_blank||0",
+   "layout_context",
+   "table_occurrence",
+   "CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Customer Detail||0",
+   "layout_context",
+   "table_occurrence",
+   "CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Global_blank||0",
+   "layout_context",
+   "table_occurrence",
+   "Global",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Lab Layout|layout_group|Lab Layouts||0|0",
+   "layout_context",
+   "table_occurrence",
+   "CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Lab Layout|layout_group|Lab Layouts||0|0",
+   "trigger",
+   "script",
+   "TRIGGER_onRecordLoad",
+   1,
+   0,
+   "OnRecordLoad"
+  ],
+  [
+   "layout|SAL__Sale_blank||0",
+   "layout_context",
+   "table_occurrence",
+   "SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Sale Entry||0",
+   "layout_context",
+   "table_occurrence",
+   "SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|WAT__Watch_blank||0",
+   "layout_context",
+   "table_occurrence",
+   "WAT__Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "layout|Watch List||0",
+   "layout_context",
+   "table_occurrence",
+   "WAT__Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|CUS__Customer :: CUS_SAL__Sale||0",
+   "join_predicate",
+   "field",
+   "CUS_SAL__Sale::ID_Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|CUS__Customer :: CUS_SAL__Sale||0",
+   "join_predicate",
+   "field",
+   "CUS__Customer::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|CUS__Customer :: CUS_SAL__Sale||0",
+   "join_predicate",
+   "table_occurrence",
+   "CUS_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|CUS__Customer :: CUS_SAL__Sale||0",
+   "join_predicate",
+   "table_occurrence",
+   "CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_CUS__Customer||0",
+   "join_predicate",
+   "field",
+   "SAL_CUS__Customer::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_CUS__Customer||0",
+   "join_predicate",
+   "field",
+   "SAL__Sale::ID_Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_CUS__Customer||0",
+   "join_predicate",
+   "table_occurrence",
+   "SAL_CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_CUS__Customer||0",
+   "join_predicate",
+   "table_occurrence",
+   "SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_WAT__Watch||0",
+   "join_predicate",
+   "field",
+   "SAL_WAT__Watch::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_WAT__Watch||0",
+   "join_predicate",
+   "field",
+   "SAL__Sale::ID_Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_WAT__Watch||0",
+   "join_predicate",
+   "table_occurrence",
+   "SAL_WAT__Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|SAL__Sale :: SAL_WAT__Watch||0",
+   "join_predicate",
+   "table_occurrence",
+   "SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|WAT__Watch :: WAT_SAL__Sale||0",
+   "join_predicate",
+   "field",
+   "WAT_SAL__Sale::ID_Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|WAT__Watch :: WAT_SAL__Sale||0",
+   "join_predicate",
+   "field",
+   "WAT__Watch::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|WAT__Watch :: WAT_SAL__Sale||0",
+   "join_predicate",
+   "table_occurrence",
+   "WAT_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "relationship|WAT__Watch :: WAT_SAL__Sale||0",
+   "join_predicate",
+   "table_occurrence",
+   "WAT__Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Layout|script|Caller||0|0",
+   "go_to_layout",
+   "layout",
+   "Watch List",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Layout|script|New Customer|script_group|Customer||0|0|0",
+   "go_to_layout",
+   "layout",
+   "Customer Detail",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Layout|script|TRIGGER_onFirstWindowOpen|script_group|Triggers||0|0|0",
+   "go_to_layout",
+   "layout",
+   "Customer Detail",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|0",
+   "go_to_layout",
+   "layout",
+   "Sale Entry",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|0",
+   "step_table",
+   "table_occurrence",
+   "CUS_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|1",
+   "go_to_layout",
+   "layout",
+   "Sale Entry",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|1",
+   "step_table",
+   "table_occurrence",
+   "<unknown>",
+   0,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|2",
+   "go_to_layout",
+   "layout",
+   "Sale Entry",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Go to Related Record|script|Caller||0|2",
+   "step_table",
+   "table_occurrence",
+   "CUS_SAL__Sale",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|New Window|script|Sell Watch ( watchId )|script_group|Sale||0|0|0",
+   "go_to_layout",
+   "layout",
+   "SAL__Sale_blank",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Perform Script|script|Caller||0|0",
+   "perform_script",
+   "script",
+   "Target",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Perform Script|script|Caller||0|1",
+   "perform_script",
+   "script",
+   "<unknown>",
+   0,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Field|script|Caller||0|0",
+   "step_target",
+   "field",
+   "CUS__Customer::Name_First",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Field|script|Caller||0|1",
+   "step_target",
+   "field",
+   "<Table Missing>",
+   0,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Field|script|Sell Watch ( watchId )|script_group|Sale||0|0|0",
+   "step_target",
+   "field",
+   "SAL__Sale::ID_Watch",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Field|script|Sell Watch ( watchId )|script_group|Sale||0|0|1",
+   "step_target",
+   "field",
+   "SAL__Sale::SoldOn",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Variable|script|Sell Watch ( watchId )|script_group|Sale||0|0|9",
+   "calc",
+   "field",
+   "SAL__Sale::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "script_step|Set Variable|script|Sell Watch ( watchId )|script_group|Sale||0|0|9",
+   "calc",
+   "field",
+   "SAL__Sale::Price",
+   1,
+   0,
+   ""
+  ],
+  [
+   "value_list|SalesOfCustomer||0",
+   "value_list_context",
+   "table_occurrence",
+   "CUS__Customer",
+   1,
+   0,
+   ""
+  ],
+  [
+   "value_list|SalesOfCustomer||0",
+   "value_list_field",
+   "field",
+   "CUS_SAL__Sale::ID",
+   1,
+   0,
+   ""
+  ],
+  [
+   "value_list|SalesOfCustomer||0",
+   "value_list_field",
+   "field",
+   "CUS_SAL__Sale::SoldOn",
+   1,
+   0,
+   ""
+  ]
+ ]
+}

@@ -21,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -480,25 +481,6 @@ class TestParser(unittest.TestCase):
         with self.assertRaises(ValueError):
             build(bogus, os.path.join(self.tmp, "bogus.db"))
 
-    def test_build_refuses_save_a_copy_as_xml(self):
-        # A real SaXML (FileMaker 26) crashed the DDR parser with a TypeError;
-        # it must be refused by name, with the version, before parsing.
-        saxml = os.path.join(self.tmp, "Lab_saxml.xml")
-        with open(saxml, "w") as f:
-            f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
-                    '<FMSaveAsXML version="2.3.0.1" Source="26.1.1" File="Lab.fmp12">'
-                    '<Structure><AddAction><RelationshipCatalog><Relationship id="1">'
-                    '<LeftTable><TableOccurrenceReference id="1" name="A"/></LeftTable>'
-                    '<RightTable><TableOccurrenceReference id="2" name="B"/></RightTable>'
-                    '</Relationship></RelationshipCatalog></AddAction></Structure>'
-                    '</FMSaveAsXML>')
-        with self.assertRaises(ValueError) as cm:
-            build(saxml, os.path.join(self.tmp, "saxml.db"))
-        msg = str(cm.exception)
-        self.assertIn("Save a Copy as XML", msg)
-        self.assertIn("2.3.0.1", msg)
-        self.assertIn("26.1.1", msg)
-
     def test_build_preserves_target_on_bad_input(self):
         # A malformed DDR must not destroy whatever already sits at the -o path.
         target = os.path.join(self.tmp, "precious.db")
@@ -520,7 +502,7 @@ class TestParser(unittest.TestCase):
         on a new machine (~/.fmsonar/dbs). mkstemp does not create it, so build
         has to: without this, the failure surfaces as Errno 2 naming the temp
         file, which reads as if the temp file were the problem."""
-        target = os.path.join(self.tmp, "fresh", "dbs", "amps.db")
+        target = os.path.join(self.tmp, "fresh", "dbs", "solution.db")
         self.assertFalse(os.path.isdir(os.path.dirname(target)))
         build(FIXTURE, target, label="fresh machine")
         from fm_ddr.parse import _is_fmsonar_db
@@ -636,6 +618,25 @@ class TestSnippet(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract_script_xml(FIXTURE, "Main Script", script_id="9999")
 
+    def test_snippet_refuses_saxml_by_name(self):
+        # A Save a Copy as XML export has another step shape; snippet reads
+        # a DDR and says so, not "script not found"
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        from fm_ddr.snippet import extract_script_xml
+        sax = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+        with self.assertRaises(ValueError) as cm:
+            extract_script_xml(sax, "Caller")
+        msg = str(cm.exception)
+        self.assertIn("Save a Copy as XML", msg)
+        self.assertIn("DDR", msg)
+        self.assertNotIn("not found", msg)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            main(["snippet", sax, "Caller"])
+        self.assertIn("Save a Copy as XML", err.getvalue())
+
     def test_snippet_clip_guarded_off_macos(self):
         import sys
         from fm_ddr.snippet import set_clipboard_xmss
@@ -750,6 +751,34 @@ class TestJSParity(unittest.TestCase):
         build([FIXTURE, FIXTURE_D], db, label="ad")
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_D], 13))
+
+
+@unittest.skipUnless(shutil.which("node"), "node not available")
+class TestViewerSaXMLRefusal(unittest.TestCase):
+    """The browser viewer refuses every SaXML fixture with a message that
+    names the format, read in the browser's 64 KB chunks; a DDR still
+    loads."""
+
+    def run_js(self, path):
+        return subprocess.run(["node", JS_RUNNER, WEB_APP, "65536", path],
+                              capture_output=True, text=True, timeout=120)
+
+    def test_refused(self):
+        import glob
+        from fm_ddr.saxml import sniff
+        paths = [p for p in sorted(glob.glob(os.path.join(
+            ROOT, "tests", "fixtures", "saxml_*.xml"))) if sniff(p)["fmt"] == "saxml"]
+        self.assertGreaterEqual(len(paths), 7)
+        for path in paths:
+            with self.subTest(fixture=os.path.basename(path)):
+                out = self.run_js(path)
+                self.assertNotEqual(out.returncode, 0)
+                self.assertIn("This is a Save a Copy as XML export (FMSaveAsXML "
+                              f'version {sniff(path)["version"]}); the browser '
+                              "viewer reads the DDR only.", out.stderr)
+
+    def test_ddr_loads(self):
+        self.assertEqual(self.run_js(FIXTURE).returncode, 0)
 
 
 class TestV19Capture(unittest.TestCase):
@@ -1721,6 +1750,3686 @@ class TestTriggerMap(unittest.TestCase):
         from fm_ddr.cli import main
         with self.assertRaises(SystemExit):
             main(["trigger-map", self.db, "--inputs", "Amount_c"])
+
+
+class TestSaXMLRefusal(unittest.TestCase):
+    """Save a Copy as XML exports fmsonar does not read are refused by name,
+    before parsing. Synthetic three-line headers, never a lab export.
+    Guard: TestGuardProofs.test_version_check."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxml_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def header(self, name, **attrs):
+        path = os.path.join(self.tmp, name)
+        root = " ".join(f'{k}="{v}"' for k, v in attrs.items())
+        with open(path, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                    f'<FMSaveAsXML {root}>\n'
+                    '</FMSaveAsXML>\n')
+        return path
+
+    def refused(self, paths):
+        with self.assertRaises(ValueError) as cm:
+            build(paths, os.path.join(self.tmp, "out.db"))
+        return str(cm.exception)
+
+    def test_unsupported_version_22(self):
+        p = self.header("v22.xml", version="2.2.3.0", Source="22.0.6",
+                        File="Lab.fmp12", Has_DDR_INFO="True")
+        msg = self.refused(p)
+        self.assertIn("Save a Copy as XML", msg)
+        self.assertIn("2.2.3.0", msg)
+        self.assertIn("22.0.6", msg)
+        self.assertIn("2.3.0.0 and 2.3.0.1", msg)
+
+    def test_unknown_version(self):
+        p = self.header("v9.xml", version="9.9.9.9", Source="99.0.1",
+                        File="Lab.fmp12", Has_DDR_INFO="True")
+        msg = self.refused(p)
+        self.assertIn("9.9.9.9", msg)
+        self.assertIn("99.0.1", msg)
+        self.assertIn("2.3.0.0 and 2.3.0.1", msg)
+
+    def test_version_quoted(self):
+        # A stray space shows in the message, not as "2.3.0.1 , FileMaker"
+        p = self.header("vs.xml", version="2.3.0.1 ", Source="26.1.1",
+                        File="Lab.fmp12", Has_DDR_INFO="True")
+        self.assertIn('(FMSaveAsXML version "2.3.0.1 ", FileMaker 26.1.1)',
+                      self.refused(p))
+
+    def test_message_lists_supported(self):
+        # The refusal names every version in SUPPORTED, whatever it holds:
+        # a version added to the table is in the message with no string to
+        # edit.
+        from fm_ddr import saxml
+        p = self.header("v9.xml", version="9.9.9.9", Source="99.0.1",
+                        File="Lab.fmp12", Has_DDR_INFO="True")
+        with mock.patch.dict(saxml.SUPPORTED, {"2.4.0.0": "saxml_2.4.0.0.xml"}):
+            msg = self.refused(p)
+        self.assertIn("2.3.0.0, 2.3.0.1 and 2.4.0.0", msg)
+        with mock.patch.dict(saxml.SUPPORTED, {"2.3.0.0": "saxml_2.3.0.0.xml"},
+                             clear=True):
+            msg = self.refused(p)
+        self.assertIn("reads version 2.3.0.0 (FileMaker 26.0)", msg)
+        self.assertNotIn("2.3.0.1", msg)
+
+    def test_no_details(self):
+        p = self.header("nodetails.xml", version="2.3.0.1", Source="26.1.1",
+                        File="Lab.fmp12")
+        self.assertIn("Include details", self.refused(p))
+
+    def test_split_catalogs(self):
+        p = self.header("split.xml", version="2.3.0.1", Source="26.1.1",
+                        File="Lab.fmp12", Has_DDR_INFO="True",
+                        binary_under_lo="False", split_catalogs="True")
+        self.assertIn("default export only", self.refused(p))
+
+    def test_mixed_formats(self):
+        p = self.header("ok.xml", version="2.3.0.1", Source="26.1.1",
+                        File="Lab.fmp12", Has_DDR_INFO="True",
+                        binary_under_lo="False", split_catalogs="False")
+        msg = self.refused([FIXTURE, p])
+        self.assertIn("one source format per index", msg)
+        self.assertIn(FIXTURE, msg)
+        self.assertIn(p, msg)
+
+    def test_refusal_leaves_no_temp_db(self):
+        p = self.header("v22.xml", version="2.2.3.0", Source="22.0.6")
+        self.refused(p)
+        self.assertEqual([n for n in os.listdir(self.tmp)
+                          if n.startswith(".fmsonar-build-")], [])
+
+
+class TestPrologSniff(unittest.TestCase):
+    """The format is read from the real root element, wherever the prolog
+    ends: comments, a long XML declaration or a padded DOCTYPE never move it
+    out of reach, and nothing before the root decides it. A DOCTYPE with an
+    internal subset, or an ENTITY declaration anywhere in the prolog, is
+    refused before any parse; a root that is neither FMPReport nor
+    FMSaveAsXML is refused by name."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_prolog_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def variant(self, src, name, before_root="", root_extra=""):
+        """src with text inserted between the XML declaration and the root,
+        and an attribute string added to the root tag."""
+        with open(src, encoding="utf-8") as f:
+            text = f.read()
+        decl_end = text.index("?>") + 2
+        root = text.index("<", decl_end)
+        head, rest = text[:decl_end], text[root:]
+        if root_extra:
+            sp = rest.index(" ")
+            rest = rest[:sp] + " " + root_extra + rest[sp:]
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(head + "\n" + before_root + rest)
+        return path
+
+    def test_padded_doctype_with_subset_refused(self):
+        # The subset opens 9 KB into the DOCTYPE, past any fixed window
+        p = self.variant(self.SAX, "dtd.xml", before_root=(
+            '<!DOCTYPE FMSaveAsXML SYSTEM "' + "x" * 9000 + '" [\n'
+            '<!ENTITY a "AAAA">\n]>\n'))
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "dtd.db"))
+        self.assertIn("DTD", str(cm.exception))
+
+    def test_entity_after_long_comment_refused(self):
+        p = self.variant(self.SAX, "ent.xml", before_root=(
+            "<!-- " + "y" * 20000 + " -->\n" +
+            '<!DOCTYPE FMSaveAsXML SYSTEM "x.dtd" [<!ENTITY b "B">]>\n'))
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "ent.db"))
+        self.assertIn("DTD", str(cm.exception))
+
+    def test_root_beyond_8kb_builds(self):
+        ref = os.path.join(self.tmp, "ref.db")
+        build(self.SAX, ref, label="ref")
+        p = self.variant(self.SAX, "late.xml",
+                         before_root="<!-- " + "z" * 20000 + " -->\n")
+        db = os.path.join(self.tmp, "late.db")
+        build(p, db, label="ref")
+        self.assertEqual(normalize(*read_sqlite(ref)), normalize(*read_sqlite(db)))
+
+    def test_long_root_tag_builds(self):
+        p = self.variant(self.SAX, "longtag.xml",
+                         root_extra='Junk="' + "j" * 20000 + '"')
+        db = os.path.join(self.tmp, "longtag.db")
+        build(p, db, label="longtag")
+        conn = sqlite3.connect(db)
+        self.assertEqual(conn.execute(
+            "SELECT source_format, ddr_version FROM ddr_run").fetchone(),
+            ("saxml", "2.3.0.1"))
+        conn.close()
+
+    def test_comment_naming_saxml_in_a_ddr(self):
+        p = self.variant(FIXTURE, "ddr_comment.xml", before_root=(
+            '<!-- not a <FMSaveAsXML version="2.3.0.1" Has_DDR_INFO="True"> -->\n'))
+        db = os.path.join(self.tmp, "ddr_comment.db")
+        build(p, db, label="fixture")
+        self.assertEqual(normalize(*read_sqlite(db)),
+                         normalize(*read_sqlite(build_fixture_db(self.tmp))))
+
+    def test_comment_naming_ddr_in_a_saxml(self):
+        p = self.variant(self.SAX, "sax_comment.xml",
+                         before_root="<!-- <FMPReport type=\"Report\"> -->\n")
+        db = os.path.join(self.tmp, "sax_comment.db")
+        build(p, db, label="c")
+        conn = sqlite3.connect(db)
+        self.assertEqual(conn.execute(
+            "SELECT source_format FROM ddr_run").fetchone(), ("saxml",))
+        conn.close()
+
+    def test_junk_root_refused_by_name(self):
+        p = os.path.join(self.tmp, "junk.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0"?>\n<!-- <FMSaveAsXML version="2.3.0.1" '
+                    'Has_DDR_INFO="True"> -->\n<ObjectList><TableViewLayoutObject/>'
+                    '</ObjectList>\n')
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "junk.db"))
+        msg = str(cm.exception)
+        self.assertIn("ObjectList", msg)
+        self.assertIn("FMPReport", msg)
+        self.assertIn("FMSaveAsXML", msg)
+
+    def test_not_xml_refused(self):
+        # expat's own reason and place
+        p = os.path.join(self.tmp, "notes.txt")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("just some notes\n")
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "notes.db"))
+        msg = str(cm.exception)
+        self.assertIn("not well-formed XML", msg)
+        self.assertIn("syntax error at line 1, column 0", msg)
+        self.assertIn("FMSaveAsXML", msg)
+
+    def test_empty_file_refused(self):
+        p = os.path.join(self.tmp, "empty.xml")
+        open(p, "w").close()
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "empty.db"))
+        self.assertIn("is empty", str(cm.exception))
+
+    def test_junk_root_cli_one_line(self):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        p = os.path.join(self.tmp, "junk2.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write("<Calculation><Text>1</Text></Calculation>\n")
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            main(["build", p, "-o", os.path.join(self.tmp, "j2.db")])
+        lines = [l for l in err.getvalue().splitlines() if l.startswith("error:")]
+        self.assertEqual(len(lines), 1)
+        self.assertIn("Calculation", lines[0])
+        self.assertNotIn("Traceback", err.getvalue())
+
+    def test_root_attributes_decoded_as_the_parser_does(self):
+        # The sniff reads the root with the parser itself: a character
+        # reference in File reads as files.name does
+        from fm_ddr import saxml
+        p = self.variant(self.SAX, "ref.xml")
+        with open(p, encoding="utf-8") as f:
+            text = f.read().replace('File="SaxLab.fmp12"', 'File="caf&#233;.fmp12"', 1)
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text)
+        self.assertEqual(saxml.sniff(p)["file"], "café.fmp12")
+
+    def test_long_prolog_comment_builds(self):
+        # No prolog limit: a comment of any length before the root is read
+        # past, as the parser reads it
+        from fm_ddr import saxml
+        p = self.variant(self.SAX, "long.xml",
+                         before_root="<!-- " + "c" * (65 * 1024 * 1024) + " -->\n")
+        self.assertEqual(saxml.sniff(p)["root"], "FMSaveAsXML")
+
+    def test_utf16_be_saxml_builds(self):
+        ref = os.path.join(self.tmp, "ref16.db")
+        build(self.SAX, ref, label="ref")
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read().replace('encoding="UTF-8"', 'encoding="UTF-16"', 1)
+        p = os.path.join(self.tmp, "be.xml")
+        with open(p, "wb") as f:
+            f.write(b"\xfe\xff" + text.encode("utf-16-be"))
+        db = os.path.join(self.tmp, "be.db")
+        build(p, db, label="ref")
+        self.assertEqual(normalize(*read_sqlite(ref)), normalize(*read_sqlite(db)))
+
+
+class TestSaXMLLocale(unittest.TestCase):
+    """The root's locale. Every export measured so far is
+    English; a few rules read English step text. Another locale, or none,
+    builds with one warning that points at those rules in COVERAGE.md;
+    English builds silent."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_locale_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_cli(self, locale):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read()
+        new = f'locale="{locale}" ' if locale is not None else ""
+        text = text.replace('locale="English" ', new, 1)
+        path = os.path.join(self.tmp, "loc.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        both = io.StringIO()
+        db = os.path.join(self.tmp, "loc.db")
+        with contextlib.redirect_stdout(both), contextlib.redirect_stderr(both):
+            main(["build", path, "-o", db])
+        self.assertTrue(os.path.exists(db))
+        return both.getvalue()
+
+    def test_english_silent(self):
+        out = self.run_cli("English")
+        self.assertNotIn("English exports only", out)
+        self.assertNotIn('locale "', out)
+
+    def test_other_locale_warns(self):
+        out = self.run_cli("German")
+        self.assertEqual(out.count('locale "German"'), 1, out)
+        self.assertIn('WARNING: loc.xml: locale "German"', out)
+        # One list of the rules, in COVERAGE.md; the warning points at it
+        # and names the consequences
+        self.assertIn('COVERAGE.md ("Locale")', out)
+        self.assertIn("v_dangling", out)
+        self.assertIn("deleted script", out)
+        self.assertNotIn("from file:", out)
+        self.assertLess(out.index("WARNING:"), out.index("Done:"))
+        with open(os.path.join(ROOT, "COVERAGE.md"), encoding="utf-8") as f:
+            cov = f.read()
+        self.assertIn("**Locale.**", cov)
+        for rule in ("Go to Layout", "Go to Related Record", "New Window",
+                     "from file:", "Perform Script", "Insert Text"):
+            self.assertIn(rule, cov[cov.index("**Locale.**"):][:1200])
+
+    def test_absent_locale_warns(self):
+        out = self.run_cli(None)
+        self.assertIn("loc.xml: no locale", out)
+
+    def test_warning_names_no_internal_constant(self):
+        self.assertNotIn("STEP_NAMES", self.run_cli("German"))
+
+class TestSaXMLInputRobustness(unittest.TestCase):
+    """Input edge cases: the same export twice, an
+    empty File attribute, Pro's XMLv2_Summary, crafted nesting and OS errors
+    each end in one clear message, never a traceback or a silent build."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxrob_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def refused(self, paths):
+        with self.assertRaises(ValueError) as cm:
+            build(paths, os.path.join(self.tmp, "out.db"))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "out.db")))
+        return str(cm.exception)
+
+    def copy(self, name, old=None, new=None):
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read()
+        if old is not None:
+            self.assertEqual(text.count(old), 1)
+            text = text.replace(old, new)
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_same_export_twice(self):
+        msg = self.refused([self.SAX, self.SAX])
+        self.assertIn("SaxLab.fmp12", msg)
+        self.assertIn("once", msg)
+
+    def test_stale_copy_of_the_same_file(self):
+        msg = self.refused([self.SAX, self.copy("stale.xml")])
+        self.assertIn("SaxLab.fmp12", msg)
+        self.assertIn("stale.xml", msg)
+
+    def test_empty_file_attribute(self):
+        p = self.copy("nofile.xml", 'File="SaxLab.fmp12"', 'File=""')
+        self.assertIn("File attribute", self.refused(p))
+
+    def test_xmlv2_summary(self):
+        p = os.path.join(self.tmp, "Summary.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write('<?xml version="1.0" encoding="UTF-8"?>\n'
+                    '<FMPReport type="XMLv2_Summary" version="2.3.0.1">'
+                    '<File name="Lab" path="/x"><XML path="Lab.xml"/></File>'
+                    '</FMPReport>\n')
+        msg = self.refused(p)
+        self.assertIn("XMLv2_Summary", msg)
+        self.assertIn("Save a Copy as XML", msg)
+        self.assertIn("each file", msg)
+        self.assertNotIn("Database Design Report", msg)
+
+    def test_crafted_depth_is_a_value_error(self):
+        # A root the sniff would refuse, forced past it: the handler's
+        # ancestor checks never index past the stack
+        from fm_ddr import saxml
+        p = os.path.join(self.tmp, "deep.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write('<ObjectList><TableViewLayoutObject/><LayoutReference/>'
+                    '<Calculation><Text>1</Text></Calculation></ObjectList>\n')
+        fake = {"fmt": "saxml", "root": "FMSaveAsXML", "type": None,
+                "version": "2.3.0.1", "source": "26.1.1", "has_details": True,
+                "split_catalogs": False, "binary_under_lo": False,
+                "file": "X.fmp12", "locale": "English"}
+        with mock.patch.object(saxml, "sniff", lambda path: dict(fake)):
+            self.assertIn("no FMSaveAsXML root", self.refused(p))
+
+    def cli_error(self, path):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err), self.assertRaises(SystemExit):
+            main(["build", path, "-o", os.path.join(self.tmp, "o.db")])
+        lines = err.getvalue().strip().splitlines()
+        self.assertEqual(len(lines), 2, err.getvalue())   # "Parsing ..." + error
+        self.assertTrue(lines[1].startswith("error: "), lines[1])
+        self.assertNotIn("Errno", lines[1])
+        return lines[1]
+
+    def test_missing_file_one_line(self):
+        line = self.cli_error(os.path.join(self.tmp, "absent.xml"))
+        self.assertIn("absent.xml", line)
+        self.assertIn("no such file", line.lower())
+
+    def test_directory_one_line(self):
+        line = self.cli_error(self.tmp)
+        self.assertIn("folder", line)
+
+
+class TestSaXMLPrivacy(unittest.TestCase):
+    """The change stamps of a SaXML export name developers (UUID userName
+    and accountName). The index keeps them (the stamps are free in the
+    index); the shareable HTML report never carries them. The
+    fixtures are scrubbed, so the names are planted here."""
+
+    USER, ACCOUNT = "Sentinel Dev Person", "sentinel.dev.account"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxpriv_")
+        src = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+        with open(src, encoding="utf-8") as f:
+            text = f.read()
+        text = text.replace('userName="" accountName=""',
+                            f'userName="{cls.USER}" accountName="{cls.ACCOUNT}"')
+        path = os.path.join(cls.tmp, "named.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        cls.db = os.path.join(cls.tmp, "named.db")
+        build(path, cls.db, label="named")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_index_keeps_the_stamps(self):
+        conn = sqlite3.connect(self.db)
+        n = conn.execute(
+            "SELECT count(*) FROM entities WHERE "
+            "json_extract(extra_json, '$.modified_by') = ? AND "
+            "json_extract(extra_json, '$.modified_account') = ?",
+            (self.USER, self.ACCOUNT)).fetchone()[0]
+        conn.close()
+        self.assertGreater(n, 0)
+
+    def test_report_carries_no_names(self):
+        from fm_ddr.report import report
+        out = report(self.db, os.path.join(self.tmp, "named.html"))
+        with open(out, encoding="utf-8") as f:
+            html = f.read()
+        self.assertGreater(len(html), 1000)
+        for needle in (self.USER, self.ACCOUNT, "modified_by",
+                       "modified_account"):
+            self.assertNotIn(needle, html)
+
+    def test_the_check_sees_a_leak(self):
+        # The guard is report's column list: with extra_json embedded per
+        # entity, the planted name reaches the HTML and the check above
+        # would fail
+        from fm_ddr import report as rep
+        real = rep._collect
+
+        def leaky(db_path):
+            data = real(db_path)
+            conn = sqlite3.connect(db_path)
+            extra = dict(conn.execute("SELECT entity_id, extra_json FROM entities"))
+            conn.close()
+            for e in data["entities"]:
+                e["x"] = extra.get(e["id"])
+            return data
+
+        with mock.patch.object(rep, "_collect", leaky):
+            out = rep.report(self.db, os.path.join(self.tmp, "leak.html"))
+        with open(out, encoding="utf-8") as f:
+            self.assertIn(self.USER, f.read())
+
+
+class TestSaXMLInfoPass(unittest.TestCase):
+    """Pass 1 (_InfoPass) against an independent ElementTree read of each
+    SaXML fixture: every counted number comes from the fixture, none is a
+    constant."""
+
+    @staticmethod
+    def fixtures():
+        from fm_ddr.saxml import SUPPORTED
+        out = []
+        for name in SUPPORTED.values():
+            path = os.path.join(ROOT, "tests", "fixtures", name)
+            if os.path.exists(path):
+                out.append(path)
+        return out + [LAB3]
+
+    @staticmethod
+    def reference(path):
+        """DDR_INFO entries and the DDRREFs before it, read with ElementTree."""
+        import xml.etree.ElementTree as ET
+        root = ET.parse(path).getroot()
+        entries = {}
+        for section in root.find("DDR_INFO"):
+            for ent in section.find("ObjectList"):
+                if not ent.tag.startswith("_"):
+                    continue
+                pair = (ent.tag, ent.get("hash"))
+                if ent.get("datatype") == "StepText":
+                    entries.setdefault(pair, ("StepText", (ent.text or "").strip()))
+                else:
+                    frefs = []
+                    for ch in ent.iter("Chunk"):
+                        if ch.get("type") != "FieldRef":
+                            continue
+                        fr = ch.find("FieldReference")
+                        to = fr.find("TableOccurrenceReference")
+                        frefs.append(("FieldRef", fr.get("id"), fr.get("name"),
+                                      fr.get("repetition"),
+                                      None if to is None else to.get("id"),
+                                      None if to is None else to.get("name")))
+                    entries.setdefault(pair, (ent.get("datatype"), frefs))
+        refs = []
+        for top in ("Structure", "Metadata"):
+            for r in root.find(top).iter("DDRREF"):
+                refs.append((r.get("kind"), r.text, r.get("hash")))
+        return entries, refs
+
+    def test_fixtures_present(self):
+        self.assertTrue(self.fixtures(), "no SaXML fixture in tests/fixtures")
+
+    def test_info_pass(self):
+        from fm_ddr.saxml import _InfoPass
+        for path in self.fixtures():
+            with self.subTest(fixture=os.path.basename(path)):
+                info = _InfoPass().parse(path)
+                entries, refs = self.reference(path)
+                self.assertGreater(len(entries), 0)
+                self.assertEqual(
+                    set(info), set(entries),
+                    f"{len(info)} pass-1 pairs vs {len(entries)} distinct "
+                    "(key, hash) in DDR_INFO")
+                # A DDRREF with an empty hash has no entry by design (lab v3:
+                # GTRR's layout calc under LayoutReferenceContainer, the
+                # chunk-less class the build counts); every other one hits
+                missed = [r for r in refs if (r[1], r[2]) not in info and r[2]]
+                self.assertTrue(all(r[0] == "ChunkList" for r in refs if not r[2]))
+                self.assertGreater(len(refs), 0)
+                self.assertEqual(missed, [], f"{len(missed)} of {len(refs)} "
+                                 "DDRREFs in Structure/Metadata miss the dict")
+                n_text = n_fref = 0
+                for pair, (dt, want) in entries.items():
+                    got = info[pair]
+                    if dt == "StepText":
+                        n_text += 1
+                        self.assertEqual(got, want, pair[0])
+                    else:
+                        frefs = [c for c in got if c[0] == "FieldRef"]
+                        n_fref += len(frefs)
+                        self.assertEqual(frefs, want, pair[0])
+                        self.assertTrue(all(c[0] in ("FieldRef", "CustomFunctionRef")
+                                            for c in got))
+                self.assertGreater(n_text, 0, "no StepText entry compared")
+                self.assertGreater(n_fref, 0, "no FieldRef chunk compared")
+                self.assertTrue(any(c[5] for v in info.values()
+                                    if isinstance(v, list) for c in v
+                                    if c[0] == "FieldRef"),
+                                "no FieldRef carries a TO name")
+
+
+def _saxml_fixtures():
+    """The per-version fixtures and the lab v3 fixture."""
+    from fm_ddr.saxml import SUPPORTED
+    return [p for p in [os.path.join(ROOT, "tests", "fixtures", n)
+                        for n in SUPPORTED.values()] + [LAB3] if os.path.exists(p)]
+
+
+# A synthetic export: the root, then empty stand-ins for the sections every
+# FileMaker file writes (saxml.REQUIRED_SECTIONS) and for the catalogs whose
+# kind a body may refer to (saxml.REFERRED_SECTIONS), so the partial-export
+# refusal lets it through; the test body adds the catalogs it is about.
+SAXML_HEAD = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+              '<FMSaveAsXML version="2.3.0.0" Source="26.0.1" File="Syn.fmp12" '
+              'locale="English" Has_DDR_INFO="True" binary_under_lo="False" split_catalogs="False">'
+              '<Metadata/><Structure><AddAction>'
+              '<FileAccessCatalog/><ExternalDataSourceCatalog/><ScriptCatalog/>'
+              '<ValueListCatalog/><CustomFunctionsCatalog/>'
+              '<BaseTableCatalog/><TableOccurrenceCatalog/>'
+              '<FieldsForTables/><ThemeCatalog/><LayoutCatalog/><PrivilegeSetsCatalog/>'
+              '<ExtendedPrivilegesCatalog/><AccountsCatalog/>')
+SAXML_TAIL = '</AddAction></Structure></FMSaveAsXML>\n'
+
+
+class TestSaXMLCatalogs(unittest.TestCase):
+    """Phase 4 catalogs: the fixture build against an ElementTree count of
+    the same file, and the shapes the lab fixture lacks as synthetic
+    exports. Guard: TestGuardProofs.test_catalog_order."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxcat_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def synth(self, body):
+        path = os.path.join(self.tmp, "syn.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + body + SAXML_TAIL)
+        return path
+
+    def build_db(self, path):
+        db = os.path.join(self.tmp, "out.db")
+        build(path, db, label="saxml")
+        return sqlite3.connect(db)
+
+    def test_fixture_counts(self):
+        import xml.etree.ElementTree as ET
+        for path in _saxml_fixtures():
+            with self.subTest(fixture=os.path.basename(path)):
+                root = ET.parse(path).getroot()
+                aa = root.find("Structure/AddAction")
+                want = {
+                    "base_table": len(aa.findall("BaseTableCatalog/BaseTable")),
+                    "field": len(aa.findall("FieldsForTables/FieldCatalog/ObjectList/Field")),
+                    "table_occurrence": len(aa.findall("TableOccurrenceCatalog/TableOccurrence")),
+                    "relationship": len(aa.findall("RelationshipCatalog/Relationship")),
+                    "custom_function": len(aa.findall(".//CustomFunctionsCatalog//CustomFunction")),
+                    "value_list": len(aa.findall("ValueListCatalog/ValueList")),
+                    "privilege_set": len(aa.findall("PrivilegeSetsCatalog/ObjectList/PrivilegeSet")),
+                    "extended_privilege": len(aa.findall(
+                        "ExtendedPrivilegesCatalog/ObjectList/ExtendedPrivilege")),
+                    "account": len(aa.findall("AccountsCatalog/ObjectList/Account")),
+                    "custom_menu": len(aa.findall("CustomMenuCatalog/CustomMenu")),
+                    "custom_menu_set": len(aa.findall(
+                        "CustomMenuSetCatalog/ObjectList/CustomMenuSet")),
+                    "theme": len(aa.findall("ThemeCatalog/Theme")),
+                    "external_data_source": len(aa.findall(
+                        "ExternalDataSourceCatalog/ExternalDataSource")),
+                }
+                conn = self.build_db(path)
+                got = dict(conn.execute(
+                    "SELECT kind, COUNT(*) FROM entities GROUP BY kind").fetchall())
+                for kind, n in want.items():
+                    self.assertEqual(got.get(kind, 0), n, kind)
+                self.assertGreater(want["field"], 0)
+                # every field hangs under its base table, by id
+                orphans = conn.execute(
+                    "SELECT COUNT(*) FROM entities f LEFT JOIN entities b"
+                    " ON b.entity_id = f.parent_entity_id AND b.kind = 'base_table'"
+                    " AND b.name = f.base_table WHERE f.kind = 'field'"
+                    " AND b.entity_id IS NULL").fetchone()[0]
+                self.assertEqual(orphans, 0)
+                # the account name is the Authentication/AccountName text
+                self.assertEqual(
+                    sorted(r[0] for r in conn.execute(
+                        "SELECT name FROM entities WHERE kind = 'account'")),
+                    sorted(e.text for e in aa.findall(
+                        "AccountsCatalog/ObjectList/Account/Authentication/AccountName")))
+                # no CR survives into stored text
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM entities WHERE instr(calc_text, char(13))"
+                    " OR instr(auto_enter, char(13)) OR instr(extra_json, char(13))"
+                    ).fetchone()[0], 0)
+                conn.close()
+
+    def test_uuid_metadata(self):
+        # Five keys from the entity's own UUID child
+        import xml.etree.ElementTree as ET
+        for path in _saxml_fixtures():
+            with self.subTest(fixture=os.path.basename(path)):
+                root = ET.parse(path).getroot()
+                aa = root.find("Structure/AddAction")
+                want = {}
+                for fc in aa.findall("FieldsForTables/FieldCatalog"):
+                    bt = fc.find("BaseTableReference").get("name")
+                    for f in fc.findall("ObjectList/Field"):
+                        u = f.find("UUID")
+                        want[(bt, f.get("name"))] = (u.text, u.get("timestamp"),
+                                                     int(u.get("modifications")))
+                conn = self.build_db(path)
+                got = {(bt, n): json.loads(ex) for bt, n, ex in conn.execute(
+                    "SELECT base_table, name, extra_json FROM entities"
+                    " WHERE kind = 'field'")}
+                self.assertEqual(set(got), set(want))
+                for k, (uuid, ts, n) in want.items():
+                    self.assertEqual((got[k]["uuid"], got[k]["modified_at"],
+                                      got[k]["modified_n"]), (uuid, ts, n), k)
+                # every entity carries one (script steps too)
+                self.assertEqual(conn.execute(
+                    "SELECT COUNT(*) FROM entities WHERE"
+                    " json_extract(extra_json, '$.uuid') IS NULL").fetchone()[0], 0)
+                conn.close()
+        p = self.synth(
+            '<BaseTableCatalog><UUID modifications="9">CATALOG</UUID>'
+            '<BaseTable id="1" name="A"><UUID modifications="3" userName="lab"'
+            ' accountName="Admin" timestamp="2026-10-07T09:44:05">U-1</UUID>'
+            '</BaseTable><BaseTable id="2" name="B"><UUID modifications="0"'
+            ' userName="" accountName="">U-2</UUID></BaseTable></BaseTableCatalog>')
+        conn = self.build_db(p)
+        got = {n: json.loads(ex) for n, ex in conn.execute(
+            "SELECT name, extra_json FROM entities")}
+        self.assertEqual(got["A"], {"uuid": "U-1", "modified_at": "2026-10-07T09:44:05",
+                                    "modified_by": "lab", "modified_account": "Admin",
+                                    "modified_n": 3})
+        self.assertEqual(got["B"], {"uuid": "U-2", "modified_n": 0})
+        conn.close()
+
+    def test_ddr_spelling(self):
+        # Timestamp -> TimeStamp; a theme by display name, id in hex
+        p = self.synth(
+            '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+            '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+            '<ObjectList>'
+            '<Field id="1" name="T" datatype="Timestamp" fieldtype="Normal"/>'
+            '<Field id="2" name="N" datatype="Number" fieldtype="Normal"/>'
+            '</ObjectList></FieldCatalog></FieldsForTables>'
+            '<ThemeCatalog><Theme Display="Apex Blue" name="com.filemaker.theme.'
+            'apex_blue" id="15"/></ThemeCatalog>')
+        conn = self.build_db(p)
+        self.assertEqual(dict(conn.execute(
+            "SELECT name, data_type FROM entities WHERE kind = 'field'")),
+            {"T": "TimeStamp", "N": "Number"})
+        self.assertEqual(conn.execute(
+            "SELECT fm_id, name FROM entities WHERE kind = 'theme'").fetchone(),
+            ("0F", "Apex Blue"))
+        conn.close()
+
+    def test_catalog_order_refused(self):
+        p = self.synth(
+            '<BaseTableCatalog><BaseTable id="129" name="A"/></BaseTableCatalog>'
+            '<FieldsForTables><FieldCatalog>'
+            '<BaseTableReference id="999" name="Gone"/>'
+            '<ObjectList><Field id="1" name="F" datatype="Text" fieldtype="Normal"/>'
+            '</ObjectList></FieldCatalog></FieldsForTables>')
+        with self.assertRaises(ValueError) as cm:
+            build(p, os.path.join(self.tmp, "out.db"))
+        msg = str(cm.exception)
+        # What is wrong and what to do, no internal vocabulary
+        self.assertIn("before the catalog", msg)
+        self.assertIn("FieldCatalog", msg)
+        self.assertIn("Re-export", msg)
+        self.assertNotIn("assumption", msg)
+
+    def test_external_table_occurrences(self):
+        # Filled (Pro with the source open) and empty (FMDeveloperTool)
+        p = self.synth(
+            '<ExternalDataSourceCatalog>'
+            '<ExternalDataSource name="Sat" type="FileMaker" id="1"><File>'
+            '<UniversalPathList>file:Sat.fmp12</UniversalPathList></File>'
+            '</ExternalDataSource></ExternalDataSourceCatalog>'
+            '<TableOccurrenceCatalog>'
+            '<TableOccurrence id="1" name="ext_Full" type="External">'
+            '<BaseTableSourceReference type="ExternalDataSourceReference">'
+            '<DataSourceReference id="1" name="Sat"/>'
+            '<BaseTableReference id="130" name="Item"/>'
+            '</BaseTableSourceReference></TableOccurrence>'
+            '<TableOccurrence id="2" name="ext_Empty" type="External">'
+            '<BaseTableSourceReference type="ExternalDataSourceReference">'
+            '</BaseTableSourceReference></TableOccurrence>'
+            '</TableOccurrenceCatalog>')
+        conn = self.build_db(p)
+        from fm_ddr.saxml import external_to_warning
+        warning = external_to_warning(conn)
+        rows = {r[0]: r[1:] for r in conn.execute(
+            "SELECT name, ext_file, base_table, extra_json FROM entities"
+            " WHERE kind = 'table_occurrence'")}
+        self.assertEqual(rows["ext_Full"], ("Sat", "Item", None))
+        self.assertEqual(rows["ext_Empty"], (None, None, '{"external": true}'))
+        ds = conn.execute("SELECT name, extra_json FROM entities"
+                          " WHERE kind = 'external_data_source'").fetchone()
+        self.assertEqual(ds[0], "Sat")
+        self.assertEqual(json.loads(ds[1]), {"file": True, "file_name": "Sat.fmp12"})
+        self.assertIn("1 external table occurrence(s) in this Save a Copy as XML "
+                      "export carry no data source", warning)
+        conn.close()
+
+    def test_relationship_translation(self):
+        # Operator table, relationship sort (no TO child: the side's TO)
+        # and an empty predicate FieldReference (TO::<unknown>)
+        p = self.synth(
+            '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+            '<TableOccurrenceCatalog>'
+            '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+            '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+            '</TableOccurrence>'
+            '<TableOccurrence id="2" name="R" type="Local"><BaseTableSourceReference>'
+            '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+            '</TableOccurrence></TableOccurrenceCatalog>'
+            '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+            '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+            '</ObjectList></FieldCatalog></FieldsForTables>'
+            '<RelationshipCatalog><Relationship id="1">'
+            '<LeftTable cascadeCreate="False" cascadeDelete="True">'
+            '<TableOccurrenceReference id="1" name="L"/></LeftTable>'
+            '<RightTable cascadeCreate="True" cascadeDelete="False">'
+            '<TableOccurrenceReference id="2" name="R"/>'
+            '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+            '<PrimaryField><FieldReference id="1" name="K"/></PrimaryField>'
+            '</Sort></SortList></SortSpecification></RightTable>'
+            '<JoinPredicateList><JoinPredicate type="GreaterOrEqual">'
+            '<LeftField><FieldReference id="1" name="K">'
+            '<TableOccurrenceReference id="1" name="L"/></FieldReference></LeftField>'
+            '<RightField><FieldReference id="0" name=""/></RightField>'
+            '</JoinPredicate></JoinPredicateList></Relationship></RelationshipCatalog>')
+        conn = self.build_db(p)
+        name, extra = conn.execute("SELECT name, extra_json FROM entities"
+                                   " WHERE kind = 'relationship'").fetchone()
+        self.assertEqual(name, "L :: R")
+        d = json.loads(extra)
+        self.assertEqual(d["predicates"], [
+            {"op": "GreaterThanOrEqualTo", "left": "L::K", "right": "R::"}])
+        self.assertEqual([(s["side"], s["cascade_create"], s["cascade_delete"])
+                          for s in d["sides"]],
+                         [("left", False, True), ("right", True, False)])
+        refs = sorted(conn.execute(
+            "SELECT context, target_kind, target_raw, target_entity_id IS NOT NULL"
+            " FROM refs").fetchall())
+        self.assertEqual(refs, [
+            ("join_predicate", "field", "L::K", 1),
+            ("join_predicate", "field", "R::<unknown>", 0),
+            ("join_predicate", "table_occurrence", "L", 1),
+            ("join_predicate", "table_occurrence", "R", 1),
+            ("sort", "field", "R::K", 1),
+        ])
+        conn.close()
+
+    def test_predicate_through_empty_external_to(self):
+        # A predicate field in another file (empty name through an external
+        # TO with no data source): name and raw NULL, unresolved, outside
+        # v_dangling. An empty predicate field with no TO at all keeps
+        # <unknown>.
+        p = self.synth(
+            '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+            '<TableOccurrenceCatalog>'
+            '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+            '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+            '</TableOccurrence>'
+            '<TableOccurrence id="2" name="ext_X" type="External">'
+            '<BaseTableSourceReference type="ExternalDataSourceReference">'
+            '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+            '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+            '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+            '</ObjectList></FieldCatalog></FieldsForTables>'
+            '<RelationshipCatalog>'
+            '<Relationship id="1">'
+            '<LeftTable><TableOccurrenceReference id="1" name="L"/></LeftTable>'
+            '<RightTable><TableOccurrenceReference id="2" name="ext_X"/></RightTable>'
+            '<JoinPredicateList><JoinPredicate type="Equal">'
+            '<LeftField><FieldReference id="1" name="K">'
+            '<TableOccurrenceReference id="1" name="L"/></FieldReference></LeftField>'
+            '<RightField><FieldReference id="4" name="">'
+            '<TableOccurrenceReference id="2" name="ext_X"/></FieldReference></RightField>'
+            '</JoinPredicate></JoinPredicateList></Relationship>'
+            '<Relationship id="2">'
+            '<LeftTable></LeftTable>'
+            '<RightTable><TableOccurrenceReference id="1" name="L"/></RightTable>'
+            '<JoinPredicateList><JoinPredicate type="Equal">'
+            '<LeftField><FieldReference id="0" name=""/></LeftField>'
+            '<RightField><FieldReference id="1" name="K">'
+            '<TableOccurrenceReference id="1" name="L"/></FieldReference></RightField>'
+            '</JoinPredicate></JoinPredicateList></Relationship>'
+            '</RelationshipCatalog>')
+        import contextlib
+        import io
+        with contextlib.redirect_stderr(io.StringIO()):
+            conn = self.build_db(p)
+        refs = sorted(conn.execute(
+            "SELECT COALESCE(target_name, ''), COALESCE(target_to_name, ''),"
+            " target_raw IS NULL, COALESCE(target_raw, ''),"
+            " target_entity_id IS NOT NULL FROM refs"
+            " WHERE context = 'join_predicate' AND target_kind = 'field'").fetchall())
+        self.assertEqual(refs, [
+            ("", "", 0, "<unknown>", 0),
+            ("", "ext_X", 1, "", 0),
+            ("K", "L", 0, "L::K", 1),
+            ("K", "L", 0, "L::K", 1),
+        ])
+        self.assertEqual(conn.execute(
+            "SELECT context, marker FROM v_dangling").fetchall(),
+            [("join_predicate", "<unknown>")])
+        conn.close()
+
+
+class TestSaXMLRules(unittest.TestCase):
+    """Phase 5 rule assertions on the lab fixture build (2.3.0.1)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxrules_")
+        cls.path = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+        cls.db = os.path.join(cls.tmp, "rules.db")
+        build(cls.path, cls.db, label="rules")
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql, *args):
+        return self.conn.execute(sql, args).fetchall()
+
+    def test_nested_folder(self):
+        (grp, parent, pkind), = self.q(
+            "SELECT s.grp, p.name, p.kind FROM entities s JOIN entities p"
+            " ON p.entity_id = s.parent_entity_id"
+            " WHERE s.kind = 'script' AND s.name = 'Target'")
+        self.assertEqual((grp, parent, pkind), ("Inner", "Inner", "script_group"))
+        (outer,), = self.q(
+            "SELECT p.name FROM entities f JOIN entities p"
+            " ON p.entity_id = f.parent_entity_id"
+            " WHERE f.kind = 'script_group' AND f.name = 'Inner'")
+        self.assertEqual(outer, "Outer")
+        # separators and markers open no entity
+        self.assertEqual(self.q("SELECT COUNT(*) FROM entities WHERE name IN ('-', '--')"),
+                         [(0,)])
+
+    def test_menu_flags(self):
+        # hidden="False" means in the menu; the lab hides two entries
+        rows = dict(self.q(
+            "SELECT name, extra_json FROM entities"
+            " WHERE kind IN ('script', 'script_group')"))
+        off = {n for n, ex in rows.items() if not json.loads(ex).get("in_menu")}
+        self.assertEqual(off, {"Hidden Folder", "Hidden Script"})
+        full = {n for n, ex in rows.items() if json.loads(ex).get("run_full_access")}
+        self.assertEqual(full, {"Full Access Script"})
+        # keys only when true
+        for ex in rows.values():
+            d = json.loads(ex)
+            self.assertNotIn(False, (d.get("in_menu"), d.get("run_full_access")))
+
+    def test_steps(self):
+        import xml.etree.ElementTree as ET
+        aa = ET.parse(self.path).getroot().find("Structure/AddAction")
+        want = {}
+        for sc in aa.findall("StepsForScripts/Script"):
+            owner = sc.find("ScriptReference").get("name")
+            for s in sc.findall("ObjectList/Step"):
+                want[(owner, int(s.get("index")) + 1)] = (
+                    s.get("id"), s.get("name"), s.get("enable") == "False")
+        got = {(o, seq): (fm, st, bool(dis)) for o, seq, fm, st, dis in self.q(
+            "SELECT p.name, s.seq, s.fm_id, s.step_type,"
+            " COALESCE(json_extract(s.extra_json, '$.disabled'), 0)"
+            " FROM entities s JOIN entities p ON p.entity_id = s.parent_entity_id"
+            " AND p.kind = 'script' WHERE s.kind = 'script_step'")}
+        self.assertEqual(got, want)
+        self.assertEqual(min(k[1] for k in got), 1)
+        # a step sits in its script's folder, as the DDR's does
+        self.assertEqual(self.q(
+            "SELECT COUNT(*) FROM entities s JOIN entities p"
+            " ON p.entity_id = s.parent_entity_id"
+            " WHERE s.kind = 'script_step' AND s.grp IS NOT p.grp"), [(0,)])
+        # an action step (button) is not an entity
+        self.assertEqual(self.q("SELECT COUNT(*) FROM entities WHERE kind = 'script_step'"),
+                         [(len(want),)])
+
+    def test_step_text(self):
+        # The DDR_INFO text, stripped, CR as LF (the DDR side is LF)
+        from fm_ddr.saxml import _InfoPass
+        info = _InfoPass().parse(self.path)
+        import xml.etree.ElementTree as ET
+        aa = ET.parse(self.path).getroot().find("Structure/AddAction")
+        want = {}
+        for sc in aa.findall("StepsForScripts/Script"):
+            owner = sc.find("ScriptReference").get("name")
+            for s in sc.findall("ObjectList/Step"):
+                ref = s.find("DDRREF")
+                text = info[(ref.text.strip(), ref.get("hash"))]
+                want[(owner, int(s.get("index")) + 1)] = (
+                    text.replace("\r\n", "\n").replace("\r", "\n") or None)
+        got = {(o, seq): t for o, seq, t in self.q(
+            "SELECT p.name, s.seq, json_extract(s.extra_json, '$.step_text')"
+            " FROM entities s JOIN entities p ON p.entity_id = s.parent_entity_id"
+            " WHERE s.kind = 'script_step'")}
+        self.assertEqual(got, want)
+        self.assertTrue(any("\n" in t for t in got.values() if t))
+
+    def caller_refs(self, context):
+        return sorted(self.q(
+            "SELECT s.seq, r.target_fm_id, r.target_name, r.target_raw,"
+            " r.target_entity_id IS NOT NULL FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " JOIN entities p ON p.entity_id = s.parent_entity_id"
+            " WHERE p.name = 'Caller' AND r.context = ?", context))
+
+    def test_perform_script(self):
+        # Target resolves; the deleted Gone leaves only <unknown> (end-of-step
+        # rule), target_name NULL, listed in v_dangling.
+        self.assertEqual(self.caller_refs("perform_script"), [
+            (2, "20", "Target", "Target", 1),
+            (3, None, None, "<unknown>", 0),
+        ])
+        self.assertEqual(self.q(
+            "SELECT context, source_name, marker FROM v_dangling"
+            " WHERE context = 'perform_script'"),
+            [("perform_script", "Perform Script", "<unknown>")])
+
+    def test_step_parameters(self):
+        # GTRR: the TO, the layout once (the new-window copy is skipped); a
+        # deleted TO is a marker element -> <unknown> from the step text
+        self.assertEqual(self.caller_refs("step_table"), [
+            (5, "1065093", "CUS_SAL__Sale", "CUS_SAL__Sale", 1),
+            (6, None, None, "<unknown>", 0),
+            (7, "1065093", "CUS_SAL__Sale", "CUS_SAL__Sale", 1),
+        ])
+        self.assertEqual([r[:4] for r in self.caller_refs("go_to_layout")], [
+            (5, "7", "Sale Entry", "Sale Entry"),
+            (6, "7", "Sale Entry", "Sale Entry"),
+            (7, "7", "Sale Entry", "Sale Entry"),
+            (10, "6", "Watch List", "Watch List"),
+        ])
+        # Set Field: the target; a deleted TO reads <Table Missing>
+        self.assertEqual(self.caller_refs("step_target"), [
+            (8, "6", "Name_First", "CUS__Customer::Name_First", 1),
+            (9, "9", None, "<Table Missing>", 0),
+        ])
+        self.assertEqual(sorted(self.q(
+            "SELECT context, marker FROM v_dangling")), [
+            ("perform_script", "<unknown>"),
+            ("step_table", "<unknown>"),
+            ("step_target", "<Table Missing>"),
+        ])
+
+    def test_disabled_step(self):
+        (dis, text), = self.q(
+            "SELECT json_extract(extra_json, '$.disabled'),"
+            " json_extract(extra_json, '$.step_text') FROM entities"
+            " WHERE kind = 'script_step' AND step_type = 'Set Variable'"
+            " AND json_extract(extra_json, '$.disabled') = 1")
+        self.assertEqual(dis, 1)
+        self.assertTrue(text.startswith("//"))
+
+    def test_layouts(self):
+        # Folder, menu flags (hidden="False" is in the menu), context TO
+        rows = {n: (k, g, p, json.loads(ex or "{}").get("in_menu")) for n, k, g, p, ex in self.q(
+            "SELECT e.name, e.kind, e.grp, p.name, e.extra_json FROM entities e"
+            " LEFT JOIN entities p ON p.entity_id = e.parent_entity_id"
+            " WHERE e.kind IN ('layout', 'layout_group')")}
+        self.assertEqual(rows["Lab Layouts"], ("layout_group", None, None, True))
+        self.assertEqual(rows["Lab Layout"], ("layout", "Lab Layouts", "Lab Layouts", True))
+        self.assertEqual({n for n, r in rows.items() if not r[3]},
+                         {"Global_blank", "CUS__Customer_blank", "WAT__Watch_blank",
+                          "SAL__Sale_blank"})
+        self.assertEqual(len(rows), 9)   # the marker opens nothing
+        ctx = dict(self.q(
+            "SELECT s.name, r.target_raw FROM refs r JOIN entities s"
+            " ON s.entity_id = r.source_entity_id WHERE r.context = 'layout_context'"
+            " AND r.target_entity_id IS NOT NULL"))
+        self.assertEqual(ctx["Lab Layout"], "CUS__Customer")
+        self.assertEqual(len(ctx), 8)
+
+    def lab_objects(self):
+        return {r[0]: r[1:] for r in self.q(
+            "SELECT json_extract(o.extra_json, '$.key'), o.name,"
+            " json_extract(o.extra_json, '$.object_type'), p.kind, o.extra_json"
+            " FROM entities o JOIN entities p ON p.entity_id = o.parent_entity_id"
+            " JOIN entities l ON l.entity_id = COALESCE(p.parent_entity_id, 0)"
+            " OR l.entity_id = p.entity_id"
+            " WHERE o.kind = 'layout_object' AND l.kind = 'layout'"
+            " AND l.name = 'Lab Layout'")}
+
+    def test_layout_objects(self):
+        import xml.etree.ElementTree as ET
+        lc = ET.parse(self.path).getroot().find("Structure/AddAction/LayoutCatalog")
+        want = len(lc.findall(".//LayoutObject"))
+        self.assertEqual(self.q("SELECT COUNT(*) FROM entities WHERE kind = 'layout_object'"),
+                         [(want,)])
+        objs = self.lab_objects()
+        name, otype, pkind, ex = objs["2"]
+        d = json.loads(ex)
+        self.assertEqual((name, otype, pkind), ("nameFirst", "Edit Box", "layout"))
+        self.assertEqual(d["hide_calc"], "IsEmpty ( CUS__Customer::ID )")
+        self.assertEqual(d["tooltip_calc"], '"First name"')
+        self.assertEqual(d["bounds"], "22,224,50,424")
+        self.assertEqual(json.loads(objs["1"][3])["text"], "Name_First")
+        # a nested object's parent is the portal
+        self.assertEqual(objs["8"][2], "layout_object")
+        # a button's label is its text, as the DDR's button text
+        self.assertEqual(json.loads(objs["5"][3])["text"], "Run Target")
+
+    def obj_refs(self, context):
+        return sorted(self.q(
+            "SELECT COALESCE(json_extract(o.extra_json, '$.key'), ''), r.target_name,"
+            " r.target_raw, r.target_entity_id IS NOT NULL, r.trigger_event"
+            " FROM refs r JOIN entities o ON o.entity_id = r.source_entity_id"
+            " JOIN entities l ON l.kind = 'layout' AND l.name = 'Lab Layout'"
+            " AND (o.parent_entity_id = l.entity_id OR o.entity_id = l.entity_id"
+            " OR o.parent_entity_id IN (SELECT entity_id FROM entities"
+            " WHERE parent_entity_id = l.entity_id))"
+            " WHERE r.context = ?", context))
+
+    def test_object_refs(self):
+        # Field objects, the repetition suffix as the DDR writes it (its
+        # FieldObj/Name, so the name keeps [3] and stays unresolved as in
+        # the DDR), the portal, buttons, object and layout triggers
+        self.assertEqual(self.obj_refs("layout_object"), [
+            ("2", "Name_First", "CUS__Customer::Name_First", 1, None),
+            ("4", "Phone_r[3]", "CUS__Customer::Phone_r[3]", 0, None),
+            ("8", "SoldOn", "CUS_SAL__Sale::SoldOn", 1, None),
+        ])
+        self.assertEqual(self.obj_refs("portal"),
+                         [("7", "CUS_SAL__Sale", "CUS_SAL__Sale", 1, None)])
+        self.assertEqual(self.obj_refs("perform_script"),
+                         [("5", "Target", "Target", 1, None)])
+        self.assertEqual(self.obj_refs("step_target"),
+                         [("6", "Name_Last", "CUS__Customer::Name_Last", 1, None)])
+        self.assertEqual(self.obj_refs("trigger")[1:], [
+            ("2", "TRIGGER_onObjectModify", "TRIGGER_onObjectModify", 1,
+             "OnObjectModify"),
+        ])
+        # the layout's own trigger (source key '' = the layout)
+        self.assertEqual(self.obj_refs("trigger")[0],
+                         ("", "TRIGGER_onRecordLoad", "TRIGGER_onRecordLoad", 1,
+                          "OnRecordLoad"))
+        # the hide calc's reference, from the object
+        self.assertEqual(self.obj_refs("calc"),
+                         [("2", "ID", "CUS__Customer::ID", 1, None)])
+        # the Pro copy has no file trigger (removed before the export)
+        self.assertEqual(self.q(
+            "SELECT count(*) FROM refs WHERE source_entity_id IS NULL"), [(0,)])
+
+    def test_file_trigger(self):
+        # A file trigger has no source; only the 2.3.0.0 lab export keeps one
+        db = os.path.join(self.tmp, "ft.db")
+        build(os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.0.xml"), db,
+              label="ft")
+        conn = sqlite3.connect(db)
+        self.assertEqual(conn.execute(
+            "SELECT target_raw, trigger_event, target_entity_id IS NOT NULL FROM refs"
+            " WHERE source_entity_id IS NULL").fetchall(),
+            [("Export SaXML", "OnFirstWindowOpen", 1)])
+        conn.close()
+
+    def test_chunk_replay(self):
+        # Every FieldRef / CustomFunctionRef chunk of DDR_INFO a DDRREF names
+        # becomes a ref from the owner; field id kept as fm_id
+        rows = self.q("SELECT r.source_kind, r.context, r.target_raw,"
+                      " r.target_fm_id, r.target_entity_id IS NOT NULL FROM refs r"
+                      " WHERE r.context IN ('calc', 'auto_enter', 'validation',"
+                      " 'function_ref')")
+        self.assertIn(("script_step", "calc", "SAL__Sale::Price", "9", 1), rows)
+        self.assertIn(("field", "function_ref", "_Str_FullName", None, 1), rows)
+        self.assertTrue(all(r[4] for r in rows))
+
+
+SAXML_STEPS = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="2" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="Callee"/><Script id="2" name="Caller"/>'
+    '</ScriptCatalog>'
+    '<StepsForScripts><Script><ScriptReference id="2" name="Caller"/><ObjectList>'
+    # 1 Perform Script, empty reference, cross-file by the step text
+    '<Step index="0" id="1" name="Perform Script" enable="True">'
+    '<DDRREF kind="StepText" hash="h1">_S1</DDRREF><ParameterValues>'
+    '<Parameter type="List"><List name="From list" value="1"></List></Parameter>'
+    '</ParameterValues></Step>'
+    # 2 Perform Script, filled cross-file shape
+    '<Step index="1" id="1" name="Perform Script" enable="True">'
+    '<DDRREF kind="StepText" hash="h2">_S2</DDRREF><ParameterValues>'
+    '<Parameter type="List"><List name="From list" value="1">'
+    '<DataSourceReference id="1" name="Sat"/><ScriptReference id="1" name="Ping"/>'
+    '</List></Parameter></ParameterValues></Step>'
+    # 3 Set Field through an external TO with no data source: empty name
+    '<Step index="2" id="76" name="Set Field" enable="True">'
+    '<DDRREF kind="StepText" hash="h3">_S3</DDRREF><ParameterValues>'
+    '<Parameter type="FieldReference"><FieldReference id="5" name="">'
+    '<TableOccurrenceReference id="2" name="ext_X"/></FieldReference></Parameter>'
+    '<Parameter type="Calculation"><Calculation><Calculation>'
+    '<DDRREF kind="ChunkList" hash="c3">_S3_0</DDRREF><Text>L::K</Text>'
+    '</Calculation></Calculation></Parameter></ParameterValues></Step>'
+    # 4 Go to Layout, deleted layout
+    '<Step index="3" id="6" name="Go to Layout" enable="True">'
+    '<DDRREF kind="StepText" hash="h4">_S4</DDRREF><ParameterValues>'
+    '<Parameter type="LayoutReferenceContainer"><LayoutReferenceContainer value="5">'
+    '</LayoutReferenceContainer></Parameter></ParameterValues></Step>'
+    '</ObjectList></Script></StepsForScripts>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Script><ObjectList>'
+    '<_S1 hash="h1" datatype="StepText">Perform Script [ “Ping” from file:'
+    ' “Sat” ]</_S1>'
+    '<_S2 hash="h2" datatype="StepText">Perform Script [ “Ping” from file:'
+    ' “Sat” ]</_S2>'
+    '<_S3 hash="h3" datatype="StepText">Set Field [ ext_X::&lt;Field Missing&gt;;'
+    ' L::K ]</_S3>'
+    '<_S4 hash="h4" datatype="StepText">Go to Layout [ &lt;unknown&gt; ]</_S4>'
+    '</ObjectList></Script><Calculation><ObjectList>'
+    '<_S3_0 hash="c3" datatype="ChunkList"><ChunkList hash="c3">'
+    '<Chunk type="FieldRef"><FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Chunk>'
+    '</ChunkList></_S3_0></ObjectList></Calculation></DDR_INFO>'
+    '</FMSaveAsXML>\n')
+
+
+class TestSaXMLStepRules(unittest.TestCase):
+    """End-of-step and cross-file rules the lab fixture cannot show, on a
+    synthetic export, and the DDR_INFO miss-rate refusal."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxsteps_")
+        self.path = os.path.join(self.tmp, "steps.xml")
+        with open(self.path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_STEPS)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def test_cross_file_and_deleted(self):
+        import contextlib
+        import io
+        db = os.path.join(self.tmp, "out.db")
+        with contextlib.redirect_stderr(io.StringIO()):
+            build(self.path, db, label="steps")
+        conn = sqlite3.connect(db)
+        rows = sorted(conn.execute(
+            "SELECT s.seq, r.context, r.target_name, r.target_to_name, r.target_raw,"
+            " r.target_file, r.target_entity_id IS NOT NULL FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id").fetchall())
+        self.assertEqual(rows, [
+            # filled or not, a cross-file call carries target_file
+            (1, "perform_script", None, None, None, "Sat", 0),
+            (2, "perform_script", "Ping", None, "Ping", "Sat", 0),
+            # a field in another file: unresolved, no marker; v_dangling
+            # lists it as unverifiable_xfile
+            (3, "calc", "K", "L", "L::K", None, 1),
+            (3, "step_target", None, "ext_X", None, None, 0),
+            # a deleted layout: the step text's <unknown>
+            (4, "go_to_layout", None, None, "<unknown>", None, 0),
+        ])
+        self.assertEqual(conn.execute(
+            "SELECT context, marker FROM v_dangling").fetchall(),
+            [("go_to_layout", "<unknown>"), ("unverifiable_xfile", "ext_X::<unknown>")])
+        conn.close()
+
+    def test_layout_unknown_only_for_the_layout(self):
+        # GTRR with a deleted TO and no layout element: the <unknown> in the
+        # step text is the table, so no go_to_layout row.
+        # Guard: TestGuardProofs.test_layout_unknown.
+        body = (
+            '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+            '<TableOccurrenceCatalog>'
+            '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+            '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+            '</TableOccurrence></TableOccurrenceCatalog>'
+            '<ScriptCatalog><Script id="1" name="Caller"/></ScriptCatalog>'
+            '<StepsForScripts><Script><ScriptReference id="1" name="Caller"/><ObjectList>'
+            '<Step index="0" id="74" name="Go to Related Record" enable="True">'
+            '<DDRREF kind="StepText" hash="g1">_G1</DDRREF><ParameterValues>'
+            '<Parameter type="TableOccurrenceReference">'
+            '<TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;"/>'
+            '</Parameter></ParameterValues></Step>'
+            '<Step index="1" id="74" name="Go to Related Record" enable="True">'
+            '<DDRREF kind="StepText" hash="g2">_G2</DDRREF><ParameterValues>'
+            '<Parameter type="TableOccurrenceReference">'
+            '<TableOccurrenceReference id="1" name="L"/></Parameter>'
+            '</ParameterValues></Step>'
+            '</ObjectList></Script></StepsForScripts>'
+            '</AddAction></Structure>'
+            '<DDR_INFO><Script><ObjectList>'
+            '<_G1 hash="g1" datatype="StepText">Go to Related Record [ From table:'
+            ' &lt;unknown&gt;; Using layout: &lt;Current Layout&gt; ]</_G1>'
+            '<_G2 hash="g2" datatype="StepText">Go to Related Record [ From table:'
+            ' “L”; Using layout: &lt;unknown&gt; ]</_G2>'
+            '</ObjectList></Script></DDR_INFO></FMSaveAsXML>\n')
+        path = os.path.join(self.tmp, "gtrr.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + body)
+        db = os.path.join(self.tmp, "gtrr.db")
+        build(path, db, label="gtrr")
+        conn = sqlite3.connect(db)
+        rows = sorted(conn.execute(
+            "SELECT s.seq, r.context, r.target_raw FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id").fetchall())
+        conn.close()
+        self.assertEqual(rows, [
+            (1, "step_table", "<unknown>"),
+            (2, "go_to_layout", "<unknown>"),
+            (2, "step_table", "L"),
+        ])
+
+    def test_step_name_spelled_as_the_ddr(self):
+        # The SaXML writes "Set Field By Name", the DDR "Set Field by Name";
+        # a step's name is part of every ref key it sources. Guard: TestGuardProofs.test_step_names.
+        body = (
+            '<ScriptCatalog><Script id="1" name="S"/></ScriptCatalog>'
+            '<StepsForScripts><Script><ScriptReference id="1" name="S"/><ObjectList>'
+            '<Step index="0" id="147" name="Set Field By Name" enable="True">'
+            '<DDRREF kind="StepText" hash="s1">_S1</DDRREF></Step>'
+            '<Step index="1" id="89" name="Comment" enable="True">'
+            '<DDRREF kind="StepText" hash="s2">_S2</DDRREF></Step>'
+            '</ObjectList></Script></StepsForScripts>'
+            '</AddAction></Structure>'
+            '<DDR_INFO><Script><ObjectList>'
+            '<_S1 hash="s1" datatype="StepText">Set Field By Name [ "x" ; 1 ]</_S1>'
+            '<_S2 hash="s2" datatype="StepText"># c</_S2>'
+            '</ObjectList></Script></DDR_INFO></FMSaveAsXML>\n')
+        path = os.path.join(self.tmp, "sfbn.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + body)
+        db = os.path.join(self.tmp, "sfbn.db")
+        build(path, db, label="sfbn")
+        conn = sqlite3.connect(db)
+        rows = conn.execute(
+            "SELECT seq, step_type, name FROM entities"
+            " WHERE kind = 'script_step' ORDER BY seq").fetchall()
+        conn.close()
+        self.assertEqual(rows, [(1, "Set Field by Name", "Set Field by Name"),
+                                (2, "Comment", "Comment")])
+
+    def test_step_text_names_the_step_as_the_ddr(self):
+        # The step text opens with the step's name in the export's spelling;
+        # the DDR's text uses its own, as step_type does.
+        # A disabled step's text starts with "//  ".
+        body = (
+            '<ScriptCatalog><Script id="1" name="S"/></ScriptCatalog>'
+            '<StepsForScripts><Script><ScriptReference id="1" name="S"/><ObjectList>'
+            '<Step index="0" id="147" name="Set Field By Name" enable="True">'
+            '<DDRREF kind="StepText" hash="s1">_S1</DDRREF></Step>'
+            '<Step index="1" id="147" name="Set Field By Name" enable="False">'
+            '<DDRREF kind="StepText" hash="s2">_S2</DDRREF></Step>'
+            '</ObjectList></Script></StepsForScripts>'
+            '</AddAction></Structure>'
+            '<DDR_INFO><Script><ObjectList>'
+            '<_S1 hash="s1" datatype="StepText">Set Field By Name [ "x" ; 1 ]</_S1>'
+            '<_S2 hash="s2" datatype="StepText">//  Set Field By Name [ "y" ; 2 ]</_S2>'
+            '</ObjectList></Script></DDR_INFO></FMSaveAsXML>\n')
+        path = os.path.join(self.tmp, "sfbn2.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + body)
+        db = os.path.join(self.tmp, "sfbn2.db")
+        build(path, db, label="sfbn2")
+        conn = sqlite3.connect(db)
+        rows = conn.execute(
+            "SELECT seq, json_extract(extra_json, '$.step_text') FROM entities"
+            " WHERE kind = 'script_step' ORDER BY seq").fetchall()
+        conn.close()
+        self.assertEqual(rows, [(1, 'Set Field by Name [ "x" ; 1 ]'),
+                                (2, '//  Set Field by Name [ "y" ; 2 ]')])
+
+    def test_truncated_ddr_info_refused(self):
+        # Guard: an empty DDR_INFO (every reference unmatched) must refuse
+        from unittest import mock
+        from fm_ddr import saxml
+        with mock.patch.object(saxml._InfoPass, "parse", lambda self, p: {}):
+            with self.assertRaises(ValueError) as cm:
+                build(self.path, os.path.join(self.tmp, "t.db"))
+        self.assertIn("DDR_INFO holds no entry for any of its 5 references",
+                      str(cm.exception))
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "t.db")))
+
+    def test_absent_ddr_info_refused(self):
+        # The section cut off entirely (a file truncated just before it)
+        with open(self.path, encoding="utf-8") as f:
+            text = f.read()
+        start, end = text.index("<DDR_INFO>"), text.index("</DDR_INFO>") + 11
+        cut = os.path.join(self.tmp, "cut.xml")
+        with open(cut, "w", encoding="utf-8") as f:
+            f.write(text[:start] + text[end:])
+        with self.assertRaises(ValueError) as cm:
+            build(cut, os.path.join(self.tmp, "c.db"))
+        self.assertIn("DDR_INFO holds no entry for any of its 5 references",
+                      str(cm.exception))
+
+
+class TestSaXMLChunklessCalcs(unittest.TestCase):
+    """Calculations whose chunk list is not in DDR_INFO are a class a valid
+    export has (a GTRR's layout calc written twice, button parameters):
+    however many, the export builds and the build says how many on stderr
+    (the 10 percent refusal is gone)."""
+
+    def test_lab_export_with_chunkless_calcs_builds(self):
+        import contextlib
+        import io
+        import re
+        tmp = tempfile.mkdtemp(prefix="fmddr_saxchunk_")
+        try:
+            src = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+            with open(src, encoding="utf-8") as f:
+                text = f.read()
+            head, info = text.split("<DDR_INFO>", 1)
+            entry = re.compile(r'<(_[^ >]+) hash="[^"]*" datatype="ChunkList">.*?</\1>',
+                               re.S)
+            total = len(entry.findall(info))
+            drop = total // 3      # a third: far past the old 10 percent line
+            info = entry.sub(lambda m, n=iter(range(total)): ""
+                             if next(n) < drop else m.group(0), info)
+            path = os.path.join(tmp, "chunkless.xml")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(head + "<DDR_INFO>" + info)
+            summary = build(path, os.path.join(tmp, "c.db"))
+            self.assertGreater(summary["_refs"], 0)
+            # The count is a warning of the build (TestSaXMLDDRInfoMisses)
+            m = re.search(r"WARNING: (\d+) calculation\(s\) without reference list",
+                          "\n".join(summary["_warnings"]))
+            self.assertIsNotNone(m, summary["_warnings"])
+            self.assertGreaterEqual(int(m.group(1)), drop)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+# Four calculations: two write the same chunk-less (key, hash) pair, one has
+# its list, and one writes with an empty hash a key whose list under another
+# hash names no field or function (nothing lost)
+SAXML_CHUNKLESS_PAIRS = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="A" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/><ObjectList>'
+    '<Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    + "".join(
+        f'<Field id="{i}" name="C{i}" datatype="Number" fieldtype="Calculated">'
+        f'<Calculation><DDRREF kind="ChunkList" hash="{h}">{k}</DDRREF>'
+        '<Text>A::K</Text></Calculation></Field>'
+        for i, k, h in ((2, "_LOST", ""), (3, "_LOST", ""), (4, "_KEPT", "H1"),
+                        (5, "_NOREF", "")))
+    + '</ObjectList></FieldCatalog></FieldsForTables>'
+    '</AddAction></Structure><DDR_INFO><Field><ObjectList>'
+    '<_KEPT hash="H1" datatype="ChunkList"><Chunk type="FieldRef">'
+    '<FieldReference id="1" name="K"><TableOccurrenceReference id="1" name="A"/>'
+    '</FieldReference></Chunk></_KEPT>'
+    '<_NOREF hash="H2" datatype="ChunkList"><Chunk type="NoRef">1</Chunk></_NOREF>'
+    '</ObjectList></Field></DDR_INFO></FMSaveAsXML>\n')
+
+
+class TestSaXMLChunklessCount(unittest.TestCase):
+    """A calculation without reference list is counted once however often
+    the export writes its (key, hash) pair: a real export writes such a
+    pair in several DDRREF elements. A key whose list under another hash
+    names no field or custom function is not counted: nothing is lost
+    there."""
+
+    def test_distinct_pairs(self):
+        tmp = tempfile.mkdtemp(prefix="fmddr_saxpairs_")
+        try:
+            path = os.path.join(tmp, "pairs.xml")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(SAXML_HEAD + SAXML_CHUNKLESS_PAIRS)
+            db = os.path.join(tmp, "pairs.db")
+            summary = build(path, db)
+            c = sqlite3.connect(db)
+            row = c.execute("SELECT ddrinfo_refs, ddrinfo_missing_steps, "
+                            "ddrinfo_missing_calcs FROM ddr_run").fetchone()
+            c.close()
+            self.assertEqual(row, (4, 0, 1))
+            warn = "\n".join(summary["_warnings"])
+            self.assertIn("WARNING: 1 calculation(s) without reference list", warn)
+            self.assertIn("names no field or custom function\n  is not counted", warn)
+            import contextlib
+            import io
+            from fm_ddr.cli import main
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+                main(["list", tmp])
+                main(["stats", db])
+            self.assertIn("1 calculation(s) without reference list", out.getvalue())
+            self.assertNotIn("1 calculations", out.getvalue())
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
+# A custom function used only inside a calculation whose chunk list the
+# export does not write, next to a field used from a calculation that has
+# its list
+SAXML_CHUNKLESS_CF = (
+    '<CustomFunctionsCatalog><ObjectList>'
+    '<CustomFunction id="1" name="MyCF" access="All"><Calculation><Text>x</Text>'
+    '</Calculation><ObjectList><Parameter name="x"/></ObjectList></CustomFunction>'
+    '</ObjectList></CustomFunctionsCatalog>'
+    + SAXML_CHUNKLESS_PAIRS.replace(
+        '<Field id="2" name="C2" datatype="Number" fieldtype="Calculated">'
+        '<Calculation><DDRREF kind="ChunkList" hash="">_LOST</DDRREF>'
+        '<Text>A::K</Text>',
+        '<Field id="2" name="C2" datatype="Number" fieldtype="Calculated">'
+        '<Calculation><DDRREF kind="ChunkList" hash="">_LOST</DDRREF>'
+        '<Text>MyCF ( A::K )</Text>'))
+
+
+class TestSaXMLWhereTextCheck(unittest.TestCase):
+    """`where` on an index with calculations without reference list: an
+    object with no reference gets the full-text check inline, so a used
+    custom function never reads as "0 reference(s)" alone; an object with
+    references gets no note."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxwhere_")
+        path = os.path.join(cls.tmp, "cf.xml")
+        assert "MyCF ( A::K )" in SAXML_CHUNKLESS_CF
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_CHUNKLESS_CF)
+        cls.db = os.path.join(cls.tmp, "cf.db")
+        build(path, cls.db)
+        cls.ddr = build_fixture_db(cls.tmp)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    @staticmethod
+    def cli(*argv):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        both = io.StringIO()
+        with contextlib.redirect_stdout(both), contextlib.redirect_stderr(both):
+            main(list(argv))
+        return both.getvalue()
+
+    def test_unreferenced_cf_shows_its_text_mentions(self):
+        out = self.cli("where", self.db, "MyCF")
+        head = next(l for l in out.splitlines() if l.startswith("# MyCF"))
+        self.assertIn("(custom_function)", head)
+        self.assertTrue(head.endswith(" 0 reference(s)"), head)
+        tail = out[out.index("0 reference(s)"):]
+        self.assertIn("1 calculation(s) without a reference list", tail)
+        self.assertIn("1 text mention(s)", tail)
+        hit = next(l for l in tail.splitlines() if l.startswith("field"))
+        self.assertIn("C2", hit)
+        # The function's own definition is not a mention
+        self.assertNotIn("custom_function  MyCF", tail)
+
+    def test_referenced_field_prints_no_note(self):
+        out = self.cli("where", self.db, "A::K")
+        self.assertNotIn("0 reference(s)", out)
+        self.assertNotIn("reference list", out)
+
+    def test_no_mention_says_so(self):
+        out = self.cli("where", self.db, "C3")
+        self.assertIn("0 reference(s)", out)
+        self.assertIn("no text mention", out)
+
+    def test_ddr_index_unchanged(self):
+        out = self.cli("where", self.ddr, "Orphan Script")
+        self.assertNotIn("reference list", out)
+        self.assertNotIn("text mention", out)
+
+
+class TestSaXMLUnusedCaveat(unittest.TestCase):
+    """`stats` and the report's health page say once that unused candidates
+    of a SaXML index may include objects used only where the export lists
+    no reference: in calculations without reference list or through an
+    external TO with no data source (unverifiable_xfile). Nothing on an
+    index without either, nor on a DDR index."""
+
+    CAVEAT = "Unused candidates may include objects used only"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxcav_")
+        path = os.path.join(cls.tmp, "pairs.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_CHUNKLESS_PAIRS)
+        fx = os.path.join(ROOT, "tests", "fixtures")
+        cls.dbs = {}
+        for name, src in (("chunkless", path),
+                          ("xfile", os.path.join(fx, "saxml_xfile_fmdt_2.3.0.0.xml")),
+                          ("clean", os.path.join(fx, "saxml_2.3.0.1.xml"))):
+            cls.dbs[name] = os.path.join(cls.tmp, name + ".db")
+            build(src, cls.dbs[name])
+        cls.dbs["ddr"] = build_fixture_db(cls.tmp)
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def stats(self, name):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            main(["stats", self.dbs[name]])
+        return out.getvalue()
+
+    def test_stats(self):
+        for name in ("chunkless", "xfile"):
+            self.assertEqual(self.stats(name).count(self.CAVEAT), 1, name)
+        for name in ("clean", "ddr"):
+            self.assertNotIn(self.CAVEAT, self.stats(name), name)
+
+    def test_report_health(self):
+        from fm_ddr.report import report
+        out = report(self.dbs["chunkless"], os.path.join(self.tmp, "r.html"))
+        with open(out, encoding="utf-8") as f:
+            html = f.read()
+        self.assertIn(self.CAVEAT, html)
+        self.assertIn("DATA.meta.unused_caveat", html)   # rendered by renderHealth
+        out = report(self.dbs["ddr"], os.path.join(self.tmp, "d.html"))
+        with open(out, encoding="utf-8") as f:
+            self.assertNotIn(self.CAVEAT, f.read())
+
+
+SAXML_EXPECTED = os.path.join(ROOT, "tests", "saxml_expected")
+
+
+def saxml_normalize(db_path):
+    """A fixture build as entity counts per kind and every ref as (source
+    key, context, target_kind, target_raw, resolved, disabled,
+    trigger_event); source keys from the harness normalize()."""
+    entities, refs = read_sqlite(db_path)
+    counts = {}
+    for e in entities:
+        counts[e["kind"]] = counts.get(e["kind"], 0) + 1
+    rows = sorted(
+        [src, ctx, tk, raw, 1 if tgt else 0, dis, trig]
+        for src, ctx, tk, raw, tgt, _amb, dis, trig, _tf
+        in normalize(entities, refs)["refs"])
+    return {"entity_counts": counts, "refs": rows}
+
+
+class TestSaXMLVersions(unittest.TestCase):
+    """Per-version gate: every fixture named in
+    SUPPORTED that exists builds and equals tests/saxml_expected/<version>.json.
+    UPDATE_SNAPSHOT=1 rewrites the files (as test_snapshot).
+    Guard: TestGuardProofs.test_version_gate."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxver_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def build_version(self, version):
+        from fm_ddr.saxml import SUPPORTED
+        import contextlib
+        import io
+        db = os.path.join(self.tmp, version + ".db")
+        with contextlib.redirect_stdout(io.StringIO()):
+            build(os.path.join(ROOT, "tests", "fixtures", SUPPORTED[version]), db,
+                  label=version)
+        return saxml_normalize(db)
+
+    def present(self):
+        from fm_ddr.saxml import SUPPORTED
+        return [v for v, n in SUPPORTED.items()
+                if os.path.exists(os.path.join(ROOT, "tests", "fixtures", n))]
+
+    def test_expected_per_version(self):
+        self.assertTrue(self.present())
+        for version in self.present():
+            with self.subTest(version=version):
+                got = self.build_version(version)
+                path = os.path.join(SAXML_EXPECTED, version + ".json")
+                if os.environ.get("UPDATE_SNAPSHOT"):
+                    os.makedirs(SAXML_EXPECTED, exist_ok=True)
+                    with open(path, "w") as f:
+                        json.dump(got, f, indent=1, sort_keys=True)
+                    continue
+                self.assertTrue(os.path.exists(path),
+                                f"no {version}.json; run with UPDATE_SNAPSHOT=1")
+                with open(path) as f:
+                    self.assertEqual(got, json.load(f))
+
+    def test_versions_agree(self):
+        # The two 26 exports of the lab agree on everything but the custom
+        # menus (Pro writes the standard menus, FMDeveloperTool none) and the
+        # OnFirstWindowOpen export trigger, removed from the copy Pro exported
+        a = self.build_version("2.3.0.0")
+        b = self.build_version("2.3.0.1")
+        kinds = set(a["entity_counts"]) | set(b["entity_counts"])
+        differ = {k: (a["entity_counts"].get(k, 0), b["entity_counts"].get(k, 0))
+                  for k in kinds
+                  if a["entity_counts"].get(k, 0) != b["entity_counts"].get(k, 0)}
+        self.assertEqual(differ, {"custom_menu": (0, 24)})
+        refs_a = [tuple(r) for r in a["refs"]]
+        refs_b = [tuple(r) for r in b["refs"]]
+        self.assertEqual([r for r in refs_b if r not in refs_a], [])
+        self.assertEqual([r for r in refs_a if r not in refs_b],
+                         [("", "trigger", "script", "Export SaXML", 1, 0,
+                           "OnFirstWindowOpen")])
+
+
+LAB3 = os.path.join(ROOT, "tests", "fixtures", "saxml_lab3_2.3.0.0.xml")
+
+
+class TestSaXMLLab3(unittest.TestCase):
+    """Lab v3: the synthetic lab file with the layout and
+    action kinds real solutions carry, exported by FMDeveloperTool
+    26.0.1 and scrubbed by tools/saxml_fixture.py. One assertion per kind
+    on the real shape, and the whole build against
+    tests/saxml_expected/lab3_2.3.0.0.json (UPDATE_SNAPSHOT=1 rewrites it)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_lab3_")
+        cls.db = os.path.join(cls.tmp, "lab3.db")
+        cls.summary = build(LAB3, cls.db, label="lab3")
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql, *args):
+        return self.conn.execute(sql, args).fetchall()
+
+    def refs_of(self, object_type=None, kind="layout_object", name=None):
+        """(source object type or kind, parent object type or kind, context,
+        target_raw, resolved, trigger_event) of the refs from matching
+        sources."""
+        return sorted(self.q(
+            "SELECT coalesce(json_extract(s.extra_json, '$.object_type'), s.kind),"
+            " coalesce(json_extract(p.extra_json, '$.object_type'), p.kind),"
+            " r.context, r.target_raw, r.target_entity_id IS NOT NULL,"
+            " r.trigger_event"
+            " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " LEFT JOIN entities p ON p.entity_id = s.parent_entity_id"
+            " WHERE s.kind = ? AND (? IS NULL OR"
+            "   json_extract(s.extra_json, '$.object_type') = ?)"
+            " AND (? IS NULL OR s.name = ? OR p.name = ?)",
+            kind, object_type, object_type, name, name, name))
+
+    def children(self, object_type):
+        return sorted(r[0] for r in self.q(
+            "SELECT json_extract(c.extra_json, '$.object_type') FROM entities c"
+            " JOIN entities p ON p.entity_id = c.parent_entity_id"
+            " WHERE json_extract(p.extra_json, '$.object_type') = ?", object_type))
+
+    def test_source(self):
+        self.assertEqual(self.q("SELECT source_format, ddr_version, source_version"
+                                " FROM ddr_run"), [("saxml", "2.3.0.0", "26.0.1")])
+        # No warning: the GTRR's layout calc the export writes twice, once
+        # with no hash, has its list on the other copy (nothing lost)
+        self.assertEqual(self.summary["_warnings"], [])
+
+    def test_button_bar_segments(self):
+        self.assertEqual(self.children("Button Bar"), ["Button"] * 3)
+        rows = [r for r in self.refs_of("Button") if r[1] == "Button Bar"]
+        self.assertEqual(rows, [
+            ("Button", "Button Bar", "go_to_layout", "Watch List", 1, None),
+            ("Button", "Button Bar", "perform_script", "Target", 1, None),
+            ("Button", "Button Bar", "step_target", "CUS__Customer::Name_Last", 1, None),
+        ])
+
+    def test_grouped_button(self):
+        self.assertEqual(self.children("Grouped Button"), ["Rectangle", "Text"])
+        self.assertEqual(self.refs_of("Grouped Button"), [
+            ("Grouped Button", "layout", "calc", "CUS__Customer::ID", 1, None),
+            ("Grouped Button", "layout", "perform_script", "Full Access Script", 1, None),
+        ])
+        step = self.q("SELECT json_extract(extra_json, '$.step_text') FROM entities"
+                      " WHERE json_extract(extra_json, '$.object_type') = 'Grouped Button'")
+        self.assertEqual(step, [("Perform Script [ “Full Access Script”; "
+                                 "Parameter: CUS__Customer::ID ]",)])
+
+    def test_popover_with_title_calc(self):
+        self.assertEqual(self.children("Popover Button"), ["PopoverPanel"])
+        self.assertEqual(self.refs_of("PopoverPanel"), [
+            ("PopoverPanel", "Popover Button", "calc", "CUS__Customer::ID", 1, None)])
+        self.assertIn(
+            ("Edit Box", "PopoverPanel", "layout_object",
+             "CUS__Customer::Address_CountryCode", 1, None),
+            self.refs_of("Edit Box"))
+
+    def test_tab_and_slide_panels(self):
+        self.assertEqual(self.children("Tab Control"), ["Panel", "Panel"])
+        self.assertEqual(self.children("Slide Control"), ["Panel", "Panel"])
+        self.assertEqual(self.refs_of("Panel"), [
+            ("Panel", "Tab Control", "calc", "CUS_SAL__Sale::ID", 1, None)])
+        in_panels = [r[2:5] for r in self.refs_of() if r[1] == "Panel"]
+        self.assertEqual(sorted(in_panels), [
+            ("calc", "CUS__Customer::Name_First", 1),        # the placeholder
+            ("layout_object", "CUS__Customer::ID", 1),
+            ("layout_object", "CUS__Customer::Name_Full_c", 1),
+            ("layout_object", "CUS__Customer::Name_Last", 1),
+            ("layout_object", "CUS__Customer::Phone_r[2]", 0),
+            ("perform_script", "Target", 1),
+        ])
+
+    def test_web_viewer(self):
+        self.assertEqual([r[2:5] for r in self.refs_of("Web Viewer")], [
+            ("calc", "CUS__Customer::ID", 1),
+            ("calc", "CUS__Customer::Name_First", 1),
+            ("calc", "CUS__Customer::Name_Last", 1),
+            ("function_ref", "_Str_FullName", 1),
+        ])
+
+    def test_custom_menu_items(self):
+        self.assertEqual([r[2:5] for r in self.refs_of(kind="custom_menu")], [
+            ("go_to_layout", "Watch List", 1),
+            ("perform_script", "Menu Target", 1),
+        ])
+        calc = self.q("SELECT calc_text FROM entities WHERE kind = 'custom_menu'")[0][0]
+        self.assertIn("not IsEmpty ( Get ( AccountName ) )", calc)   # install calc
+        self.assertEqual(self.q("SELECT name FROM entities"
+                                " WHERE kind = 'custom_menu_set'"), [("Lab Menu Set",)])
+
+    def test_sub_summary_break_field(self):
+        # A sub-summary part's break field is a reference from the layout,
+        # context part_break, on the SaXML side only (the DDR writes no Part
+        # element)
+        rows = [r[2:5] for r in self.refs_of(kind="layout", name="Lab Report")]
+        self.assertIn(("part_break", "SAL__Sale::ID_Customer", 1), rows)
+        self.assertEqual([r for r in rows if r[0] == "part_break"],
+                         [("part_break", "SAL__Sale::ID_Customer", 1)])
+        self.assertEqual(self.q("SELECT count(*) FROM refs"
+                                " WHERE context = 'part_break'"), [(1,)])
+
+    def test_custom_menu_keeps_every_item_step(self):
+        # On SaXML a custom menu keeps the step text of every item, one line
+        # each in item order (the DDR path keeps only the last item's,
+        # unchanged)
+        text = self.q("SELECT json_extract(extra_json, '$.step_text') FROM entities"
+                      " WHERE kind = 'custom_menu'")[0][0]
+        lines = text.split("\n")
+        self.assertEqual(len(lines), 2, text)
+        self.assertTrue(lines[0].startswith("Perform Script [ "), lines[0])
+        self.assertIn("Menu Target", lines[0])
+        self.assertEqual(lines[1], "Go to Layout [ “Watch List” (WAT__Watch) ]")
+        hits = self.q("SELECT count(*) FROM text_index WHERE kind = 'custom_menu'"
+                      " AND text_index MATCH '\"Menu Target\"'")
+        self.assertEqual(hits, [(1,)])
+
+    def test_break_field_through_a_deleted_to(self):
+        # The shape FileMaker writes for a break field whose TO
+        # is gone: an empty field name under <Table Missing>. A defect,
+        # listed in v_dangling
+        with open(LAB3, encoding="utf-8") as f:
+            text = f.read()
+        old = ('<FieldReference id="6" name="ID_Customer" '
+               'UUID="0C1AF394-626B-4A1C-8A1F-67E678BEDC53">\n'
+               '\t\t\t\t\t\t\t\t\t<TableOccurrenceReference id="1065092" '
+               'name="SAL__Sale" UUID="0A348502-C291-4142-9545-F286D5161185">')
+        at = text.index(old, text.index('<Part type="Leading Sub-summary"'))
+        text = (text[:at] + '<FieldReference id="6" name="">\n'
+                '<TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;">'
+                + text[at + len(old):])
+        path = os.path.join(self.tmp, "gone.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        db = os.path.join(self.tmp, "gone.db")
+        build(path, db, label="gone")
+        conn = sqlite3.connect(db)
+        rows = conn.execute("SELECT marker, marker_class FROM v_dangling"
+                            " WHERE context = 'part_break'").fetchall()
+        conn.close()
+        self.assertEqual(rows, [("<Table Missing>::<unknown>", "<Table Missing>")])
+
+    def test_validation_calc(self):
+        rows = self.refs_of(kind="field", name="Name_Last")
+        self.assertEqual(sorted({r[2:5] for r in rows}), [
+            ("validation", "CUS__Customer::Name_First", 1),
+            ("validation", "CUS__Customer::Name_Last", 1)])
+        self.assertEqual(len(rows), 4)
+
+    def test_triggers(self):
+        got = self.q("SELECT layout_name, trigger_event, script_name FROM v_triggers"
+                     " WHERE script_name LIKE 'TRIGGER_on%' ORDER BY 2")
+        self.assertIn(("Lab Layout", "OnLayoutEnter", "TRIGGER_onLayoutEnter"), got)
+        self.assertIn(("Lab Layout", "OnPanelSwitch", "TRIGGER_onPanelSwitch"), got)
+        self.assertEqual(self.refs_of("Tab Control"), [
+            ("Tab Control", "layout", "calc", "CUS__Customer::ID", 1, None),
+            ("Tab Control", "layout", "trigger", "TRIGGER_onPanelSwitch", 1,
+             "OnPanelSwitch")])
+
+    def test_send_mail_calcs(self):
+        rows = self.refs_of(kind="script_step", name="Lab Mailer")
+        self.assertEqual([r[2:5] for r in rows], [
+            ("calc", "CUS_SAL__Sale::SoldOn", 1),
+            ("calc", "CUS__Customer::ID", 1),
+            ("calc", "CUS__Customer::Name_First", 1),
+            ("calc", "CUS__Customer::Name_Last", 1),
+            ("function_ref", "_Str_FullName", 1),
+        ])
+
+    def test_gtrr_new_window(self):
+        rows = self.refs_of(kind="script_step", name="Lab Related Window")
+        self.assertEqual([r[2:5] for r in rows],
+                         [("step_table", "WAT_SAL__Sale", 1)])
+
+    def test_expected(self):
+        got = saxml_normalize(self.db)
+        path = os.path.join(SAXML_EXPECTED, "lab3_2.3.0.0.json")
+        if os.environ.get("UPDATE_SNAPSHOT"):
+            with open(path, "w") as f:
+                json.dump(got, f, indent=1, sort_keys=True)
+            self.skipTest("lab3 expected regenerated")
+        with open(path) as f:
+            self.assertEqual(got, json.load(f))
+
+
+class TestSaXMLCrossFile(unittest.TestCase):
+    """The filled cross-file shapes of a Pro 26.1.1 export made with the
+    satellite file open (two-file lab): the external TO names its data
+    source and base table, the cross-file Perform Script carries the data
+    source, and a calc field through the external TO keeps the field name,
+    so nothing of it is dangling."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxxf_")
+        cls.db = os.path.join(cls.tmp, "xf.db")
+        cls.out = io.StringIO()
+        with contextlib.redirect_stdout(cls.out):
+            build(os.path.join(ROOT, "tests", "fixtures",
+                               "saxml_xfile_2.3.0.1.xml"), cls.db, label="xf")
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql):
+        return self.conn.execute(sql).fetchall()
+
+    def test_external_to_filled(self):
+        self.assertEqual(self.q(
+            "SELECT name, ext_file, base_table FROM entities"
+            " WHERE kind = 'table_occurrence' ORDER BY name"),
+            [("Main", None, "Main"), ("ext_Item", "Sat", "Item")])
+        self.assertNotIn("carry no data source", self.out.getvalue())
+
+    def test_cross_file_perform_script(self):
+        self.assertEqual(self.q(
+            "SELECT s.kind, s.name, r.target_raw, r.target_file"
+            " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " WHERE r.context = 'perform_script'"),
+            [("script_step", "Perform Script", "Ping", "Sat")])
+
+    def test_cross_file_calc_field(self):
+        self.assertEqual(self.q(
+            "SELECT s.name, r.target_raw, r.target_to_name, r.target_name"
+            " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " WHERE r.context = 'calc'"),
+            [("SatName", "ext_Item::Name", "ext_Item", "Name")])
+        self.assertEqual(self.q(
+            "SELECT s.name, r.target_raw FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " WHERE r.context = 'step_target'"),
+            [("Set Field", "ext_Item::Name")])
+        self.assertEqual(self.q("SELECT count(*) FROM v_dangling"), [(0,)])
+
+
+class TestSaXMLCrossFileFMDT(unittest.TestCase):
+    """Both files of the two-file lab exported with FMDeveloperTool 26.0.1
+    and built together: one index, one files row each,
+    the data source maps to the satellite's row, and still nothing resolves
+    across the files, because the main file's export leaves every
+    reference into the other file empty. The filled shape needs a Pro
+    export with every file open (TestSaXMLCrossFile)."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxxfdt_")
+        cls.db = os.path.join(cls.tmp, "both.db")
+        fx = os.path.join(ROOT, "tests", "fixtures")
+        cls.summary = build([os.path.join(fx, "saxml_xfile_fmdt_2.3.0.0.xml"),
+                             os.path.join(fx, "saxml_xfile_sat_fmdt_2.3.0.0.xml")],
+                            cls.db, label="both")
+        cls.conn = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql):
+        return self.conn.execute(sql).fetchall()
+
+    def test_two_files_one_index(self):
+        self.assertEqual(self.q("SELECT name FROM files ORDER BY file_id"),
+                         [("Main.fmp12",), ("Sat.fmp12",)])
+        self.assertEqual(self.q("SELECT ds_name, target_file_name FROM v_data_sources"),
+                         [("Sat", "Sat.fmp12")])
+
+    def test_nothing_resolves_across_files(self):
+        self.assertEqual(self.q(
+            "SELECT name, ext_file, base_table FROM entities"
+            " WHERE kind = 'table_occurrence' AND name = 'ext_Item'"),
+            [("ext_Item", None, None)])
+        self.assertEqual(self.q(
+            "SELECT r.target_raw, r.target_file, r.target_entity_id FROM refs r"
+            " WHERE r.context = 'perform_script'"), [(None, "Sat", None)])
+        self.assertEqual(self.q(
+            "SELECT count(*) FROM refs r JOIN entities t"
+            " ON t.entity_id = r.target_entity_id JOIN files f ON f.file_id = t.file_id"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " WHERE s.file_id <> t.file_id"), [(0,)])
+        self.assertEqual(self.q("SELECT context FROM v_dangling"),
+                         [("unverifiable_xfile",)] * 2)
+
+
+class TestSaXMLMixed26(unittest.TestCase):
+    """The FileMaker 26 versions share one rule set: a Pro 26.1 export of
+    the main file (2.3.0.1, filled cross-file slots) and an FMDeveloperTool
+    26.0 export of the satellite (2.3.0.0) build into one index, resolve
+    across the files, and record each file's version."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxmix_")
+        cls.db = os.path.join(cls.tmp, "mix.db")
+        fx = os.path.join(ROOT, "tests", "fixtures")
+        build([os.path.join(fx, "saxml_xfile_2.3.0.1.xml"),
+               os.path.join(fx, "saxml_xfile_sat_fmdt_2.3.0.0.xml")], cls.db, label="mix")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql):
+        conn = sqlite3.connect(self.db)
+        try:
+            return conn.execute(sql).fetchall()
+        finally:
+            conn.close()
+
+    def test_resolves_across_files(self):
+        self.assertEqual(self.q(
+            "SELECT r.context, f.name FROM refs r"
+            " JOIN entities t ON t.entity_id = r.target_entity_id"
+            " JOIN files f ON f.file_id = t.file_id"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " WHERE s.file_id <> t.file_id ORDER BY 1"), [
+            ("calc", "Sat.fmp12"), ("join_predicate", "Sat.fmp12"),
+            ("perform_script", "Sat.fmp12"), ("step_target", "Sat.fmp12")])
+        self.assertEqual(self.q("SELECT count(*) FROM v_dangling"), [(0,)])
+
+    def test_version_per_file(self):
+        self.assertEqual(self.q(
+            "SELECT name, format_version, source_version FROM files ORDER BY file_id"),
+            [("Main.fmp12", "2.3.0.1", "26.1.1"), ("Sat.fmp12", "2.3.0.0", "26.0.1")])
+
+    def test_run_names_both_versions(self):
+        # ddr_run holds the build, not its first export: a mixed build
+        # names both versions
+        self.assertEqual(self.q("SELECT source_format, ddr_version, source_version"
+                                " FROM ddr_run"),
+                         [("saxml", "2.3.0.0, 2.3.0.1", "26.0.1, 26.1.1")])
+
+    def test_stats_lists_the_files(self):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            main(["stats", self.db])
+        self.assertEqual(out.getvalue().splitlines()[0],
+                         "source: saxml 2.3.0.0, 2.3.0.1 (FileMaker 26.0.1, 26.1.1)")
+        self.assertIn("  Main.fmp12: saxml 2.3.0.1 (FileMaker 26.1.1)", out.getvalue())
+        self.assertIn("  Sat.fmp12: saxml 2.3.0.0 (FileMaker 26.0.1)", out.getvalue())
+        # A DDR index (no per-file version) prints no file list
+        ddr = build_fixture_db(self.tmp)
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            main(["stats", ddr])
+        self.assertNotIn(": saxml", out.getvalue())
+
+
+SAXML_EMPTY_EXTERNAL = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="2" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="2" name="C" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>ext_X::&lt;Field Missing&gt;</Text></Calculation></Field>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '</AddAction></Structure><DDR_INFO></DDR_INFO></FMSaveAsXML>\n')
+
+
+class TestSaXMLEmptyExternalWarning(unittest.TestCase):
+    """The build warning on a SaXML export whose external TOs carry no
+    data source (the FMDeveloperTool route). A warning: the build stands.
+    One block, printed once by build() before the CLI's "Done:"; the
+    remedy names only the measured route."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxwarn_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_build(self, path):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        err = io.StringIO()
+        db = os.path.join(self.tmp, "w.db")
+        with contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(err):
+            main(["build", path, "-o", db])
+        self.assertTrue(os.path.exists(db))
+        return err.getvalue()
+
+    def test_warns(self):
+        path = os.path.join(self.tmp, "fmdt.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_EMPTY_EXTERNAL)
+        err = self.run_build(path)
+        self.assertIn(
+            "WARNING: 1 external table occurrence(s) in this Save a Copy as XML "
+            "export carry no data source and no base table.", err)
+        self.assertIn("TO::<Field Missing>: 1 object(s) here show in v_dangling "
+                      "as unverifiable_xfile, not broken_calc:", err)
+        self.assertIn("the field may exist in the other file or may be gone; "
+                      "this export cannot tell.", err)
+        # The cause is measured per route, never attributed to this file
+        self.assertIn("The export left these table occurrences empty "
+                      "(FMDeveloperTool does this; measured: FileMaker Pro with "
+                      "the files open fills them;\n  Server not yet measured).", err)
+        self.assertNotIn("This is how FMDeveloperTool exports", err)
+        self.assertNotIn("FileMaker Pro or FileMaker Server", err)
+
+    def test_one_block_before_done(self):
+        # The fact is said once, and every warning (this one and the low
+        # resolution one) comes before "Done:" on the combined output
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        path = os.path.join(self.tmp, "fmdt.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_EMPTY_EXTERNAL)
+        both = io.StringIO()
+        with contextlib.redirect_stdout(both), contextlib.redirect_stderr(both):
+            main(["build", path, "-o", os.path.join(self.tmp, "b.db")])
+        out = both.getvalue()
+        self.assertEqual(out.count("carry no data source"), 1, out)
+        self.assertEqual(out.count("external table occurrence"), 1, out)
+        self.assertLess(out.rindex("WARNING:"), out.index("Done:"), out)
+
+    def test_low_resolution_before_done(self):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        both = io.StringIO()
+        with contextlib.redirect_stdout(both), contextlib.redirect_stderr(both):
+            main(["build", FIXTURE_C, "-o", os.path.join(self.tmp, "c.db")])
+        out = both.getvalue()
+        self.assertEqual(out.count("WARNING:"), 1, out)
+        self.assertLess(out.index("references resolved"), out.index("Done:"), out)
+
+    def test_silent_when_filled(self):
+        err = self.run_build(os.path.join(ROOT, "tests", "fixtures",
+                                          "saxml_xfile_2.3.0.1.xml"))
+        self.assertNotIn("external table occurrence", err)
+
+    def test_counts_field_objects(self):
+        # A field object through such a TO is counted with the calculations
+        path = os.path.join(self.tmp, "lay.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_LAYOUTS)
+        err = self.run_build(path)
+        self.assertIn("1 field reference(s) from layout objects or script steps "
+                      "through them name no field and show in v_dangling as "
+                      "unverifiable_xfile", err)
+
+
+SAXML_XFILE_CLASS = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="3" name="a_ext_X" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="2" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    # only through the empty external TO, twice: unverifiable
+    '<Field id="2" name="Xonly" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>ext_X::&lt;Field Missing&gt; &amp; ext_X::&lt;Field Missing&gt;'
+    '</Text></Calculation></Field>'
+    # one bare marker next to it: a defect
+    '<Field id="3" name="Xbare" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>ext_X::&lt;Field Missing&gt; &amp; &lt;Field Missing&gt;'
+    '</Text></Calculation></Field>'
+    # a local TO: a defect
+    '<Field id="4" name="Local" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>L::&lt;Field Missing&gt;</Text></Calculation></Field>'
+    # a local TO whose name ends with the external one: a defect
+    '<Field id="5" name="Suffix" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>a_ext_X::&lt;Field Missing&gt;</Text></Calculation></Field>'
+    # through the external TO plus a missing function: the function stays a defect
+    '<Field id="6" name="Xfunc" datatype="Text" fieldtype="Calculated">'
+    '<Calculation><Text>ext_X::&lt;Field Missing&gt; &amp; &lt;Function Missing&gt;'
+    '</Text></Calculation></Field>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '</AddAction></Structure><DDR_INFO></DDR_INFO></FMSaveAsXML>\n')
+
+
+class TestSaXMLUnverifiableXfile(unittest.TestCase):
+    """1.15.0: an entity whose every <Field Missing> follows an
+    empty external TO (the FMDeveloperTool route) is marked
+    extra_json.xfile_marker and v_dangling lists that row as
+    unverifiable_xfile, not broken_calc. A bare or local-TO marker keeps the
+    entity a defect; other markers stay broken_calc. Guard: TestGuardProofs.test_mark_xfile."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxxfc_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def dangling(self, path):
+        import contextlib
+        import io
+        db = os.path.join(self.tmp, "x.db")
+        with contextlib.redirect_stdout(io.StringIO()):
+            build(path, db, label="x")
+        conn = sqlite3.connect(db)
+        try:
+            rows = conn.execute(
+                "SELECT context, source_kind, source_name, marker FROM v_dangling"
+                " ORDER BY source_name, context, marker").fetchall()
+            marked = conn.execute(
+                "SELECT name FROM entities"
+                " WHERE json_extract(extra_json, '$.xfile_marker') = 1"
+                " ORDER BY name").fetchall()
+        finally:
+            conn.close()
+        return rows, marked
+
+    def test_fmdt_fixture(self):
+        # The two-file lab exported by FMDeveloperTool: the calc field
+        # through the empty external TO reads ext_Item::<Field Missing>; the
+        # Set Field target through it names no field, live or deleted alike
+        # (the DDR marks a deleted one <Field Missing>)
+        rows, marked = self.dangling(os.path.join(
+            ROOT, "tests", "fixtures", "saxml_xfile_fmdt_2.3.0.0.xml"))
+        self.assertEqual(rows, [
+            ("unverifiable_xfile", "field", "SatName", "<Field Missing>"),
+            ("unverifiable_xfile", "script_step", "Set Field", "ext_Item::<unknown>")])
+        self.assertEqual(marked, [("SatName",)])
+
+    def test_pro_fixture_unmarked(self):
+        rows, marked = self.dangling(os.path.join(
+            ROOT, "tests", "fixtures", "saxml_xfile_2.3.0.1.xml"))
+        self.assertEqual((rows, marked), ([], []))
+
+    def test_rule(self):
+        path = os.path.join(self.tmp, "c.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_XFILE_CLASS)
+        rows, marked = self.dangling(path)
+        self.assertEqual(marked, [("Xfunc",), ("Xonly",)])
+        self.assertEqual(rows, [
+            ("broken_calc", "field", "Local", "<Field Missing>"),
+            ("broken_calc", "field", "Suffix", "<Field Missing>"),
+            ("broken_calc", "field", "Xbare", "<Field Missing>"),
+            ("broken_calc", "field", "Xfunc", "<Function Missing>"),
+            ("unverifiable_xfile", "field", "Xfunc", "<Field Missing>"),
+            ("unverifiable_xfile", "field", "Xonly", "<Field Missing>"),
+        ])
+
+
+SAXML_LAYOUTS = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="2" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="S"/></ScriptCatalog>'
+    '<ValueListCatalog><ValueList id="1" name="V"><Source value="Custom"/>'
+    '</ValueList></ValueListCatalog>'
+    '<LayoutCatalog>'
+    '<Layout id="9" name="-" isSeparatorItem="True"><Options hidden="False">0</Options>'
+    '</Layout>'
+    '<Layout id="1" name="Lay">'
+    '<TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;"/>'
+    '<PartsList><Part type="Body"><ObjectList>'
+    # 1 field object with a value list
+    '<LayoutObject id="1" type="Edit Box" name=""><Field>'
+    '<FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '<Display Style="0"><ValueListReference id="1" name="V"/></Display></Field>'
+    '</LayoutObject>'
+    # 2 a field in another file: empty name through an external TO
+    '<LayoutObject id="2" type="Edit Box" name=""><Field>'
+    '<FieldReference id="5" name="" repetition="1">'
+    '<TableOccurrenceReference id="2" name="ext_X"/></FieldReference></Field>'
+    '</LayoutObject>'
+    # 3 no TO child
+    '<LayoutObject id="3" type="Edit Box" name=""><Field>'
+    '<FieldReference id="6" name="Gone" repetition="1"/></Field></LayoutObject>'
+    # 4 a deleted TO: the marker element
+    '<LayoutObject id="4" type="Edit Box" name=""><Field>'
+    '<FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;"/>'
+    '</FieldReference></Field></LayoutObject>'
+    # 5 a deleted field through a local TO
+    '<LayoutObject id="5" type="Edit Box" name=""><Field>'
+    '<FieldReference id="7" name="" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Field>'
+    '</LayoutObject>'
+    # 6 portal: sort and filter
+    '<LayoutObject id="6" type="Portal" name=""><Portal>'
+    '<TableOccurrenceReference id="1" name="L"/>'
+    '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+    '<PrimaryField><FieldReference id="1" name="K">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></PrimaryField>'
+    '</Sort></SortList></SortSpecification>'
+    '<Calculation><DDRREF kind="ChunkList" hash="p1">_P1</DDRREF><Text>L::K</Text>'
+    '</Calculation><ObjectList/></Portal></LayoutObject>'
+    # 7 portal whose TO is gone
+    '<LayoutObject id="7" type="Portal" name=""><Portal><ObjectList/></Portal>'
+    '</LayoutObject>'
+    # 8 grouped button with a script
+    '<LayoutObject id="8" type="Grouped Button" name=""><GroupedButton><action>'
+    '<Options>4</Options><ScriptReference id="1" name="S"/></action>'
+    '</GroupedButton></LayoutObject>'
+    # 9 button whose script is gone; trigger whose script is gone
+    '<LayoutObject id="9" type="Button" name=""><Button><action>'
+    '<Options>4</Options></action></Button>'
+    '<ScriptTriggers><ScriptTrigger id="1" action="OnObjectEnter"/></ScriptTriggers>'
+    '</LayoutObject>'
+    '</ObjectList></Part></PartsList>'
+    '<Options hidden="True">0</Options>'
+    '</Layout></LayoutCatalog>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Calculation><ObjectList>'
+    '<_P1 hash="p1" datatype="ChunkList"><ChunkList hash="p1">'
+    '<Chunk type="FieldRef"><FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Chunk>'
+    '</ChunkList></_P1></ObjectList></Calculation></DDR_INFO>'
+    '</FMSaveAsXML>\n')
+
+
+class TestSaXMLLayoutRules(unittest.TestCase):
+    """Layout shapes the lab fixture lacks, on a synthetic export: a deleted
+    context TO, field objects without a usable target, a value list binding,
+    portal sort, filter and a deleted portal TO, a grouped button, a button
+    and a trigger whose script is gone, a separator.
+    Guard: TestGuardProofs.test_action_and_trigger_rules."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxlay_")
+        path = os.path.join(cls.tmp, "lay.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_LAYOUTS)
+        db = os.path.join(cls.tmp, "lay.db")
+        with contextlib.redirect_stderr(io.StringIO()):
+            build(path, db, label="lay")
+        cls.conn = sqlite3.connect(db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_layout(self):
+        self.assertEqual(self.conn.execute(
+            "SELECT name, extra_json FROM entities WHERE kind = 'layout'").fetchall(),
+            [("Lay", None)])   # separator skipped; hidden: no in_menu key
+        self.assertEqual(self.conn.execute(
+            "SELECT target_fm_id, target_name, target_raw FROM refs"
+            " WHERE context = 'layout_context'").fetchall(),
+            [(None, None, "<unknown>")])
+
+    def test_object_refs(self):
+        rows = sorted(self.conn.execute(
+            "SELECT json_extract(o.extra_json, '$.key'), r.context, r.target_name,"
+            " r.target_to_name, r.target_raw, r.target_entity_id IS NOT NULL,"
+            " r.trigger_event FROM refs r"
+            " JOIN entities o ON o.entity_id = r.source_entity_id"
+            " WHERE o.kind = 'layout_object'").fetchall())
+        self.assertEqual(rows, [
+            ("1", "layout_object", "K", "L", "L::K", 1, None),
+            ("1", "value_list_source", "V", None, "V", 1, None),
+            ("2", "layout_object", None, "ext_X", None, 0, None),
+            ("3", "layout_object", None, None, "<unknown>", 0, None),
+            ("4", "layout_object", None, None, "<unknown>", 0, None),
+            ("5", "layout_object", None, "L", "<unknown>", 0, None),
+            ("6", "calc", "K", "L", "L::K", 1, None),
+            ("6", "portal", "L", None, "L", 1, None),
+            ("6", "sort", "K", "L", "L::K", 1, None),
+            ("7", "portal", None, None, "<unknown>", 0, None),
+            ("8", "perform_script", "S", None, "S", 1, None),
+            ("9", "perform_script", None, None, "<unknown>", 0, None),
+            ("9", "trigger", None, None, "<unknown>", 0, "OnObjectEnter"),
+        ])
+
+    def test_dangling(self):
+        # Every deleted target is in; the field object through the empty
+        # external TO (its name left out by the export: it may exist in the
+        # other file or be gone) is in as unverifiable_xfile, never dropped
+        self.assertEqual(sorted(self.conn.execute(
+            "SELECT context, marker, marker_class, source_kind FROM v_dangling"
+            ).fetchall()), [
+            ("layout_context", "<unknown>", "<unknown>", "layout"),
+            ("layout_object", "<unknown>", "<unknown>", "layout_object"),
+            ("layout_object", "<unknown>", "<unknown>", "layout_object"),
+            ("layout_object", "<unknown>", "<unknown>", "layout_object"),
+            ("perform_script", "<unknown>", "<unknown>", "layout_object"),
+            ("portal", "<unknown>", "<unknown>", "layout_object"),
+            ("trigger", "<unknown>", "<unknown>", "layout_object"),
+            ("unverifiable_xfile", "ext_X::<unknown>", "<unknown>", "layout_object"),
+        ])
+
+
+SAXML_TABLE_VIEW = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence>'
+    '<TableOccurrence id="2" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="2" name="J" datatype="Text" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<LayoutCatalog><Layout id="1" name="Lay">'
+    '<TableOccurrenceReference id="1" name="L"/>'
+    '<PartsList><Part type="Body"><ObjectList>'
+    '<LayoutObject id="1" type="Edit Box" name=""><Field>'
+    '<FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Field>'
+    '</LayoutObject>'
+    '</ObjectList></Part></PartsList>'
+    '<TableView><ObjectList membercount="5">'
+    # 50: the form object's field again (another column id): not twice
+    '<TableViewLayoutObject hidden="False" id="50" name="K" width="75">'
+    '<FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '</TableViewLayoutObject>'
+    # 1: column ids are their own id space: the id of a form object that
+    # shows another field; J is not on the form, so the column is read
+    '<TableViewLayoutObject hidden="False" id="1" name="J" width="75">'
+    '<FieldReference id="2" name="J" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '</TableViewLayoutObject>'
+    # 51: a table-view-only field, hidden in table view; a calculation
+    # under the column is not read
+    '<TableViewLayoutObject hidden="True" id="51" name="J" width="120">'
+    '<FieldReference id="2" name="J" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '<Calculation><DDRREF kind="ChunkList" hash="t1">_T1</DDRREF><Text>L::K</Text>'
+    '</Calculation></TableViewLayoutObject>'
+    # 52: a field in another file through an empty external TO
+    '<TableViewLayoutObject hidden="False" id="52" name="" width="75">'
+    '<FieldReference id="9" name="" repetition="1">'
+    '<TableOccurrenceReference id="2" name="ext_X"/></FieldReference>'
+    '</TableViewLayoutObject>'
+    # 53: no TO
+    '<TableViewLayoutObject hidden="False" id="53" name="Gone" width="75">'
+    '<FieldReference id="7" name="Gone" repetition="1"/>'
+    '</TableViewLayoutObject>'
+    '</ObjectList></TableView>'
+    '<Options hidden="False">0</Options>'
+    '</Layout></LayoutCatalog>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Calculation><ObjectList>'
+    '<_T1 hash="t1" datatype="ChunkList"><ChunkList hash="t1">'
+    '<Chunk type="FieldRef"><FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Chunk>'
+    '</ChunkList></_T1></ObjectList></Calculation></DDR_INFO>'
+    '</FMSaveAsXML>\n')
+
+
+class TestSaXMLTableView(unittest.TestCase):
+    """A table-view-only column is a field object of the layout, as the
+    DDR lists it; a column of a form field object (same field id and TO id)
+    is not counted twice, whatever its id; and nothing else under TableView
+    is read."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxtv_")
+        path = os.path.join(cls.tmp, "tv.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_TABLE_VIEW)
+        db = os.path.join(cls.tmp, "tv.db")
+        with contextlib.redirect_stderr(io.StringIO()):
+            build(path, db, label="tv")
+        cls.conn = sqlite3.connect(db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.conn.close()
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_columns(self):
+        objs = sorted(self.conn.execute(
+            "SELECT o.fm_id, o.extra_json, p.kind FROM entities o"
+            " JOIN entities p ON p.entity_id = o.parent_entity_id"
+            " WHERE o.kind = 'layout_object'").fetchall())
+        self.assertEqual(sorted([(k, json.loads(x).get("table_view_only"), p)
+                                 for k, x, p in objs], key=repr), [
+            ("1", None, "layout"),
+            ("1", True, "layout"),
+            ("51", True, "layout"),
+            ("52", True, "layout"),
+            ("53", True, "layout"),
+        ])
+        rows = sorted(self.conn.execute(
+            "SELECT o.fm_id, r.context, r.target_name, r.target_to_name,"
+            " r.target_raw, r.target_entity_id IS NOT NULL FROM refs r"
+            " JOIN entities o ON o.entity_id = r.source_entity_id"
+            " WHERE o.kind = 'layout_object'").fetchall())
+        self.assertEqual(rows, [
+            ("1", "layout_object", "J", "L", "L::J", 1),
+            ("1", "layout_object", "K", "L", "L::K", 1),
+            ("51", "layout_object", "J", "L", "L::J", 1),
+            ("52", "layout_object", None, "ext_X", None, 0),
+            ("53", "layout_object", None, None, "<unknown>", 0),
+        ])
+
+    def test_nothing_else_read(self):
+        self.assertEqual(self.conn.execute(
+            "SELECT COUNT(*) FROM refs WHERE context NOT IN"
+            " ('layout_object', 'layout_context')").fetchone(), (0,))
+
+
+class TestSaXMLCredentials(unittest.TestCase):
+    """FileMaker's credential elements never reach the index. The fixtures
+    carry the sentinel in place of every credential text
+    (tools/saxml_fixture.py); a build must not hold it in any text column.
+
+    Broken-guard run inside the test: no rule of the real handler reads a
+    skipped credential element, so emptying SKIP alone proves nothing. The
+    proof therefore covers the account path: a handler that also takes
+    Account/Authentication/PasswordEncrypted/Data as the account name
+    (ACCOUNT_NAME_TAGS widened) keeps the sentinel out while SKIP holds,
+    and writes it into entities.name once SKIP is emptied."""
+
+    SENTINEL = "FIXTURE-SECRET-NEVER-INDEXED"
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxcred_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def hits(self, path):
+        """Build `path`; {table.column: rows holding the sentinel}."""
+        db = os.path.join(self.tmp, "cred.db")
+        if os.path.exists(db):
+            os.remove(db)
+        build(path, db, label="cred")
+        conn = sqlite3.connect(db)
+        out = {}
+        for (table,) in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"):
+            for col in conn.execute(f'PRAGMA table_info("{table}")'):
+                n = conn.execute(
+                    f'SELECT COUNT(*) FROM "{table}" WHERE '
+                    f'instr(CAST("{col[1]}" AS TEXT), ?) > 0',
+                    (self.SENTINEL,)).fetchone()[0]
+                if n:
+                    out[f"{table}.{col[1]}"] = n
+        conn.close()
+        return out
+
+    @staticmethod
+    def leaky_handler():
+        from fm_ddr import saxml
+
+        class Leaky(saxml.SaXMLHandler):
+            ACCOUNT_NAME_TAGS = ("AccountName", "Data")
+
+            def _start_Data(self, a):
+                self._account_text("Data")
+        return Leaky
+
+    def test_fixtures_carry_no_user_names(self):
+        import re
+        for path in _saxml_fixtures():
+            with self.subTest(fixture=os.path.basename(path)):
+                with open(path, encoding="utf-8") as f:
+                    text = f.read()
+                self.assertIn(self.SENTINEL, text)
+                self.assertIsNone(re.search(r'\buserName="[^"]', text))
+                self.assertIsNone(re.search(r'\baccountName="[^"]', text))
+
+    def test_sentinel_never_indexed(self):
+        from unittest import mock
+        from fm_ddr import saxml
+        self.assertTrue(_saxml_fixtures())
+        for path in _saxml_fixtures():
+            with self.subTest(fixture=os.path.basename(path)):
+                self.assertEqual(self.hits(path), {})
+                with mock.patch.object(saxml, "SaXMLHandler", self.leaky_handler()):
+                    # SKIP holds: the widened rule never sees the element
+                    self.assertEqual(self.hits(path), {})
+                    # Broken guard: SKIP emptied, the sentinel arrives
+                    with mock.patch.object(saxml, "SKIP", frozenset()):
+                        leaked = self.hits(path)
+                self.assertIn("entities.name", leaked)
+
+
+class TestGuardProofs(unittest.TestCase):
+    """Each guard broken in turn, and the test that pins it must then fail:
+    the proof that the test can see the guard go, run on every suite run
+    Every case also
+    checks the same test passes unbroken, so a proof is never vacuous."""
+
+    def fails_under(self, case_cls, method, patcher):
+        def run(p=None):
+            res = unittest.TestResult()
+            suite = unittest.TestSuite([case_cls(method)])
+            import contextlib
+            import io
+            with contextlib.redirect_stdout(io.StringIO()), \
+                    contextlib.redirect_stderr(io.StringIO()):
+                if p is None:
+                    suite.run(res)
+                else:
+                    with p:
+                        suite.run(res)
+            return res.wasSuccessful()
+        self.assertTrue(run(), f"{method} fails unbroken")
+        self.assertFalse(run(patcher), f"{method} passes with the guard broken")
+
+    def test_version_check(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLRefusal, "test_unsupported_version_22",
+                         mock.patch.object(saxml, "check", lambda info, path: None))
+
+    def test_catalog_order(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLCatalogs, "test_catalog_order_refused",
+                         mock.patch.object(saxml.SaXMLHandler, "_order_error",
+                                           lambda self: None))
+
+    def test_layout_unknown(self):
+        import re
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLStepRules, "test_layout_unknown_only_for_the_layout",
+                         mock.patch.object(saxml, "LAYOUT_UNKNOWN",
+                                           re.compile("<unknown>")))
+
+    def test_step_names(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLStepRules, "test_step_name_spelled_as_the_ddr",
+                         mock.patch.dict(saxml.STEP_NAMES, clear=True))
+
+    def test_version_gate(self):
+        # The per-version expected files see a rule go: the field-object
+        # rule (every field on a layout) disabled
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLVersions, "test_expected_per_version",
+                         mock.patch.object(saxml.SaXMLHandler, "_field_object",
+                                           lambda self, fr: None))
+
+    def test_mark_xfile(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLUnverifiableXfile, "test_rule",
+                         mock.patch.object(saxml.SaXMLHandler, "_mark_xfile",
+                                           lambda self: None))
+
+    def test_external_to_warning(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLEmptyExternalWarning, "test_warns",
+                         mock.patch.object(saxml, "external_to_warning",
+                                           lambda conn: None))
+
+    def test_action_and_trigger_rules(self):
+        from fm_ddr import saxml
+        for name in ("_end_action", "_end_ScriptTrigger"):
+            with self.subTest(rule=name):
+                self.fails_under(TestSaXMLLayoutRules, "test_dangling",
+                                 mock.patch.object(saxml.SaXMLHandler, name,
+                                                   lambda self: None))
+
+    def test_dtd_refusal(self):
+        from fm_ddr import saxml
+        real = saxml._dtd_refusal
+        self.fails_under(TestPrologSniff, "test_padded_doctype_with_subset_refused",
+                         mock.patch.object(saxml, "_dtd_refusal",
+                                           lambda path: RuntimeError(str(real(path)))))
+
+    def test_duplicate_refusal(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLInputRobustness, "test_stale_copy_of_the_same_file",
+                         mock.patch.object(saxml, "refuse_duplicates",
+                                           lambda pairs: None))
+
+    def test_locale_warning(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLLocale, "test_other_locale_warns",
+                         mock.patch.object(saxml, "locale_warning",
+                                           lambda infos: None))
+
+    def test_ddrinfo_warning(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLDDRInfoMisses, "test_in_the_warning_block",
+                         mock.patch.object(saxml, "ddrinfo_warning",
+                                           lambda conn: None))
+
+    def test_step_text_guard(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLStepTextGuard, "test_every_step_text_missing_refused",
+                         mock.patch.object(saxml, "STEPTEXT_MISS_LIMIT", 2.0))
+
+    def test_partial_refusal(self):
+        from fm_ddr import saxml
+        self.fails_under(TestSaXMLPartialExport, "test_catalog_list_export_refused",
+                         mock.patch.object(saxml, "refuse_partial",
+                                           lambda sections, kinds, path: None))
+
+
+class TestSourceFormat(unittest.TestCase):
+    """ddr_run.source_format / source_version and their readers (stats, list,
+    report); an index built before the columns reads as a DDR."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_srcfmt_")
+        cls.ddr = build_fixture_db(cls.tmp)
+        cls.sax = os.path.join(cls.tmp, "sax.db")
+        build(os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.0.xml"), cls.sax,
+              label="sax")
+        # An index from before the columns: drop both
+        cls.old = os.path.join(cls.tmp, "old.db")
+        shutil.copyfile(cls.ddr, cls.old)
+        c = sqlite3.connect(cls.old)
+        c.execute("ALTER TABLE ddr_run DROP COLUMN source_format")
+        c.execute("ALTER TABLE ddr_run DROP COLUMN source_version")
+        c.commit(); c.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def run_row(self, db):
+        c = sqlite3.connect(db)
+        row = c.execute("SELECT source_format, source_version, ddr_version FROM ddr_run").fetchone()
+        c.close()
+        return row
+
+    def test_build_writes_both_columns(self):
+        self.assertEqual(self.run_row(self.ddr)[:2], ("ddr", None))
+        self.assertEqual(self.run_row(self.sax), ("saxml", "26.0.1", "2.3.0.0"))
+
+    def stats(self, db):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            main(["stats", db])
+        return out.getvalue()
+
+    def test_stats_source_line(self):
+        self.assertTrue(self.stats(self.sax).startswith(
+            "source: saxml 2.3.0.0 (FileMaker 26.0.1)\n"))
+        ver = self.run_row(self.ddr)[2]
+        self.assertTrue(self.stats(self.ddr).startswith(f"source: ddr {ver}\n"))
+        self.assertTrue(self.stats(self.old).startswith(f"source: ddr {ver}\n"))
+        self.assertNotIn("external table occurrences", self.stats(self.sax))
+
+    def test_stats_external_to_line(self):
+        ext = os.path.join(self.tmp, "ext.db")
+        shutil.copyfile(self.sax, ext)
+        c = sqlite3.connect(ext)
+        c.execute("""UPDATE entities SET extra_json = '{"external": true}'
+                     WHERE entity_id = (SELECT MIN(entity_id) FROM entities
+                                        WHERE kind = 'table_occurrence')""")
+        c.commit(); c.close()
+        self.assertIn("  1 external table occurrences with no data source", self.stats(ext))
+
+    def test_list_format_column(self):
+        import subprocess, sys as _sys
+        r = subprocess.run([_sys.executable, "-m", "fm_ddr.cli", "list", self.tmp],
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+        lines = {ln.split()[0]: ln.split() for ln in r.stdout.splitlines() if ".db" in ln}
+        self.assertIn("format", r.stdout)
+        self.assertIn("saxml", lines["sax.db"])
+        self.assertIn("ddr", lines["old.db"])
+        self.assertIn("ddr", lines[os.path.basename(self.ddr)])
+
+    def test_stale_hints(self):
+        # build overwrites an fmsonar index without --force, so the rebuild
+        # hints do not ask for it; the list status carries no em dash
+        import io, contextlib
+        from fm_ddr.cli import main
+        stale = os.path.join(self.tmp, "stale.db")
+        shutil.copyfile(self.sax, stale)
+        c = sqlite3.connect(stale)
+        c.execute("UPDATE ddr_run SET parser_version = '1.0.0'")
+        c.execute("DROP VIEW v_cascades")
+        c.commit(); c.close()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
+            main(["stats", stale])
+            with self.assertRaises(SystemExit) as cm:
+                main(["cascades", stale])
+        self.assertIn("Rebuild:", err.getvalue())
+        self.assertNotIn("--force", err.getvalue())
+        self.assertIn("Rebuild:", str(cm.exception))
+        self.assertNotIn("--force", str(cm.exception))
+        os.remove(stale)
+        # A source touched after the build
+        d = tempfile.mkdtemp(prefix="fmddr_srcnew_")
+        try:
+            src = os.path.join(d, "src.xml")
+            shutil.copyfile(os.path.join(ROOT, "tests", "fixtures",
+                                         "saxml_2.3.0.0.xml"), src)
+            with contextlib.redirect_stdout(io.StringIO()):
+                build(src, os.path.join(d, "new.db"))
+            later = os.path.getmtime(src) + 60
+            os.utime(src, (later, later))
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                main(["list", d])
+        finally:
+            shutil.rmtree(d, ignore_errors=True)
+        self.assertIn("source newer than index, rebuild", out.getvalue())
+
+    def test_report_meta(self):
+        from fm_ddr.report import _collect as load_data
+        m = load_data(self.sax)["meta"]
+        self.assertEqual((m["source_format"], m["source_version"], m["ddr_version"]),
+                         ("saxml", "26.0.1", "2.3.0.0"))
+        m = load_data(self.old)["meta"]
+        self.assertEqual((m["source_format"], m["source_version"]), ("ddr", None))
+
+
+class TestSaXMLModule(unittest.TestCase):
+    """The handler is a plain class statement and parse.py does not import
+    saxml at its top. Each check runs in a fresh
+    interpreter, so no earlier import in the suite can mask it."""
+
+    def run_py(self, code):
+        r = subprocess.run([sys.executable, "-c", code], cwd=ROOT,
+                           capture_output=True, text=True)
+        self.assertEqual(r.returncode, 0, r.stderr)
+
+    def test_handler_is_a_class_statement(self):
+        self.run_py(
+            "import inspect, fm_ddr.saxml as s\n"
+            "assert 'SaXMLHandler' in vars(s), 'no class in the module dict'\n"
+            "assert not hasattr(s, '__getattr__'), 'module __getattr__ present'\n"
+            "assert inspect.isclass(s.SaXMLHandler)\n"
+            "from fm_ddr.parse import DDRHandler\n"
+            "assert issubclass(s.SaXMLHandler, DDRHandler)\n")
+
+    def test_parse_does_not_import_saxml_at_top(self):
+        self.run_py(
+            "import sys, fm_ddr.parse as p\n"
+            "assert 'saxml' not in vars(p), 'parse imports saxml at its top'\n"
+            "assert 'fm_ddr.saxml' not in sys.modules\n")
+
+
+class TestSaXMLLabPair(unittest.TestCase):
+    """The lab file's DDR and its Save a Copy as XML (2.3.0.1, the same file
+    state) built side by side: what the DDR path writes, the SaXML path
+    writes too."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxpair_")
+        cls.dbs = {}
+        for kind, name in (("ddr", "saxml_lab_ddr.xml"), ("sax", "saxml_2.3.0.1.xml")):
+            db = os.path.join(cls.tmp, kind + ".db")
+            with contextlib.redirect_stderr(io.StringIO()):
+                build(os.path.join(ROOT, "tests", "fixtures", name), db, label=kind)
+            cls.dbs[kind] = db
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, kind, sql, *args):
+        conn = sqlite3.connect(self.dbs[kind])
+        try:
+            return conn.execute(sql, args).fetchall()
+        finally:
+            conn.close()
+
+    OBJECTS = (
+        "WITH RECURSIVE up(obj, id, parent, kind) AS ("
+        " SELECT entity_id, entity_id, parent_entity_id, kind FROM entities"
+        " WHERE kind = 'layout_object'"
+        " UNION ALL SELECT up.obj, e.entity_id, e.parent_entity_id, e.kind"
+        " FROM up JOIN entities e ON e.entity_id = up.parent WHERE up.kind <> 'layout')"
+        " SELECT l.name, json_extract(o.extra_json, '$.key'),"
+        " json_extract(o.extra_json, '$.step_text')"
+        " FROM up JOIN entities l ON l.entity_id = up.id AND l.kind = 'layout'"
+        " JOIN entities o ON o.entity_id = up.obj")
+
+    def objects(self, kind):
+        return {(lay, key): text for lay, key, text in self.q(kind, self.OBJECTS)}
+
+    def test_object_step_text(self):
+        # A button's launch text (Perform Script with its parameter) is on
+        # the object in both indexes; the DDR's object text ends lines with
+        # CR on a real solution's DDR, so lines are compared, not bytes
+        ddr, sax = self.objects("ddr"), self.objects("sax")
+        with_text = {k: v for k, v in ddr.items() if v}
+        self.assertGreaterEqual(len(with_text), 3)
+        norm = lambda t: t.replace("\r\n", "\n").replace("\r", "\n") if t else t
+        self.assertEqual({k: norm(sax.get(k)) for k in with_text},
+                         {k: norm(v) for k, v in with_text.items()})
+        self.assertEqual({k for k, v in sax.items() if v}, set(with_text))
+
+    def test_auto_enter_as_ddr(self):
+        # The DDR writes always_evaluate / overwrite_existing only for an
+        # auto-enter calculation or when one is on; Pro 26.1 writes both
+        # attributes on every field
+        q = ("SELECT base_table, name, auto_enter FROM entities"
+             " WHERE kind = 'field' ORDER BY 1, 2")
+        self.assertEqual(self.q("sax", q), self.q("ddr", q))
+
+    def test_step_calc_text_as_ddr(self):
+        # A Set Field's target repetition is not part of the step's
+        # calculation text on the DDR
+        q = ("SELECT p.name, s.seq, s.calc_text FROM entities s"
+             " JOIN entities p ON p.entity_id = s.parent_entity_id"
+             " WHERE s.kind = 'script_step' ORDER BY 1, 2")
+        ddr = self.q("ddr", q)
+        self.assertGreater(sum(1 for r in ddr if r[2]), 10)
+        self.assertEqual(self.q("sax", q), ddr)
+
+    def test_investigate_launch_sites(self):
+        # The skill's step 5: investigate names each layout launch site with
+        # its parameter, the same on both indexes
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+
+        def sites(kind):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                main(["investigate", self.dbs[kind], "Sell Watch ( watchId )"])
+            text = out.getvalue()
+            start = text.index("## Layout launch sites")
+            return text[start:text.index("\n## ", start + 1)]
+        ddr = sites("ddr")
+        self.assertIn("Parameter:", ddr)
+        self.assertEqual(sites("sax"), ddr)
+
+
+# Insert Text: the literal is Parameter/Text@value; the analysis step text
+# leaves it out when the target is a variable and quotes it when the target
+# is a field (the shapes FileMaker writes)
+SAXML_INSERT_TEXT = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Text" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="Query"/></ScriptCatalog>'
+    '<StepsForScripts><Script><ScriptReference id="1" name="Query"/><ObjectList>'
+    # 1 to a variable, a two-line literal (CR as the export writes it)
+    '<Step index="0" id="61" name="Insert Text" enable="True">'
+    '<DDRREF kind="StepText" hash="h1">_I1</DDRREF><ParameterValues>'
+    '<Parameter type="Boolean"><Boolean type="Select" value="True"/></Parameter>'
+    '<Parameter type="Target"><Variable value="$sql"/></Parameter>'
+    '<Parameter type="Text"><Text value="SELECT zebrafield&#13;FROM A"/></Parameter>'
+    '</ParameterValues></Step>'
+    # 2 to a field: the step text already quotes the literal
+    '<Step index="1" id="61" name="Insert Text" enable="True">'
+    '<DDRREF kind="StepText" hash="h2">_I2</DDRREF><ParameterValues>'
+    '<Parameter type="FieldReference"><FieldReference id="1" name="K">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Parameter>'
+    '<Parameter type="Text"><Text value="quagga"/></Parameter>'
+    '</ParameterValues></Step>'
+    # 3 to a variable, one line, no Select
+    '<Step index="2" id="61" name="Insert Text" enable="True">'
+    '<DDRREF kind="StepText" hash="h3">_I3</DDRREF><ParameterValues>'
+    '<Parameter type="Target"><Variable value="$json"/></Parameter>'
+    '<Parameter type="Text"><Text value="{ &quot;okapi&quot; : 1 }"/></Parameter>'
+    '</ParameterValues></Step>'
+    '</ObjectList></Script></StepsForScripts>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Script><ObjectList>'
+    '<_I1 hash="h1" datatype="StepText">Insert Text [ $sql ]&#13;[ Select ]</_I1>'
+    '<_I2 hash="h2" datatype="StepText">Insert Text [ L::K; “quagga” ]&#13;[ Select ]</_I2>'
+    '<_I3 hash="h3" datatype="StepText">Insert Text [ $json ]</_I3>'
+    '</ObjectList></Script></DDR_INFO>'
+    '</FMSaveAsXML>\n')
+
+
+class TestSaXMLInsertText(unittest.TestCase):
+    """Insert Text's literal reaches step_text and the FTS index as the DDR
+    writes it: Insert Text [ $var; “literal” ]."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxit_")
+        path = os.path.join(cls.tmp, "it.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_INSERT_TEXT)
+        cls.db = os.path.join(cls.tmp, "it.db")
+        build(path, cls.db, label="it")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def test_step_text(self):
+        conn = sqlite3.connect(self.db)
+        rows = conn.execute(
+            "SELECT seq, json_extract(extra_json, '$.step_text') FROM entities"
+            " WHERE kind = 'script_step' ORDER BY seq").fetchall()
+        conn.close()
+        self.assertEqual(rows, [
+            (1, "Insert Text [ $sql; “SELECT zebrafield\nFROM A” ]\n[ Select ]"),
+            (2, "Insert Text [ L::K; “quagga” ]\n[ Select ]"),
+            (3, "Insert Text [ $json; “{ \"okapi\" : 1 }” ]"),
+        ])
+
+    def test_fts_finds_the_literal(self):
+        conn = sqlite3.connect(self.db)
+        for word, seq in (("zebrafield", 1), ("quagga", 2), ("okapi", 3)):
+            with self.subTest(word=word):
+                self.assertEqual(conn.execute(
+                    "SELECT e.seq FROM text_index t JOIN entities e"
+                    " ON e.entity_id = t.entity_id WHERE text_index MATCH ?",
+                    (word,)).fetchall(), [(seq,)])
+        conn.close()
+
+
+class TestSaXMLCascadesXfile(unittest.TestCase):
+    """A cascade delete into a table occurrence on an empty external TO
+    (FMDeveloperTool route: no data source, no base table) is never hidden:
+    `cascades <db> <table>` lists it as a candidate for any table, and the
+    unfiltered run counts it."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxcas_")
+        path = os.path.join(cls.tmp, "cas.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD +
+                '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+                '<TableOccurrenceCatalog>'
+                '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+                '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+                '</TableOccurrence>'
+                '<TableOccurrence id="2" name="L2" type="Local"><BaseTableSourceReference>'
+                '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+                '</TableOccurrence>'
+                '<TableOccurrence id="3" name="ext_X" type="External">'
+                '<BaseTableSourceReference type="ExternalDataSourceReference">'
+                '</BaseTableSourceReference></TableOccurrence></TableOccurrenceCatalog>'
+                '<RelationshipCatalog>'
+                '<Relationship id="1">'
+                '<LeftTable cascadeDelete="False"><TableOccurrenceReference id="1" name="L"/></LeftTable>'
+                '<RightTable cascadeDelete="True"><TableOccurrenceReference id="3" name="ext_X"/></RightTable>'
+                '</Relationship>'
+                '<Relationship id="2">'
+                '<LeftTable cascadeDelete="False"><TableOccurrenceReference id="1" name="L"/></LeftTable>'
+                '<RightTable cascadeDelete="True"><TableOccurrenceReference id="2" name="L2"/></RightTable>'
+                '</Relationship>'
+                '</RelationshipCatalog>' + SAXML_TAIL)
+        cls.db = os.path.join(cls.tmp, "cas.db")
+        with contextlib.redirect_stderr(io.StringIO()):
+            build(path, cls.db, label="cas")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def run_cli(self, *args):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            main(["cascades", self.db, *args])
+        return out.getvalue()
+
+    def test_filtered_lists_unknown_base_table(self):
+        # The table in the other file is named nowhere in this export
+        out = self.run_cli("Remote")
+        self.assertIn("ext_X", out)
+        self.assertIn("base table", out)
+        self.assertIn("1 relationship side(s) delete into a table occurrence", out)
+
+    def test_filtered_known_table_keeps_its_rows(self):
+        out = self.run_cli("A")
+        self.assertIn("L :: L2", out)
+        self.assertIn("ext_X", out)        # still a candidate for A
+
+    def test_unfiltered_counts_them(self):
+        out = self.run_cli()
+        self.assertIn("2 relationship side(s)", out)
+        self.assertIn("1 relationship side(s) delete into a table occurrence", out)
+
+
+# A popover's title calculation: LayoutObject/Title holds the DDRREF and the
+# Text directly, with no Calculation wrapper (lab v3 shape)
+SAXML_POPOVER = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/>'
+    '<ObjectList><Field id="1" name="K" datatype="Number" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<LayoutCatalog><Layout id="1" name="Lay">'
+    '<TableOccurrenceReference id="1" name="L"/>'
+    '<PartsList><Part type="Body"><ObjectList>'
+    '<LayoutObject id="17" type="Popover Button" name=""><PopoverButton>'
+    '<LayoutObject id="16" type="PopoverPanel" name="">'
+    '<Title><DDRREF kind="ChunkList" hash="p1">_P1_PopoverPanel</DDRREF>'
+    '<Text><![CDATA["Customer " & L::K]]></Text></Title>'
+    '<ObjectList></ObjectList></LayoutObject>'
+    '</PopoverButton></LayoutObject>'
+    '</ObjectList></Part></PartsList>'
+    '</Layout></LayoutCatalog>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Calculation><ObjectList>'
+    '<_P1_PopoverPanel hash="p1" datatype="ChunkList"><ChunkList hash="p1">'
+    '<Chunk type="NoRef">"Customer " &amp; </Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="1" name="K" repetition="1">'
+    '<TableOccurrenceReference id="1" name="L"/></FieldReference></Chunk>'
+    '</ChunkList></_P1_PopoverPanel></ObjectList></Calculation></DDR_INFO>'
+    '</FMSaveAsXML>\n')
+
+
+class TestSaXMLPopoverTitle(unittest.TestCase):
+    """A popover's title calculation gives its field references and its text
+    to the popover object, as the DDR's TitleCalc does."""
+
+    def test_title_calc(self):
+        tmp = tempfile.mkdtemp(prefix="fmddr_saxpop_")
+        try:
+            path = os.path.join(tmp, "pop.xml")
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(SAXML_HEAD + SAXML_POPOVER)
+            db = os.path.join(tmp, "pop.db")
+            build(path, db, label="pop")
+            conn = sqlite3.connect(db)
+            refs = conn.execute(
+                "SELECT o.fm_id, r.context, r.target_raw, r.target_entity_id IS NOT NULL"
+                " FROM refs r JOIN entities o ON o.entity_id = r.source_entity_id"
+                " WHERE r.context = 'calc'").fetchall()
+            calc = conn.execute(
+                "SELECT calc_text FROM entities WHERE kind = 'layout_object'"
+                " AND fm_id = '16'").fetchone()
+            conn.close()
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+        self.assertEqual(refs, [("16", "calc", "L::K", 1)])
+        self.assertEqual(calc, ('"Customer " & L::K',))
+
+
+PARTIAL = os.path.join(ROOT, "tests", "fixtures", "saxml_partial_2.3.0.0.xml")
+
+
+class TestSaXMLPartialExport(unittest.TestCase):
+    """A partial export (FMDeveloperTool -catalog_list) is refused by name:
+    an index of some catalogs would list every field unused and every
+    script orphaned. The fixture is a real FMDeveloperTool 26.0.1 export of
+    the lab file with -catalog_list BaseTableCatalog FieldCatalog
+    TableOccurrenceCatalog (scrubbed by tools/saxml_fixture.py); the other
+    cases cut a section out of a whole export."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.0.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxpart_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def refused(self, path):
+        db = os.path.join(self.tmp, "out.db")
+        with self.assertRaises(ValueError) as cm:
+            build(path, db)
+        self.assertFalse(os.path.exists(db))
+        return str(cm.exception)
+
+    def cut(self, name, start, end):
+        """The whole fixture without the element from `start` to `end`."""
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read()
+        i = text.index(start)
+        j = text.index(end, i) + len(end)
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text[:i] + text[j:])
+        return path
+
+    def test_catalog_list_export_refused(self):
+        msg = self.refused(PARTIAL)
+        self.assertIn("-catalog_list", msg)
+        for name in ("LayoutCatalog", "PrivilegeSetsCatalog", "AccountsCatalog",
+                     "Metadata", "FileAccessCatalog", "ThemeCatalog",
+                     "ExtendedPrivilegesCatalog"):
+            self.assertIn(name, msg)
+        for name in ("BaseTableCatalog", "TableOccurrenceCatalog"):
+            self.assertNotIn(name, msg)
+
+    def test_missing_layouts_refused(self):
+        p = self.cut("nolayouts.xml", "<LayoutCatalog", "</LayoutCatalog>")
+        msg = self.refused(p)
+        self.assertIn("LayoutCatalog", msg)
+        self.assertNotIn("Metadata", msg)
+
+    def test_missing_metadata_refused(self):
+        # -catalog_list leaves Metadata out unless it is named (measured):
+        # the file triggers live there
+        p = self.cut("nometa.xml", "<Metadata", "</Metadata>")
+        self.assertIn("Metadata", self.refused(p))
+
+    def test_always_present_catalogs_required(self):
+        # Every whole export at hand writes these three; -catalog_list
+        # writes each only when it is named (measured)
+        for el in ("FileAccessCatalog", "ThemeCatalog", "ExtendedPrivilegesCatalog"):
+            with self.subTest(catalog=el):
+                p = self.cut(f"no_{el}.xml", f"<{el}", f"</{el}>")
+                msg = self.refused(p)
+                self.assertIn(el, msg)
+                self.assertIn("-catalog_list", msg)
+
+    def cut_lab3(self, name, *elements):
+        """Lab v3 without the named sections: what FMDeveloperTool 26.0.1
+        writes for a -catalog_list naming every catalog but those
+        (measured: ScriptCatalog drops StepsForScripts too)."""
+        with open(LAB3, encoding="utf-8") as f:
+            text = f.read()
+        for el in elements:
+            self.assertEqual(text.count(f"<{el}"), 1)
+            i = text.index(f"<{el}")
+            j = text.index(f"</{el}>", i) + len(f"</{el}>")
+            text = text[:i] + text[j:]
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_absent_catalog_with_references_refused(self):
+        # A catalog a whole export leaves out only when the file has none,
+        # while the export still refers to its kind
+        for els, what in ((("ScriptCatalog", "StepsForScripts"), "scripts"),
+                          (("ValueListCatalog",), "value lists"),
+                          (("CustomFunctionsCatalog",), "custom functions")):
+            with self.subTest(catalog=els[0]):
+                msg = self.refused(self.cut_lab3(f"no_{els[0]}.xml", *els))
+                self.assertIn(els[0], msg)
+                self.assertIn(what, msg)
+                self.assertIn("-catalog_list", msg)
+                self.assertNotIn("StepsForScripts", msg)
+
+    def test_external_tos_need_their_data_sources(self):
+        src = os.path.join(ROOT, "tests", "fixtures", "saxml_xfile_fmdt_2.3.0.0.xml")
+        with open(src, encoding="utf-8") as f:
+            text = f.read()
+        i = text.index("<ExternalDataSourceCatalog")
+        j = text.index("</ExternalDataSourceCatalog>") + len("</ExternalDataSourceCatalog>")
+        p = os.path.join(self.tmp, "nods.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text[:i] + text[j:])
+        msg = self.refused(p)
+        self.assertIn("ExternalDataSourceCatalog", msg)
+        self.assertIn("data sources", msg)
+
+    def test_absent_catalog_without_references_builds(self):
+        # A whole export of a file with no scripts, value lists or custom
+        # functions has none of the three: no refusal (the satellite of the
+        # two-file lab has no value list and no custom function)
+        sat = os.path.join(ROOT, "tests", "fixtures", "saxml_xfile_sat_fmdt_2.3.0.0.xml")
+        self.assertGreater(build(sat, os.path.join(self.tmp, "sat.db"))["_refs"], 0)
+
+    def test_fields_without_tables_names_the_catalog(self):
+        # -catalog_list FieldCatalog: named as a missing catalog, not as an
+        # internal order assumption
+        p = self.cut("notables.xml", "<BaseTableCatalog", "</BaseTableCatalog>")
+        msg = self.refused(p)
+        self.assertIn("BaseTableCatalog", msg)
+        self.assertNotIn("assumption", msg)
+
+    def test_whole_exports_build(self):
+        for path in _saxml_fixtures() + [
+                os.path.join(ROOT, "tests", "fixtures", "saxml_xfile_2.3.0.1.xml"),
+                os.path.join(ROOT, "tests", "fixtures", "saxml_xfile_fmdt_2.3.0.0.xml")]:
+            with self.subTest(fixture=os.path.basename(path)):
+                db = os.path.join(self.tmp, "ok.db")
+                if os.path.exists(db):
+                    os.remove(db)
+                self.assertGreater(build(path, db)["_refs"], 0)
+
+    def test_split_catalogs_file_refused(self):
+        # The root FMDeveloperTool writes on each -split_catalogs file
+        # (measured: both attributes True)
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read()
+        old = 'binary_under_lo="False" split_catalogs="False"'
+        self.assertEqual(text.count(old), 1)
+        p = os.path.join(self.tmp, "SaxLab_LayoutCatalog.xml")
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(text.replace(old, 'binary_under_lo="True" split_catalogs="True"'))
+        self.assertIn("split_catalogs", self.refused(p))
+
+
+class TestSaXMLMessages(unittest.TestCase):
+    """A malformed or cut-off export is named as such with expat's place in
+    the file; the low-resolution warning does not fire on the healthy lab
+    exports."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxmsg_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def write(self, name, text):
+        path = os.path.join(self.tmp, name)
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def fixture(self):
+        with open(self.SAX, encoding="utf-8") as f:
+            return f.read()
+
+    def refused(self, path):
+        with self.assertRaises(ValueError) as cm:
+            build(path, os.path.join(self.tmp, "out.db"))
+        return str(cm.exception)
+
+    def test_undefined_entity_on_the_root(self):
+        text = self.fixture()
+        self.assertEqual(text.count('locale="English"'), 1)
+        msg = self.refused(self.write("ent.xml", text.replace(
+            'locale="English"', 'locale="&nope;"')))
+        self.assertIn("ent.xml", msg)
+        self.assertIn("undefined entity at line 2, column", msg)
+        self.assertNotIn("no XML root element", msg)
+
+    def test_cut_off_export(self):
+        text = self.fixture()
+        for frac in (0.1, 0.5, 0.97):
+            with self.subTest(cut=frac):
+                msg = self.refused(self.write("cut.xml", text[:int(len(text) * frac)]))
+                self.assertIn("cut.xml is cut off or damaged", msg)
+                self.assertRegex(msg, r"at line \d+, column \d+")
+                self.assertIn("Re-export", msg)
+
+    def test_lab_exports_get_no_resolution_warning(self):
+        fx = os.path.join(ROOT, "tests", "fixtures")
+        for names in (["saxml_2.3.0.0.xml"], ["saxml_2.3.0.1.xml"], [LAB3],
+                      ["saxml_xfile_2.3.0.1.xml"], ["saxml_xfile_fmdt_2.3.0.0.xml"]):
+            with self.subTest(fixture=names[0]):
+                db = os.path.join(self.tmp, "lab.db")
+                if os.path.exists(db):
+                    os.remove(db)
+                s = build([os.path.join(fx, n) for n in names], db)
+                self.assertNotIn("WARNING: only", "\n".join(s["_warnings"]))
+
+    def test_unexplained_misses_still_warn(self):
+        # A field the export names and the index does not have: neither a
+        # marked defect nor another file's
+        body = SAXML_CHUNKLESS_PAIRS.replace(
+            '<FieldReference id="1" name="K"><TableOccurrenceReference id="1" name="A"/>'
+            '</FieldReference></Chunk></_KEPT>',
+            '<FieldReference id="9" name="Nope"><TableOccurrenceReference id="1" name="A"/>'
+            '</FieldReference></Chunk></_KEPT>')
+        self.assertNotEqual(body, SAXML_CHUNKLESS_PAIRS)
+        s = build(self.write("nope.xml", SAXML_HEAD + body),
+                  os.path.join(self.tmp, "nope.db"))
+        w = "\n".join(s["_warnings"])
+        self.assertIn("WARNING: only 0% of references resolved", w)
+        self.assertIn("v_dangling", w)
+        self.assertNotIn("source version", w)
+
+    def test_ddr_warning_unchanged(self):
+        with open(FIXTURE, encoding="utf-8") as f:
+            text = f.read()
+        # Every script call pointed at a script the DDR does not have
+        import re
+        text2 = re.sub(r'(<Script [^>]*name=")([^"]*")', r'\1Gone_\2', text)
+        self.assertNotEqual(text, text2)
+        s = build(self.write("ddr.xml", text2), os.path.join(self.tmp, "ddr.db"))
+        w = "\n".join(s["_warnings"])
+        if "WARNING: only" in w:
+            self.assertIn("(source version", w)
+            self.assertIn("On a healthy single-file solution expect ~98%", w)
+
+
+class TestSaXMLStepTextGuard(unittest.TestCase):
+    """A step text missing from DDR_INFO is damage: every whole export
+    measured has none (the real file: 0 of its step texts). More than 10
+    percent missing refuses the export; calculations without reference
+    list never refuse."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_saxstep_")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def without_step_texts(self, k):
+        """The fixture with the hash of k StepText DDRREFs altered (93 in
+        all): their entries no longer match."""
+        import re
+        with open(self.SAX, encoding="utf-8") as f:
+            text = f.read()
+        n = iter(range(10**6))
+        text = re.sub(r'<DDRREF kind="StepText" hash="',
+                      lambda m: m.group(0) + ("X" if next(n) < k else ""), text)
+        path = os.path.join(self.tmp, f"step{k}.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        return path
+
+    def test_every_step_text_missing_refused(self):
+        db = os.path.join(self.tmp, "all.db")
+        with self.assertRaises(ValueError) as cm:
+            build(self.without_step_texts(93), db)
+        msg = str(cm.exception)
+        self.assertIn("93 of 93", msg)
+        self.assertIn("step text", msg)
+        self.assertIn("Re-export", msg)
+        self.assertFalse(os.path.exists(db))
+
+    def test_ten_percent_line(self):
+        # 10 of 93 is past the line, 9 of 93 is under it
+        with self.assertRaises(ValueError):
+            build(self.without_step_texts(10), os.path.join(self.tmp, "ten.db"))
+        summary = build(self.without_step_texts(9), os.path.join(self.tmp, "nine.db"))
+        self.assertIn("9 step(s) without step text", "\n".join(summary["_warnings"]))
+
+
+class TestSaXMLDDRInfoMisses(unittest.TestCase):
+    """A DDRREF whose DDR_INFO entry is absent loses a step text or a
+    calculation's references. A whole export has a few (no refusal); every
+    miss is counted into ddr_run, printed in the one
+    WARNING block before "Done:", shown by `stats` and `list`, and `where`
+    and `investigate` say that `search` is the check."""
+
+    SAX = os.path.join(ROOT, "tests", "fixtures", "saxml_2.3.0.1.xml")
+
+    @classmethod
+    def setUpClass(cls):
+        import re
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxmiss_")
+        with open(cls.SAX, encoding="utf-8") as f:
+            text = f.read()
+        head, info = text.split("<DDR_INFO>", 1)
+        # Half of the chunk lists removed, and 5 of the 93 step texts (under
+        # the 10 percent that refuses, TestSaXMLStepTextGuard)
+        for dt, cut in (("ChunkList", lambda total: total // 2),
+                        ("StepText", lambda total: 5)):
+            entry = re.compile(
+                r'<(_[^ >]+) hash="[^"]*" datatype="%s">.*?</\1>' % dt, re.S)
+            total = len(entry.findall(info))
+            info = entry.sub(lambda m, n=iter(range(total)), k=cut(total): ""
+                             if next(n) < k else m.group(0), info)
+        cls.half = os.path.join(cls.tmp, "half.xml")
+        with open(cls.half, "w", encoding="utf-8") as f:
+            f.write(head + "<DDR_INFO>" + info)
+        cls.db = os.path.join(cls.tmp, "half.db")
+        cls.build_out = cls.cli("build", cls.half, "-o", cls.db)
+        cls.ddr = build_fixture_db(cls.tmp)
+        cls.old = os.path.join(cls.tmp, "old.db")
+        shutil.copyfile(cls.db, cls.old)
+        c = sqlite3.connect(cls.old)
+        for col in ("ddrinfo_refs", "ddrinfo_missing_steps", "ddrinfo_missing_calcs"):
+            c.execute(f"ALTER TABLE ddr_run DROP COLUMN {col}")
+        c.commit(); c.close()
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    @staticmethod
+    def cli(*argv):
+        import contextlib
+        import io
+        from fm_ddr.cli import main
+        both = io.StringIO()
+        with contextlib.redirect_stdout(both), contextlib.redirect_stderr(both):
+            main(list(argv))
+        return both.getvalue()
+
+    def counts(self, db=None):
+        c = sqlite3.connect(db or self.db)
+        row = c.execute("SELECT ddrinfo_refs, ddrinfo_missing_steps, "
+                        "ddrinfo_missing_calcs FROM ddr_run").fetchone()
+        c.close()
+        return row
+
+    def test_recorded(self):
+        refs, steps, calcs = self.counts()
+        self.assertGreater(refs, 0)
+        self.assertGreater(steps, 0)
+        self.assertGreater(calcs, 0)
+        # A DDR has no DDR_INFO: nothing to count
+        self.assertEqual(self.counts(self.ddr), (None, None, None))
+
+    def test_in_the_warning_block(self):
+        out = self.build_out
+        _, steps, calcs = self.counts()
+        line = (f"WARNING: {calcs} calculation(s) without reference list and "
+                f"{steps} step(s) without step text")
+        self.assertEqual(out.count(line), 1, out)
+        self.assertLess(out.index(line), out.index("Done:"))
+        self.assertIn("search", out[out.index(line):out.index("Done:")])
+        # No stray line outside the block
+        self.assertNotIn("are not in DDR_INFO", out)
+
+    def test_stats(self):
+        _, steps, calcs = self.counts()
+        out = self.cli("stats", self.db)
+        self.assertIn(f"{calcs} calculation(s) without reference list", out)
+        self.assertIn(f"{steps} step(s) without step text", out)
+        for db in (self.ddr, self.old):
+            self.assertNotIn("without reference list", self.cli("stats", db))
+
+    def test_list(self):
+        _, _, calcs = self.counts()
+        out = self.cli("list", self.tmp)
+        line = next(l for l in out.splitlines() if l.startswith("half.db"))
+        self.assertIn(f"{calcs} calculation(s) without reference list", line)
+        old = next(l for l in out.splitlines() if l.startswith("old.db"))
+        self.assertNotIn("reference list", old)
+
+    def test_investigate_prints_no_note(self):
+        # Callers, callees and the body come from step references and step
+        # text, never from a calculation's chunk list: nothing to point at
+        c = sqlite3.connect(self.db)
+        script = c.execute("SELECT name FROM entities WHERE kind = 'script' "
+                           "ORDER BY entity_id LIMIT 1").fetchone()[0]
+        c.close()
+        self.assertNotIn("reference list", self.cli("investigate", self.db, script))
+
+    def test_where_on_a_used_object_prints_no_note(self):
+        c = sqlite3.connect(self.db)
+        name = c.execute(
+            "SELECT t.name FROM refs r JOIN entities t"
+            " ON t.entity_id = r.target_entity_id WHERE t.kind = 'script'"
+            " ORDER BY t.entity_id LIMIT 1").fetchone()[0]
+        c.close()
+        out = self.cli("where", self.db, name)
+        self.assertNotIn("reference list", out)
+        self.assertNotIn("0 reference(s)", out)
+
+
+SAXML_DDR_FORMS = (
+    '<BaseTableCatalog><BaseTable id="1" name="A"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="L" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="A"/></BaseTableSourceReference>'
+    '</TableOccurrence></TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="A"/><ObjectList>'
+    '<Field id="1" name="K" datatype="Number" fieldtype="Normal">'
+    '<AutoEnter type="" alwaysEvaluate="False" overwriteExisting="False"></AutoEnter>'
+    '</Field>'
+    '<Field id="2" name="C" datatype="Text" fieldtype="Normal">'
+    '<AutoEnter type="Calculated" prohibitModification="False" alwaysEvaluate="False"'
+    ' overwriteExisting="False"><Calculated enable="True"/><Calculation><Calculation>'
+    '<Text>L::K</Text></Calculation></Calculation></AutoEnter></Field>'
+    '<Field id="3" name="M" datatype="Text" fieldtype="Normal">'
+    '<AutoEnter type="ModificationAccountName" alwaysEvaluate="False"'
+    ' overwriteExisting="True"></AutoEnter></Field>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="S"/></ScriptCatalog>'
+    '<StepsForScripts><Script><ScriptReference id="1" name="S"/><ObjectList>'
+    # Set Field with the default repetition and a value
+    '<Step index="0" id="76" name="Set Field" enable="True"><ParameterValues>'
+    '<Parameter type="FieldReference"><FieldReference id="1" name="K">'
+    '<repetition><Calculation><Calculation><Text>1</Text></Calculation></Calculation>'
+    '</repetition><TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '</Parameter><Parameter type="Calculation"><Calculation><Calculation>'
+    '<Text>L::K + 1</Text></Calculation></Calculation></Parameter>'
+    '</ParameterValues></Step>'
+    # Go to Field with a repetition by calculation and nothing else
+    '<Step index="1" id="17" name="Go to Field" enable="True"><ParameterValues>'
+    '<Parameter type="FieldReference"><FieldReference id="1" name="K">'
+    '<repetition><Calculation><Calculation><Text>$i</Text></Calculation></Calculation>'
+    '</repetition><TableOccurrenceReference id="1" name="L"/></FieldReference>'
+    '</Parameter></ParameterValues></Step>'
+    # Show Custom Dialog: the labels are attributes; the DDR writes each
+    # as a quoted calculation after the title and the message
+    '<Step index="2" id="87" name="Show Custom Dialog" enable="True"><ParameterValues>'
+    '<Parameter type="Title"><Calculation><Calculation><Text>"T"</Text>'
+    '</Calculation></Calculation></Parameter>'
+    '<Parameter type="Message"><Calculation><Calculation><Text>"M"</Text>'
+    '</Calculation></Calculation></Parameter>'
+    '<Parameter type="Button1" value="OK"><Boolean type="Commit" value="True"/></Parameter>'
+    '<Parameter type="Button2" value="Say &quot;no&quot;"><Boolean type="Commit" value="False"/>'
+    '</Parameter><Parameter type="Button3"><Boolean type="Commit" value="False"/></Parameter>'
+    '</ParameterValues></Step>'
+    # Insert Text into a variable: the variable's repetition, as a field's
+    '<Step index="3" id="61" name="Insert Text" enable="True"><ParameterValues>'
+    '<Parameter type="Target"><Variable value="$v"><repetition><Calculation>'
+    '<Calculation><Text>1</Text></Calculation></Calculation></repetition></Variable>'
+    '</Parameter></ParameterValues></Step>'
+    # Set Variable: the DDR keeps the variable's repetition in calc_text
+    '<Step index="4" id="141" name="Set Variable" enable="True"><ParameterValues>'
+    '<Parameter type="Variable"><value><Calculation><Calculation><Text>2</Text>'
+    '</Calculation></Calculation></value><Name value="$w"/><repetition><Calculation>'
+    '<Calculation><Text>3</Text></Calculation></Calculation></repetition></Parameter>'
+    '</ParameterValues></Step>'
+    '</ObjectList></Script></StepsForScripts>'
+    + SAXML_TAIL)
+
+
+class TestSaXMLDDRForms(unittest.TestCase):
+    """Where the export spells a value differently, the index keeps the
+    DDR's form: a field target's repetition is not step
+    calculation text, a dialog's button labels are, and a field's
+    auto-enter JSON carries the evaluate/overwrite flags only where the DDR
+    writes them."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_saxforms_")
+        path = os.path.join(cls.tmp, "forms.xml")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_DDR_FORMS)
+        cls.db = os.path.join(cls.tmp, "forms.db")
+        build(path, cls.db, label="forms")
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, sql):
+        conn = sqlite3.connect(self.db)
+        try:
+            return conn.execute(sql).fetchall()
+        finally:
+            conn.close()
+
+    def test_step_calc_text(self):
+        self.assertEqual(self.q(
+            "SELECT step_type, calc_text FROM entities WHERE kind = 'script_step'"
+            " ORDER BY seq"), [
+            ("Set Field", "L::K + 1"),
+            ("Go to Field", None),
+            ("Show Custom Dialog", '"T"\n"M"\n"OK"\n"Say \\"no\\""'),
+            ("Insert Text", None),
+            ("Set Variable", "2\n3"),
+        ])
+
+    def test_auto_enter(self):
+        self.assertEqual(self.q(
+            "SELECT name, auto_enter FROM entities WHERE kind = 'field' ORDER BY fm_id"), [
+            ("K", None),
+            ("C", '{"calc": "L::K", "calc_active": true, "always_evaluate": false, '
+                  '"overwrite_existing": false}'),
+            ("M", '{"type": "ModificationAccountName", "always_evaluate": false, '
+                  '"overwrite_existing": true}'),
+        ])
 
 
 if __name__ == "__main__":

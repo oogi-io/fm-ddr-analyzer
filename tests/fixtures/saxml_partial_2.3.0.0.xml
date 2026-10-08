@@ -1,0 +1,697 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FMSaveAsXML version="2.3.0.0" Source="26.0.1" File="SaxLab.fmp12" UUID="21C371C1-E706-4DCD-B766-F4F6BC64735E" locale="English" Has_DDR_INFO="True" binary_under_lo="False" split_catalogs="False">
+	<Structure membercount="1">
+		<AddAction membercount="3">
+			<BaseTableCatalog membercount="4">
+				<SortOrder>1</SortOrder>
+				<CustomOrderList>
+					<key>129</key>
+					<key>130</key>
+					<key>131</key>
+					<key>132</key>
+				</CustomOrderList>
+				<UUID modifications="3" userName="" accountName="" timestamp="2026-10-07T09:44:15">42B75B38-CDE5-4842-A33F-FCAE7EE6F8EC</UUID>
+				<BaseTable id="129" comment="" name="Global">
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:05">ABFA4E88-10F3-4BC8-9DDA-8F17E017BC0E</UUID>
+					</BaseTable>
+				<BaseTable id="130" comment="" name="CUS__Customer">
+					<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">ABFD6C5B-DEF0-45D8-B68E-DF55EF54DF75</UUID>
+					</BaseTable>
+				<BaseTable id="131" comment="" name="WAT__Watch">
+					<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">28524AD6-908E-4DAA-B5BF-06CAED8FE24B</UUID>
+					</BaseTable>
+				<BaseTable id="132" comment="" name="SAL__Sale">
+					<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">26BA9F15-40FA-4293-8098-FD335F0E32EF</UUID>
+					</BaseTable>
+			</BaseTableCatalog>
+			<TableOccurrenceCatalog membercount="8">
+				<CustomOrderList>
+					<key>1065089</key>
+					<key>1065090</key>
+					<key>1065091</key>
+					<key>1065092</key>
+					<key>1065093</key>
+					<key>1065094</key>
+					<key>1065095</key>
+					<key>1065096</key>
+				</CustomOrderList>
+				<UUID modifications="8" userName="" accountName="" timestamp="2026-10-08T14:41:54">F5743844-7637-431D-95D5-4D4FB6639E59</UUID>
+				<TableOccurrence View="Full" height="0" id="1065089" name="Global" type="Local">
+					<UUID modifications="2" userName="" accountName="" timestamp="2026-10-07T09:44:18">01299073-4792-4A9F-8603-48B775E24FBE</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="129" name="Global" UUID="ABFA4E88-10F3-4BC8-9DDA-8F17E017BC0E"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065090" name="CUS__Customer" type="Local">
+					<UUID modifications="2" userName="" accountName="" timestamp="2026-10-07T09:44:18">305ECC15-ADD2-4467-8378-3D41FB901B87</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="130" name="CUS__Customer" UUID="ABFD6C5B-DEF0-45D8-B68E-DF55EF54DF75"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065091" name="WAT__Watch" type="Local">
+					<UUID modifications="2" userName="" accountName="" timestamp="2026-10-07T09:44:18">1D3CB119-A26E-4A66-A308-B887FD7D7479</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="131" name="WAT__Watch" UUID="28524AD6-908E-4DAA-B5BF-06CAED8FE24B"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065092" name="SAL__Sale" type="Local">
+					<UUID modifications="3" userName="" accountName="" timestamp="2026-10-07T09:44:18">0A348502-C291-4142-9545-F286D5161185</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="132" name="SAL__Sale" UUID="26BA9F15-40FA-4293-8098-FD335F0E32EF"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065093" name="CUS_SAL__Sale" type="Local">
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:18">A264B529-CA3C-4FF1-9561-1BB8FDDD0B4F</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="132" name="SAL__Sale" UUID="26BA9F15-40FA-4293-8098-FD335F0E32EF"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065094" name="WAT_SAL__Sale" type="Local">
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:18">32A57F52-1336-43AE-B543-D4C6A2BBDEA2</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="132" name="SAL__Sale" UUID="26BA9F15-40FA-4293-8098-FD335F0E32EF"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065095" name="SAL_WAT__Watch" type="Local">
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:18">AFC98EF6-5B96-4D05-A94E-977B061F88FD</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="131" name="WAT__Watch" UUID="28524AD6-908E-4DAA-B5BF-06CAED8FE24B"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+				<TableOccurrence View="Full" height="0" id="1065096" name="SAL_CUS__Customer" type="Local">
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:18">638CDB2B-540D-4C8F-91A5-3278E5EEA589</UUID>
+					<BaseTableSourceReference type="BaseTableReference">
+						<BaseTableReference id="130" name="CUS__Customer" UUID="ABFD6C5B-DEF0-45D8-B68E-DF55EF54DF75"></BaseTableReference>
+					</BaseTableSourceReference>
+					</TableOccurrence>
+			</TableOccurrenceCatalog>
+			<FieldsForTables membercount="4">
+				<FieldCatalog>
+					<SortOrder>1</SortOrder>
+					<CustomOrderList>
+						<key>1</key>
+						<key>2</key>
+						<key>3</key>
+						<key>4</key>
+						<key>5</key>
+					</CustomOrderList>
+					<UUID modifications="1" userName="" accountName="" timestamp="2026-10-07T09:44:05">70FE554F-C02C-4402-8192-C42513104FCD</UUID>
+					<BaseTableReference id="129" name="Global" UUID="ABFA4E88-10F3-4BC8-9DDA-8F17E017BC0E"></BaseTableReference>
+					<ObjectList membercount="5">
+						<Field id="1" name="ID" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:05">64933A55-4297-4CA3-996E-DE0076AE7044</UUID>
+							<AutoEnter type="Calculated" prohibitModification="True" overwriteExisting="False" alwaysEvaluate="False">
+								<Calculated enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065089" name="Global" UUID="01299073-4792-4A9F-8603-48B775E24FBE"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">_64933A55-4297-4CA3-996E-DE0076AE7044_1</DDRREF>
+										<Text>Get ( UUID )</Text>
+									</Calculation>
+								</Calculated>
+							</AutoEnter>
+							<Validation alwaysValidate="False" type="Always" allowOverride="True" notEmpty="True" unique="True" existing="False"></Validation>
+							<Storage autoIndex="True" index="Minimal" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="2" name="zz_recCreateAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:05">C778267D-26A1-465A-B46A-F5B57D6CE61A</UUID>
+							<AutoEnter type="CreationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="3" name="zz_recCreateTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:05">3DDA0098-EC98-43F8-8911-BA2A6443475C</UUID>
+							<AutoEnter type="CreationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="4" name="zz_recModifyAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:05">8F139191-D161-4D33-90FF-4F64392C8509</UUID>
+							<AutoEnter type="ModificationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="5" name="zz_recModifyTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:05">C6CBDC4A-88AF-4470-80AF-FE44E9920FF9</UUID>
+							<AutoEnter type="ModificationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+					</ObjectList>
+				</FieldCatalog>
+				<FieldCatalog>
+					<SortOrder>1</SortOrder>
+					<CustomOrderList>
+						<key>1</key>
+						<key>2</key>
+						<key>3</key>
+						<key>4</key>
+						<key>5</key>
+						<key>6</key>
+						<key>7</key>
+						<key>8</key>
+						<key>9</key>
+						<key>10</key>
+					</CustomOrderList>
+					<UUID modifications="3" userName="" accountName="" timestamp="2026-10-08T14:41:54">78C39C55-ACDD-43C0-B7B9-6D5A317BE811</UUID>
+					<BaseTableReference id="130" name="CUS__Customer" UUID="ABFD6C5B-DEF0-45D8-B68E-DF55EF54DF75"></BaseTableReference>
+					<ObjectList membercount="10">
+						<Field id="1" name="ID" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">238A0B48-FCF7-4497-994A-B88EA0FB3EA9</UUID>
+							<AutoEnter type="Calculated" prohibitModification="True" overwriteExisting="False" alwaysEvaluate="False">
+								<Calculated enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">_238A0B48-FCF7-4497-994A-B88EA0FB3EA9_1</DDRREF>
+										<Text>Get ( UUID )</Text>
+									</Calculation>
+								</Calculated>
+							</AutoEnter>
+							<Validation alwaysValidate="False" type="Always" allowOverride="True" notEmpty="True" unique="True" existing="False"></Validation>
+							<Storage autoIndex="True" index="Minimal" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="2" name="zz_recCreateAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">F0D2A6D1-6E16-422B-8241-0E4A4F372CB4</UUID>
+							<AutoEnter type="CreationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="3" name="zz_recCreateTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">D867562A-0D55-4118-9419-BD7556E6DBFB</UUID>
+							<AutoEnter type="CreationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="4" name="zz_recModifyAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">CAC0D504-EA1C-4D80-9A1D-97CCF20D90B6</UUID>
+							<AutoEnter type="ModificationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="5" name="zz_recModifyTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">680D5AB2-BA53-42D9-927B-D18F6645BBD8</UUID>
+							<AutoEnter type="ModificationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="6" name="Name_First" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">D3DA0015-124B-4C66-932F-6F9988939314</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="7" name="Name_Last" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="1" userName="" accountName="" timestamp="2026-10-08T14:41:54">53E70F35-5C9A-4EAE-A205-D1A9F103D785</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="Always" allowOverride="True" notEmpty="True" unique="False" existing="False">
+								<Calculated enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="789E518C9EA7565C0831040030B9D5C2">_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4_2</DDRREF>
+										<Text>Length ( Name_Last ) &lt; 100 and Name_Last &lt;&gt; CUS__Customer::Name_First</Text>
+									</Calculation>
+								</Calculated>
+								<MessageCalc enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="E78BFF28667EBB83091E93734F016358">_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4</DDRREF>
+										<Text>"Too long: " &amp; Name_Last</Text>
+									</Calculation>
+								</MessageCalc>
+							</Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="8" name="Name_Full_c" fieldtype="Calculated" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">2A51B9D3-772D-45B5-8056-52209E31740F</UUID>
+							<AutoEnter alwaysEvaluate="False"></AutoEnter>
+							<Storage storeCalculationResults="True" autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Calculation>
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+								<DDRREF kind="ChunkList" hash="1DB48AF5DBE52BAC2F6F879C88B443DA">_2A51B9D3-772D-45B5-8056-52209E31740F_0</DDRREF>
+								<Text>_Str_FullName ( Name_First ; Name_Last )</Text>
+							</Calculation>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="9" name="Address_CountryCode" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">2B553655-F928-4188-BAF9-A9225A36D967</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="False" notEmpty="False" unique="False" existing="False">
+								<ValueListReference id="2" name="CountryCode" UUID="9AB4D663-47EF-45AB-A19A-BB5CD7654182"></ValueListReference>
+							</Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="10" name="Phone_r" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T20:41:32">78F42732-B98F-439A-BCB9-AAEA1583BF68</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="3">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+					</ObjectList>
+				</FieldCatalog>
+				<FieldCatalog>
+					<SortOrder>1</SortOrder>
+					<CustomOrderList>
+						<key>1</key>
+						<key>2</key>
+						<key>3</key>
+						<key>4</key>
+						<key>5</key>
+						<key>6</key>
+						<key>7</key>
+						<key>8</key>
+						<key>9</key>
+						<key>10</key>
+						<key>11</key>
+					</CustomOrderList>
+					<UUID modifications="2" userName="" accountName="" timestamp="2026-10-07T09:44:22">D620B5E6-46D1-4882-8763-F30289CEEF3C</UUID>
+					<BaseTableReference id="131" name="WAT__Watch" UUID="28524AD6-908E-4DAA-B5BF-06CAED8FE24B"></BaseTableReference>
+					<ObjectList membercount="11">
+						<Field id="1" name="ID" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">8A31C7BF-5EA3-4B68-9064-70D95BA2742A</UUID>
+							<AutoEnter type="Calculated" prohibitModification="True" overwriteExisting="False" alwaysEvaluate="False">
+								<Calculated enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065091" name="WAT__Watch" UUID="1D3CB119-A26E-4A66-A308-B887FD7D7479"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">_8A31C7BF-5EA3-4B68-9064-70D95BA2742A_1</DDRREF>
+										<Text>Get ( UUID )</Text>
+									</Calculation>
+								</Calculated>
+							</AutoEnter>
+							<Validation alwaysValidate="False" type="Always" allowOverride="True" notEmpty="True" unique="True" existing="False"></Validation>
+							<Storage autoIndex="True" index="Minimal" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="2" name="zz_recCreateAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">7F467C2E-B987-409F-8D12-533139D00FDE</UUID>
+							<AutoEnter type="CreationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="3" name="zz_recCreateTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">89EA1391-84E9-4517-BE33-51EC7636E52D</UUID>
+							<AutoEnter type="CreationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="4" name="zz_recModifyAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">0ADF1F98-CE4A-40AF-BC9F-6C112214D6D4</UUID>
+							<AutoEnter type="ModificationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="5" name="zz_recModifyTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">F4CD0C8F-F8BC-4B69-8B2A-8273951DEAFB</UUID>
+							<AutoEnter type="ModificationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="6" name="Brand" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">4E7178A9-C5F0-4C0C-8684-5F81100525C0</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="False" notEmpty="True" unique="False" existing="False">
+								<ValueListReference id="1" name="Brand" UUID="53F5CCC3-E480-4A8A-92D1-EDF71ECCF81A"></ValueListReference>
+							</Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="7" name="Model" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">E9F47A13-43D7-4AD1-8082-D01B79745799</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="8" name="Price" fieldtype="Normal" datatype="Number" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">2367AF93-FC12-4CF0-98A5-16B31A4A4EA6</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False">
+								<Strict>Numeric</Strict>
+							</Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="9" name="Price_Total_s" fieldtype="Summary" datatype="Number" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">C97AE2DB-3B8B-405A-9F22-0450FBA3EA65</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<SummaryInfo restartEachGroup="False" summarizeRepetition="Together" operation="Total">
+								<SummaryField>
+									<FieldReference id="8" name="Price" UUID="2367AF93-FC12-4CF0-98A5-16B31A4A4EA6">
+										<BaseTableReference id="131" name="WAT__Watch" UUID="28524AD6-908E-4DAA-B5BF-06CAED8FE24B"></BaseTableReference>
+									</FieldReference>
+								</SummaryField>
+							</SummaryInfo>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="10" name="zz_Filter_g" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">2A7D1E18-A2E7-4A5F-A261-1ACCE82E1E2F</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage global="True" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="11" name="SaleCount_cu" fieldtype="Calculated" datatype="Number" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:22">1A027C9C-E085-48AD-8398-62F6B202B0D4</UUID>
+							<AutoEnter alwaysEvaluate="False"></AutoEnter>
+							<Storage storeCalculationResults="False" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Calculation>
+								<TableOccurrenceReference id="1065091" name="WAT__Watch" UUID="1D3CB119-A26E-4A66-A308-B887FD7D7479"></TableOccurrenceReference>
+								<DDRREF kind="ChunkList" hash="AD1E8C062132D158D3A2CA5BD2994377">_1A027C9C-E085-48AD-8398-62F6B202B0D4_0</DDRREF>
+								<Text>Count ( WAT_SAL__Sale::ID )</Text>
+							</Calculation>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+					</ObjectList>
+				</FieldCatalog>
+				<FieldCatalog>
+					<SortOrder>1</SortOrder>
+					<CustomOrderList>
+						<key>1</key>
+						<key>2</key>
+						<key>3</key>
+						<key>4</key>
+						<key>5</key>
+						<key>6</key>
+						<key>7</key>
+						<key>8</key>
+						<key>9</key>
+					</CustomOrderList>
+					<UUID modifications="2" userName="" accountName="" timestamp="2026-10-07T09:44:22">72A887F3-B45B-48CA-AB98-D6218AE88FC5</UUID>
+					<BaseTableReference id="132" name="SAL__Sale" UUID="26BA9F15-40FA-4293-8098-FD335F0E32EF"></BaseTableReference>
+					<ObjectList membercount="9">
+						<Field id="1" name="ID" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">87F23DF5-9EFC-478A-A702-BF9B9EDDCD53</UUID>
+							<AutoEnter type="Calculated" prohibitModification="True" overwriteExisting="False" alwaysEvaluate="False">
+								<Calculated enable="True">
+									<Calculation>
+										<TableOccurrenceReference id="1065092" name="SAL__Sale" UUID="0A348502-C291-4142-9545-F286D5161185"></TableOccurrenceReference>
+										<DDRREF kind="ChunkList" hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">_87F23DF5-9EFC-478A-A702-BF9B9EDDCD53_1</DDRREF>
+										<Text>Get ( UUID )</Text>
+									</Calculation>
+								</Calculated>
+							</AutoEnter>
+							<Validation alwaysValidate="False" type="Always" allowOverride="True" notEmpty="True" unique="True" existing="False"></Validation>
+							<Storage autoIndex="True" index="Minimal" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="2" name="zz_recCreateAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">03B8B256-3B17-4DCE-879D-C0AD17088774</UUID>
+							<AutoEnter type="CreationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="3" name="zz_recCreateTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">1AB630A1-46B2-4B3D-9B51-C92A3ADB25CE</UUID>
+							<AutoEnter type="CreationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="4" name="zz_recModifyAccountName" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">6C7DCEA4-DD3D-4598-807B-71FA2AD4F6FB</UUID>
+							<AutoEnter type="ModificationAccountName" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="5" name="zz_recModifyTimestamp" fieldtype="Normal" datatype="Timestamp" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">77288E0E-B833-4CF1-B143-02BF311846D5</UUID>
+							<AutoEnter type="ModificationTimestamp" prohibitModification="True"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="6" name="ID_Customer" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">0C1AF394-626B-4A1C-8A1F-67E678BEDC53</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="7" name="ID_Watch" fieldtype="Normal" datatype="Text" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">BE9448BB-9FCD-45F6-BFD1-F2A4CE035026</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="8" name="SoldOn" fieldtype="Normal" datatype="Date" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:15">EE13BFA0-F54E-44BE-BFC0-45A95D300F9D</UUID>
+							<AutoEnter type="" prohibitModification="False"></AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+						<Field id="9" name="Price" fieldtype="Normal" datatype="Number" comment="">
+							<UUID modifications="0" userName="" accountName="" timestamp="2026-10-07T09:44:22">3148FAD4-8BB6-4AF6-9124-A0C4BBA411B3</UUID>
+							<AutoEnter type="Looked_up" prohibitModification="False">
+								<Looked_up dontCopyIfEmpty="True" noMatchCopyOption="DoNotCopy" enable="True">
+									<FieldReference id="8" name="Price" UUID="2367AF93-FC12-4CF0-98A5-16B31A4A4EA6">
+										<TableOccurrenceReference id="1065095" name="SAL_WAT__Watch" UUID="AFC98EF6-5B96-4D05-A94E-977B061F88FD"></TableOccurrenceReference>
+									</FieldReference>
+									<Context>
+										<TableOccurrenceReference id="1065092" name="SAL__Sale" UUID="0A348502-C291-4142-9545-F286D5161185"></TableOccurrenceReference>
+									</Context>
+								</Looked_up>
+							</AutoEnter>
+							<Validation alwaysValidate="False" type="OnlyDuringDataEntry" allowOverride="True" notEmpty="False" unique="False" existing="False"></Validation>
+							<Storage autoIndex="True" index="None" global="False" maxRepetitions="1">
+								<LanguageReference name="English" id="21"></LanguageReference>
+							</Storage>
+							<Annotation></Annotation>
+							<DisplayNames enable="False"></DisplayNames>
+						</Field>
+					</ObjectList>
+				</FieldCatalog>
+			</FieldsForTables>
+		</AddAction>
+	</Structure>
+	<DDR_INFO>
+		<Calculation>
+			<ObjectList>
+				<_64933A55-4297-4CA3-996E-DE0076AE7044_1 hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3" datatype="ChunkList">
+					<TableOccurrenceReference id="1065089" name="Global" UUID="01299073-4792-4A9F-8603-48B775E24FBE"></TableOccurrenceReference>
+					<ChunkList hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">
+						<Chunk type="FunctionRef">Get</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FunctionRef">UUID</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_64933A55-4297-4CA3-996E-DE0076AE7044_1>
+				<_238A0B48-FCF7-4497-994A-B88EA0FB3EA9_1 hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3" datatype="ChunkList">
+					<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+					<ChunkList hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">
+						<Chunk type="FunctionRef">Get</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FunctionRef">UUID</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_238A0B48-FCF7-4497-994A-B88EA0FB3EA9_1>
+				<_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4_2 hash="789E518C9EA7565C0831040030B9D5C2" datatype="ChunkList">
+					<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+					<ChunkList hash="789E518C9EA7565C0831040030B9D5C2">
+						<Chunk type="FunctionRef">Length</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="7" name="Name_Last" repetition="1" UUID="53E70F35-5C9A-4EAE-A205-D1A9F103D785">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+						<Chunk type="NoRef"> ) &lt; 100 </Chunk>
+						<Chunk type="FunctionRef">and</Chunk>
+						<Chunk type="NoRef"> </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="7" name="Name_Last" repetition="1" UUID="53E70F35-5C9A-4EAE-A205-D1A9F103D785">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+						<Chunk type="NoRef"> &lt;&gt; </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="6" name="Name_First" repetition="1" UUID="D3DA0015-124B-4C66-932F-6F9988939314">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+					</ChunkList>
+				</_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4_2>
+				<_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4 hash="E78BFF28667EBB83091E93734F016358" datatype="ChunkList">
+					<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+					<ChunkList hash="E78BFF28667EBB83091E93734F016358">
+						<Chunk type="NoRef">"Too long: " &amp; </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="7" name="Name_Last" repetition="1" UUID="53E70F35-5C9A-4EAE-A205-D1A9F103D785">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+					</ChunkList>
+				</_53E70F35-5C9A-4EAE-A205-D1A9F103D785_4>
+				<_2A51B9D3-772D-45B5-8056-52209E31740F_0 hash="1DB48AF5DBE52BAC2F6F879C88B443DA" datatype="ChunkList">
+					<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+					<ChunkList hash="1DB48AF5DBE52BAC2F6F879C88B443DA">
+						<Chunk type="CustomFunctionRef">_Str_FullName</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="6" name="Name_First" repetition="1" UUID="D3DA0015-124B-4C66-932F-6F9988939314">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+						<Chunk type="NoRef"> ; </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="7" name="Name_Last" repetition="1" UUID="53E70F35-5C9A-4EAE-A205-D1A9F103D785">
+								<TableOccurrenceReference id="1065090" name="CUS__Customer" UUID="305ECC15-ADD2-4467-8378-3D41FB901B87"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_2A51B9D3-772D-45B5-8056-52209E31740F_0>
+				<_8A31C7BF-5EA3-4B68-9064-70D95BA2742A_1 hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3" datatype="ChunkList">
+					<TableOccurrenceReference id="1065091" name="WAT__Watch" UUID="1D3CB119-A26E-4A66-A308-B887FD7D7479"></TableOccurrenceReference>
+					<ChunkList hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">
+						<Chunk type="FunctionRef">Get</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FunctionRef">UUID</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_8A31C7BF-5EA3-4B68-9064-70D95BA2742A_1>
+				<_1A027C9C-E085-48AD-8398-62F6B202B0D4_0 hash="AD1E8C062132D158D3A2CA5BD2994377" datatype="ChunkList">
+					<TableOccurrenceReference id="1065091" name="WAT__Watch" UUID="1D3CB119-A26E-4A66-A308-B887FD7D7479"></TableOccurrenceReference>
+					<ChunkList hash="AD1E8C062132D158D3A2CA5BD2994377">
+						<Chunk type="FunctionRef">Count</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FieldRef">
+							<FieldReference id="1" name="ID" repetition="1" UUID="87F23DF5-9EFC-478A-A702-BF9B9EDDCD53">
+								<TableOccurrenceReference id="1065094" name="WAT_SAL__Sale" UUID="32A57F52-1336-43AE-B543-D4C6A2BBDEA2"></TableOccurrenceReference>
+							</FieldReference>
+						</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_1A027C9C-E085-48AD-8398-62F6B202B0D4_0>
+				<_87F23DF5-9EFC-478A-A702-BF9B9EDDCD53_1 hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3" datatype="ChunkList">
+					<TableOccurrenceReference id="1065092" name="SAL__Sale" UUID="0A348502-C291-4142-9545-F286D5161185"></TableOccurrenceReference>
+					<ChunkList hash="9BEC4C5D2CF1659E640FE3DBFE5C12E3">
+						<Chunk type="FunctionRef">Get</Chunk>
+						<Chunk type="NoRef"> ( </Chunk>
+						<Chunk type="FunctionRef">UUID</Chunk>
+						<Chunk type="NoRef"> )</Chunk>
+					</ChunkList>
+				</_87F23DF5-9EFC-478A-A702-BF9B9EDDCD53_1>
+			</ObjectList>
+		</Calculation>
+	</DDR_INFO>
+</FMSaveAsXML>

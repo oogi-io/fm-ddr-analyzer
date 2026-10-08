@@ -102,12 +102,53 @@ solution, or a single `*_fmp12.xml`:
 fmsonar build /path/to/DDR/Summary.xml -o solution.db
 ```
 
+**Or from a Save a Copy as XML export (FileMaker 26, CLI only, v1.15.0).** `build`
+also reads FileMaker's own XML export, made with FileMaker 26 (format
+versions 2.3.0.0 and 2.3.0.1) and with **"Include details for analysis
+tools"** on; any other export is refused with a message that says why (so are
+Pro's multi-file summary, `XMLv2_Summary`: pass the per-file exports; and a
+partial export made with FMDeveloperTool's `-catalog_list` that lacks a section
+every file writes or a catalog it refers to; the two versions build
+together). It can
+be made without opening FileMaker Pro, which makes it the route for an
+unattended or agent-driven build:
+
+```bash
+# FileMaker Server's FMDeveloperTool, on a copy of the closed file
+FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
+fmsonar build Solution_saxml.xml -o solution.db
+```
+
+FMDeveloperTool takes the account password as an argument, so it is visible in
+the process list while the export runs; use a dedicated export account.
+
+The script step **Save a Copy as XML** (option "Include details for analysis
+tools"), run in FileMaker Pro or on Server, writes the same format. Pass one
+export per file of a multi-file solution. FMDeveloperTool leaves references
+into other files empty (external table occurrences, cross-file calls), so
+those stay unresolved, also when the other files' exports are built into the
+same index (measured); a Save a Copy as XML from FileMaker Pro with every file
+open fills them (measured on one file of a two-file lab; FileMaker Server not
+yet measured). For a fully resolved multi-file index, build from the DDR. A
+whole export holds calculations with no reference list of their own, mostly
+on layout objects (on a large solution several percent of the calculation
+references on layout objects): `build`, `stats` and `list` give the count,
+and `where`, when it finds no reference, prints the name's full-text
+mentions beside the 0. Every export measured so far is
+English; an export with another locale builds with a warning that points at
+the few rules that read English step text (listed in COVERAGE.md). The
+expected differences between the two routes, as measured, are listed in
+[COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR"). The browser viewer
+reads DDRs only. A SaXML-built index also stores each object's last-change
+stamp, including the developer's FileMaker user and account name; the HTML
+`report` leaves them out ([SECURITY.md](SECURITY.md)).
+
 Then query it. Each command is copy-paste safe on its own:
 
 | Command | Answers |
 |---|---|
 | `fmsonar where solution.db "CONTACT::email"` | where is this field / script / layout / TO / custom function used |
-| `fmsonar search solution.db "GetContainerAttribute"` | full-text across every calc, script step, and name |
+| `fmsonar search solution.db "GetContainerAttribute"` | full-text across every calc, script step (Insert Text literals included), and name |
 | `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
 | `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
 | `fmsonar stats solution.db` | entity counts + reference-resolution health |
@@ -162,7 +203,8 @@ reference types.
 
 ## Performance and scope
 
-- **Input:** DDR XML — one file, several, or a `Summary.xml` manifest. Both
+- **Input:** DDR XML (one file, several, or a `Summary.xml` manifest), or
+  FileMaker 26 Save a Copy as XML exports in the CLI. Both
   parsers (Python CLI and the browser's JS twin, parity-tested edge by edge)
   stream with SAX, so file size doesn't matter. Measured: a 510 MB 9-file
   production solution builds in ~26 s; the 416 MB main file parses in-browser
@@ -174,15 +216,17 @@ reference types.
 
 ## Data model
 
-One database holds a whole solution — all files of a multi-file solution share
-one entity space, so cross-file references resolve. The schema is also
-snapshot-aware (`ddr_run`) so a future diff feature can store several DDR
-exports side by side; today `build` always writes a fresh single-snapshot DB
-(diffing is on the roadmap).
+One database holds a whole solution: all files of a multi-file solution share
+one entity space. Cross-file references resolve on a DDR build of every file;
+on SaXML only where the export filled them (FileMaker Pro with every file
+open), never on an FMDeveloperTool export. `ddr_run` holds one row
+per build: the source format (`ddr` or `saxml`), its version, and the fmsonar
+version that built the index (`parser_version`). `build` always writes a fresh
+database for one export of one solution.
 
 | Table | What it holds |
 |-------|---------------|
-| `ddr_run` | One parse run (source path, DDR version, timestamp, label) |
+| `ddr_run` | One parse run (source path, source format `ddr` or `saxml`, root version, FileMaker version of a SaXML export, timestamp, label) |
 | `files` | Each FileMaker file in the run |
 | `entities` | Every named thing — one row per `kind` (see below) |
 | `refs` | Every "source **uses** target" edge; `target_entity_id` resolved after load |
@@ -303,8 +347,12 @@ and the losses shape the roadmap. The full story:
   install paths with a signed + notarized .pkg (Developer ID) so macOS
   installs the snippet watcher without any Gatekeeper friction. Parked
   until a dedicated signing session.
-- [ ] **Phase 3 — DDR diff.** Two snapshots in one DB → what changed between
-  deploys (added/removed/modified fields, scripts, layouts).
+- **Diff of two exports: not in fmsonar.** fmsonar answers questions about
+  one export of one solution; comparing two exports of different states
+  (what changed between deploys) is outside its scope.
+  `tools/compare_resolution.py` compares two indexes of the same export built
+  by two parser versions: it is the parser's regression check, not a change
+  report.
 - [x] **Copy as FM snippet (web + CLI).** In the web app, every script has a
   "Copy FM snippet" button that re-streams the source file, extracts that
   script's raw steps, and copies fmxmlsnippet XML as text (byte-identical to
@@ -319,7 +367,8 @@ and the losses shape the roadmap. The full story:
   into Script Workspace. The transform reproduces FileMaker's own copied
   output byte-for-byte (268/268 steps on the reference script) and is
   paste-verified in Script Workspace; see SNIPPET_FORMAT.md. Browsers cannot set
-  the XMSS flavor, so the web app cannot paste directly — CLI only.
+  the XMSS flavor, so the web app cannot paste directly: CLI only. It reads a
+  DDR; a Save a Copy as XML export is refused by name.
 - [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
   them as input for the FileMaker upgrade tool to apply. Shares the raw-XML
   prerequisite with snippet copy; parked until the read-only explorer has

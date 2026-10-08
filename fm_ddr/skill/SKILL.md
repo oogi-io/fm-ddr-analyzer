@@ -1,6 +1,6 @@
 ---
 name: fmsonar
-description: Analyze FileMaker solutions via their DDR (Database Design Report). Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, or asks structural questions about a FileMaker solution. Works from any directory; databases are cached centrally.
+description: Analyze FileMaker solutions via their DDR (Database Design Report) or a FileMaker 26 "Save a Copy as XML" export. Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, a Save a Copy as XML (SaXML) export, or asks structural questions about a FileMaker solution. Works from any directory; databases are cached centrally.
 ---
 
 You analyze FileMaker solutions using the `fm-ddr` CLI (fmsonar's engine).
@@ -14,7 +14,26 @@ parser version, staleness) - run it first when unsure what exists. Reuse a
 cached DB if it is newer than its source DDR and not flagged stale.
 
 To build, you need the user's DDR export (FileMaker: Tools > Database Design
-Report > XML). If you don't know where it is, ask - don't scan the whole disk.
+Report > XML) or a Save a Copy as XML export (below). If you don't know where it is, ask - don't scan the whole disk.
+
+A FileMaker "Save a Copy as XML" export also builds, **only from FileMaker 26**
+(format 2.3.0.0 or 2.3.0.1) and only when made with "Include details for
+analysis tools" (FMDeveloperTool: `-include_details`); `build` refuses anything
+else and says why (Pro's `XMLv2_Summary`, a duplicate export of the same file,
+an empty `File` attribute, a cut-off export and a partial `-catalog_list`
+export included; 2.3.0.0 and 2.3.0.1 build together). One export per file;
+never mix a DDR and a SaXML export in one build. Some calculations have no
+reference list in the export (mostly on layout objects): when `where` finds
+no reference on such an index it prints the name's full-text mentions; read
+them, and run `search` before you call anything unused. An FMDeveloperTool export leaves references into
+other files empty: for a fully resolved multi-file index, prefer the DDR; its
+`<Field Missing>` calculations, field objects and step targets through external TOs are
+`unverifiable_xfile` rows in `v_dangling`, some of them real defects. A
+non-English export builds with a warning: say so when you report from it. A
+SaXML index names developers in `extra_json.modified_by` / `modified_account`;
+keep those out of anything you hand on. `stats` prints which format built an
+index; COVERAGE.md "SaXML next to the DDR" lists the expected differences
+(SaXML only: `part_break` refs, every custom menu item's step text).
 
 ```bash
 mkdir -p ~/.fmsonar/dbs
@@ -166,12 +185,12 @@ order, 'check'-tier ops), not on the graph walk.
   anything broken, and the marked defects are in `v_dangling`.
   `ambiguous=1` = the resolver guessed among same-named candidates; say so
   when it matters.
-- Read-only: never modify a DB; rebuild from the DDR instead.
+- Read-only: never modify a DB; rebuild from the source export instead.
 
 ## 5. Extras
 
 - Interactive HTML for the user: `fm-ddr report <db> -o out.html` (self-contained; send it to them).
-- Copy a script as a FileMaker-pasteable snippet: `fm-ddr snippet <ddr.xml> "Script Name" --clip` (macOS).
+- Copy a script as a FileMaker-pasteable snippet: `fm-ddr snippet <ddr.xml> "Script Name" --clip` (macOS). DDR only: a Save a Copy as XML export is refused.
 - Skill freshness: `fm-ddr install-skill --check` compares this installed skill
   against the one shipped with your fm_ddr install (`--remote` = against GitHub
   main). If it reports drift, tell the user and offer to update.

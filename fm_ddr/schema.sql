@@ -8,11 +8,28 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS ddr_run (
     run_id        INTEGER PRIMARY KEY,
     source_path   TEXT,
-    ddr_version   TEXT,
+    ddr_version   TEXT,         -- root element version: FMPReport@version (DDR) or
+                                -- FMSaveAsXML@version (SaXML, e.g. 2.3.0.0); a SaXML
+                                -- build of several versions lists them comma-separated
+                                -- (2.3.0.0, 2.3.0.1): each file's is files.format_version
     creation_time TEXT,
     parsed_at     TEXT,
     parser_version TEXT,      -- fm_ddr version that built this index (stale-check)
-    label         TEXT          -- optional human label e.g. "mysolution 2026-07-07"
+    source_format TEXT,         -- 'ddr' | 'saxml' (Save a Copy as XML); NULL = an index
+                                -- built before this column, read as 'ddr'
+    source_version TEXT,        -- SaXML: FMSaveAsXML@Source, the FileMaker version that
+                                -- wrote it (e.g. 26.0.1; comma-separated as ddr_version);
+                                -- NULL for a DDR
+    label         TEXT,         -- optional human label e.g. "mysolution 2026-07-07"
+    ddrinfo_refs  INTEGER,      -- SaXML only (NULL for a DDR, and on an index built
+                                -- before these columns): DDRREF elements read
+    ddrinfo_missing_steps INTEGER,  -- of those, steps whose DDR_INFO entry is
+                                    -- absent: no step text
+    ddrinfo_missing_calcs INTEGER   -- calculations whose chunk list is absent: no
+                                    -- field or custom function references; one per
+                                    -- distinct (key, hash) pair, not per DDRREF; a key
+                                    -- whose list under another hash names nothing
+                                    -- is not counted (nothing lost)
 );
 
 -- One FileMaker file within a run (a solution can span several files).
@@ -20,7 +37,10 @@ CREATE TABLE IF NOT EXISTS files (
     file_id     INTEGER PRIMARY KEY,
     run_id      INTEGER NOT NULL REFERENCES ddr_run(run_id),
     name        TEXT,
-    path        TEXT
+    path        TEXT,
+    format_version TEXT,    -- SaXML: this export's FMSaveAsXML@version (2.3.0.0 and
+                            -- 2.3.0.1 build together); NULL for a DDR, older index
+    source_version TEXT     -- SaXML: its Source (the FileMaker version); NULL for a DDR
 );
 
 -- Unified entity table. Every named thing in the DDR is a row here.
@@ -51,7 +71,13 @@ CREATE TABLE IF NOT EXISTS entities (
                                     -- {file: true, link: "X_fmp12.xml"} (v1.13.0); script,
                                     -- script_group, layout, layout_group: {in_menu: true} and
                                     -- script {run_full_access: true}, keys only when the DDR
-                                    -- flag is True (v1.14.0)
+                                    -- flag is True (v1.14.0). SaXML builds add: external_data_source
+                                    -- {file_name} (the path without its scheme); table_occurrence
+                                    -- {external: true} = an external TO with no data source (its
+                                    -- field refs stay unresolved); entities with a UUID element
+                                    -- {uuid, modified_at, modified_by, modified_account, modified_n};
+                                    -- any entity {xfile_marker: true} = its every <Field Missing>
+                                    -- follows such a TO (v_dangling: unverifiable_xfile, v1.15.0)
     -- field storage & auto-enter (v1.9.0; NULL for non-fields and pre-1.9 builds)
     stored           INTEGER,       -- 0 = unstored calc (storeCalculationResults="False"), 1 = stored
     indexed          TEXT,          -- index setting: None | Minimal | All
@@ -72,6 +98,8 @@ CREATE TABLE IF NOT EXISTS entities (
 --            acts on) | portal (the TO a portal shows) | value_list_context
 --            (the "starting from" TO of a related-values list) (v1.14.0; all
 --            three resolve by name within the file, an empty name is '<unknown>')
+--          | part_break (a sub-summary part's break field, source the layout;
+--            Save a Copy as XML input only, the DDR has no Part element; v1.15.0)
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
 --  lookup = the source field a looked-up value copies FROM; a field's full
 --  dependency set is context IN ('calc','auto_enter','validation','lookup'))

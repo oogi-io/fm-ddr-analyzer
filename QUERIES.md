@@ -361,7 +361,10 @@ WHERE source_kind = 'script_step' AND source_parent_name LIKE 'Invoice%'
 ORDER BY script, step_type;
 -- source_kind = 'layout_object' rows are button steps (step_type NULL,
 -- source_parent_name = the layout or enclosing object); context =
--- 'broken_calc' rows are entities whose calc text carries a marker.
+-- 'broken_calc' rows are entities whose calc text carries a marker;
+-- 'unverifiable_xfile' rows (SaXML only, v1.15.0) are <Field Missing> markers,
+-- field objects and step targets through an external TO with no data source:
+-- a field in another file that the export cannot check.
 ```
 
 Markers the DDR writes only in a step's TEXT (no reference element, so no
@@ -513,7 +516,8 @@ Entity counts (the auto-generated equivalent of a DDR summary):
 SELECT kind, COUNT(*) n FROM entities GROUP BY kind ORDER BY n DESC;
 ```
 
-Base tables with field + record counts:
+Base tables with field + record counts (`records` is NULL on a SaXML index:
+the export has no record counts):
 
 ```sql
 SELECT bt.name, bt.records,
@@ -528,6 +532,37 @@ SELECT s.grp, s.name,
        (SELECT COUNT(*) FROM entities st WHERE st.parent_entity_id=s.entity_id) AS steps
 FROM entities s WHERE s.kind='script' ORDER BY s.grp, s.name;
 ```
+
+## Source format and last change (SaXML)
+
+Which format built this index (`ddr` or `saxml`; for SaXML `source_version`
+is the FileMaker version that wrote the export). An index built before the
+columns existed fails on this query with "no such column" and is a DDR index:
+
+```sql
+SELECT COALESCE(source_format, 'ddr') AS format, ddr_version, source_version,
+       parser_version, parsed_at, label
+FROM ddr_run;
+```
+
+**Last change per object, SaXML only.** A Save a Copy as XML export stamps
+every catalog entity with its last modification (COVERAGE.md, "SaXML next to
+the DDR"); a DDR index has no such keys and returns no rows. Most recent
+changes first:
+
+```sql
+SELECT kind, name,
+       json_extract(extra_json,'$.modified_at')      AS modified_at,
+       json_extract(extra_json,'$.modified_by')      AS modified_by,
+       json_extract(extra_json,'$.modified_account') AS modified_account,
+       json_extract(extra_json,'$.modified_n')       AS modifications
+FROM entities
+WHERE json_extract(extra_json,'$.modified_at') IS NOT NULL
+ORDER BY modified_at DESC LIMIT 30;
+```
+
+Script steps and layout objects carry only `uuid`: roll a step up to its
+script (`parent_entity_id`) for its last change.
 
 ## Storage, auto-enter & triggers (v1.9.0+)
 
@@ -630,18 +665,18 @@ WHERE kind='layout_object' AND json_extract(extra_json,'$.text') LIKE '%<<%';
 Three recurring ways an analysis stops one hop short and reaches a wrong or
 incomplete answer. Each has a cheap query that resolves it to completion.
 
-**1. A predecessor's FULL change surface — not the one comment you found.** AMPS
-devs annotate every changed calc/step with the ticket number. Finding one such
+**1. A predecessor's FULL change surface, not the one comment you found.** Many
+teams annotate every changed calc/step with the ticket number. Finding one such
 comment tells you the predecessor; it does NOT tell you everything the
 predecessor changed (a change usually spans a field family: the tier field, its
 subtotal, its total). Dump every entity the ticket touched:
 
 ```sql
-SELECT base_table, name, calc_text FROM entities WHERE calc_text GLOB '*SS-2633*'
+SELECT base_table, name, calc_text FROM entities WHERE calc_text GLOB '*PRJ-1042*'
 UNION ALL
 SELECT scr.name, s.step_type, json_extract(s.extra_json,'$.step_text')
 FROM entities s JOIN entities scr ON scr.entity_id=s.parent_entity_id AND scr.kind='script'
-WHERE json_extract(s.extra_json,'$.step_text') GLOB '*SS-2633*';
+WHERE json_extract(s.extra_json,'$.step_text') GLOB '*PRJ-1042*';
 -- the "// Previous calc: ..." lines reveal the before/after of the whole change
 ```
 

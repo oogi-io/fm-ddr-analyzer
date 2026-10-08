@@ -805,7 +805,10 @@ async function parseOneStream(stream, size, state){
     state.read+=value.byteLength;
     if(!decoder) decoder=makeDecoder(value);
     let text=decoder.decode(value,{stream:true});
-    if(first){ if(text.charCodeAt(0)===0xFEFF) text=text.slice(1); first=false; }
+    if(first){ if(text.charCodeAt(0)===0xFEFF) text=text.slice(1); first=false;
+      const sx=/<FMSaveAsXML\b[^>]*?\bversion="([^"]*)"/.exec(text);
+      if(sx) throw new Error('This is a Save a Copy as XML export (FMSaveAsXML version '+sx[1]+
+        '); the browser viewer reads the DDR only. Build it with the CLI: fmsonar build <file> -o <db>.'); }
     buffer+=text; buffer=feed(buffer);
     if(H.ver===startVer && H.fileIdx===startFiles && state.read>262144)
       throw new Error(NOT_DDR);
@@ -849,7 +852,7 @@ async function run(input){
   const edges=H.edges.map(r=>({s:r.s,t:r.t,tr:r.tr,tk:r.tk,c:r.c,a:r.amb||0,tf:r.tf||null,dis:r.dis||0,ev:r.ev||null}));
   const entities=H.entities.map(e=>({id:e.id,k:e.k,n:e.n,bt:e.bt,g:e.g,p:e.p,f:e.f,fm:e.fm,st:e.st,dt:e.dt,ft:e.ft,ef:e.ef,c:e.c,ot:e.ot,sx:e.step?e.step.slice(0,2000):null,d:e.d||0,sto:e.sto,idx:e.idx,glb:e.glb,ae:e.ae,ex:e.ex,tx:e.tx}));
   postMessage({type:'done', data:{
-    meta:{label:H.label, ddr_version:H.ver},
+    meta:{label:H.label, ddr_version:H.ver, source_format:'ddr', source_version:null},
     files:H.fileNames,
     counts:counts, refsTotal:H.edges.length, refsResolved:resolved,
     browsable:["base_table","field","table_occurrence","relationship","layout","script","custom_function","value_list"],
@@ -997,8 +1000,15 @@ function esc0(x){return (x==null?'':''+x).replace(/[&<>"]/g,c=>({'&':'&amp;','<'
 
 <!-- ============ SHARED VIEWER (single source: live page, export, report.py) ============ -->
 <script id="viewer-src">
+// Source label: "SaXML x (FileMaker y)" for a Save a Copy as XML index, else "DDR x"
+function srcLabel(m){
+  if(!m||!m.ddr_version) return '';
+  if(m.source_format==='saxml')
+    return 'SaXML '+m.ddr_version+(m.source_version?' (FileMaker '+m.source_version+')':'');
+  return 'DDR '+m.ddr_version;
+}
 // initViewer(DATA): renders the cross-reference viewer into #meta/#kinds/#list/#detail.
-// DATA: {meta:{label,ddr_version}, counts, refsTotal, refsResolved, browsable, entities, edges}
+// DATA: {meta:{label,ddr_version,source_format,source_version}, counts, refsTotal, refsResolved, browsable, entities, edges}
 function initViewer(DATA){
   const $=id=>document.getElementById(id);
   const KIND_LABELS={base_table:'table',table_occurrence:'TO',custom_function:'CF',value_list:'VL'};
@@ -1016,7 +1026,7 @@ function initViewer(DATA){
     stepsSorted[pid]=stepsByScript[pid].map(id=>byId[id]).sort((a,b)=>a.id-b.id);
   });
   const pct=Math.round(100*DATA.refsResolved/Math.max(DATA.refsTotal,1));
-  $('meta').textContent=DATA.meta.label+(DATA.meta.ddr_version?'  \u00b7  DDR '+DATA.meta.ddr_version:'')+
+  $('meta').textContent=DATA.meta.label+(srcLabel(DATA.meta)?'  \u00b7  '+srcLabel(DATA.meta):'')+
     '  \u00b7  '+DATA.entities.length+' entities  \u00b7  '+DATA.refsTotal+' refs ('+pct+'% resolved)'+
     (DATA._ms?'  \u00b7  '+DATA._ms+' ms':'');
   const fcEl=$('filechips');
@@ -1063,7 +1073,8 @@ function initViewer(DATA){
     field_reference:'set field / reference',go_to_layout:'go to layout',layout_object:'on layout',
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
     to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order',
-    step_table:'step table',portal:'portal',value_list_context:'value list context'};
+    step_table:'step table',portal:'portal',value_list_context:'value list context',
+    part_break:'sub-summary break field'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can
@@ -1511,7 +1522,7 @@ function initViewer(DATA){
     const path=[e.bt,e.g].filter(Boolean).join(' \u00b7 ');
     const fileName=(files.length>1&&e.f!=null&&files[e.f])?files[e.f]:null;
     let body='<header><h1>fmsonar</h1><span class="sub">'+esc(DATA.meta.label)+
-      (DATA.meta.ddr_version?' \u00b7 DDR '+DATA.meta.ddr_version:'')+' \u00b7 shared entity</span></header>'+
+      (srcLabel(DATA.meta)?' \u00b7 '+esc(srcLabel(DATA.meta)):'')+' \u00b7 shared entity</span></header>'+
       '<div class="detail" style="overflow:visible">'+
       '<h2>'+esc(e.n||'(unnamed)')+'</h2><div class="path"><span class="kind-tag">'+kl(e.k)+'</span>'+esc(path)+
       (fileName?' <span class="kind-tag">'+esc(fileName)+'</span>':'')+'</div>';
@@ -1799,7 +1810,7 @@ function initViewer(DATA){
     const pct=Math.round(100*DATA.refsResolved/Math.max(DATA.refsTotal,1));
 
     let h='<h2>Solution health</h2><div class="path">'+esc(DATA.meta.label)+
-      (DATA.meta.ddr_version?' \u00b7 DDR '+DATA.meta.ddr_version:'')+'</div>';
+      (srcLabel(DATA.meta)?' \u00b7 '+esc(srcLabel(DATA.meta)):'')+'</div>';
     h+='<div class="scriptmeta">'+
       '<span>Entities: <b>'+DATA.entities.length+'</b></span>'+
       '<span>References: <b>'+DATA.refsTotal+'</b> ('+pct+'% resolved)</span>'+
@@ -1808,7 +1819,8 @@ function initViewer(DATA){
     h+='<div class="caveat"><b>Read before acting:</b> these are review lists, not delete lists. '+
       'Usage inside ExecuteSQL strings, calculated names, custom menus, and anything outside this DDR '+
       '(other systems, users running scripts from the menu) is structurally invisible \u2014 '+
-      'use Enter-search (in code) as a second check. See COVERAGE.md in the repo.</div>';
+      'use Enter-search (in code) as a second check. See COVERAGE.md in the repo.</div>'+
+      (DATA.meta.unused_caveat?'<div class="caveat">'+esc(DATA.meta.unused_caveat)+'</div>':'');
     const sections=[];
     sections.push(hTable('Unused field candidates',['Field','File'],unusedFields,'unused_fields.csv'));
     sections.push(hTable('Orphan script candidates',['Script','Group','File'],orphanScripts,'orphan_scripts.csv'));
