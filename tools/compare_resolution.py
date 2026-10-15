@@ -5,9 +5,11 @@ new parser, then run this on both indexes. Every resolved edge is keyed by conte
 (file, source kind, source parent, source name, step seq, context, target kind,
 target raw, trigger event) and valued by its target (file, kind, base table, FM id).
 The report lists keys LOST (resolved before, not now), CHANGED (resolved to
-something else) and GAINED (new), with the first rows of each. Lost or changed
-means a regression; gained is what the release added. Read-only on both indexes;
-stdlib only.
+something else) and GAINED (new), with the first rows of each, and FEWER: a key
+both sides have whose edges to one target dropped in number (duplicate edges,
+the same step naming the same target twice, are counted, not collapsed). Lost,
+changed or fewer means a regression; gained is what the release added.
+Read-only on both indexes; stdlib only.
 
 The header names each index's source (ddr_run.source_format and source_version;
 an index without them is a DDR). A DDR index against a SaXML index is a
@@ -17,7 +19,7 @@ refs whose source file is NAME on both sides (a multi-file DDR index against a
 one-file SaXML index).
 
 usage: python3 tools/compare_resolution.py OLD.db NEW.db [--file NAME]
-exit status: 1 on any lost or changed key, else 0
+exit status: 1 on any lost or changed key or any fewer edges, else 0
 """
 import argparse, sqlite3, sys
 from collections import Counter
@@ -56,17 +58,20 @@ def load(path, file_name=None):
     conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     out = {}
     dup = Counter()
+    edges = Counter()      # (key, target) -> number of edges
     for row in conn.execute(SQL):
         if file_name is not None and row[0] != file_name:
             continue
         key, val = tuple(row[:9]), tuple(row[9:])
+        edges[(key, val)] += 1
         if key in out:
-            # identical duplicate edges (same step, same target twice) are collapsed; keep a count
+            # duplicate edges (same step, same target twice): the first
+            # target is the key's value, every edge is counted in edges
             dup[key] += 1
             continue
         out[key] = val
     conn.close()
-    return out, dup
+    return out, dup, edges
 
 def main(old_path, new_path, file_name=None):
     osrc, nsrc = source(old_path), source(new_path)
@@ -84,14 +89,17 @@ def main(old_path, new_path, file_name=None):
                 # A typo would compare two empty sets and pass
                 print(f"error: no file named {file_name} in {path}", file=sys.stderr)
                 return 2
-    old, odup = load(old_path, file_name)
-    new, ndup = load(new_path, file_name)
+    old, odup, oedges = load(old_path, file_name)
+    new, ndup, nedges = load(new_path, file_name)
     lost = [k for k in old if k not in new]
     changed = [k for k in old if k in new and new[k] != old[k]]
     gained = [k for k in new if k not in old]
+    # edges to a target that dropped in number, on keys both sides have
+    fewer = [kv for kv, n in oedges.items() if kv[0] in new and nedges.get(kv, 0) < n]
     print(f"old resolved keys: {len(old):,} (+{sum(odup.values()):,} duplicate edges)")
     print(f"new resolved keys: {len(new):,} (+{sum(ndup.values()):,} duplicate edges)")
-    print(f"lost: {len(lost):,}  changed: {len(changed):,}  gained: {len(gained):,}")
+    print(f"lost: {len(lost):,}  changed: {len(changed):,}  fewer edges: {len(fewer):,}"
+          f"  gained: {len(gained):,}")
     def show(label, keys, limit=12):
         if not keys:
             return
@@ -104,8 +112,12 @@ def main(old_path, new_path, file_name=None):
             print("  ", k, "->", v)
     show("lost", lost)
     show("changed", changed)
+    if fewer:
+        print(f"\n# fewer edges (first {min(12, len(fewer))}):")
+        for kv in fewer[:12]:
+            print("  ", kv[0], "->", kv[1], f"{oedges[kv]} -> {nedges.get(kv, 0)}")
     show("gained", gained, limit=5)
-    return 0 if not lost and not changed else 1
+    return 0 if not lost and not changed and not fewer else 1
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="Compare the resolved references of two fmsonar indexes.")

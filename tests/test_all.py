@@ -5672,5 +5672,40 @@ class TestImportExportFind(unittest.TestCase):
             self.assertEqual(only_disabled, [("disabledonly", 1)], kind)
 
 
+class TestCompareResolutionGate(unittest.TestCase):
+    """tools/compare_resolution.py exits 1 when a key keeps its target but
+    loses one of its duplicate edges."""
+
+    def test_fewer_edges_fails(self):
+        tmp = tempfile.mkdtemp(prefix="fmddr_gate_")
+        try:
+            new = os.path.join(tmp, "new.db")
+            build(FIXTURE_E, new, label="new")
+            old = os.path.join(tmp, "old.db")
+            shutil.copy(new, old)
+            conn = sqlite3.connect(old)
+            # the old side had the same resolved edge twice
+            conn.execute("INSERT INTO refs (file_id, source_entity_id, source_kind, context,"
+                         " target_kind, target_fm_id, target_name, target_to_name, target_raw,"
+                         " target_file, target_entity_id, ambiguous, disabled, trigger_event)"
+                         " SELECT file_id, source_entity_id, source_kind, context, target_kind,"
+                         " target_fm_id, target_name, target_to_name, target_raw, target_file,"
+                         " target_entity_id, ambiguous, disabled, trigger_event FROM refs"
+                         " WHERE context = 'export_field' AND target_entity_id IS NOT NULL"
+                         " ORDER BY ref_id LIMIT 1")
+            conn.commit()
+            conn.close()
+            tool = os.path.join(ROOT, "tools", "compare_resolution.py")
+            same = subprocess.run([sys.executable, tool, new, new],
+                                  capture_output=True, text=True)
+            self.assertEqual(same.returncode, 0, same.stdout)
+            out = subprocess.run([sys.executable, tool, old, new],
+                                 capture_output=True, text=True)
+            self.assertEqual(out.returncode, 1, out.stdout)
+            self.assertIn("lost: 0  changed: 0  fewer edges: 1", out.stdout)
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()
