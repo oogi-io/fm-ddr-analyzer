@@ -310,6 +310,13 @@ function dec(s){
     return e in map?map[e]:m;
   });
 }
+// A field slot with no name: a deleted field (TO::<Field Missing> / TO::<unknown>, or
+// <Table Missing> / <unknown> with no TO). Mirrors parse.py _marker_field_ref.
+function markerFieldRef(ctx,fm,tbl){
+  if(tbl){ const marker=(H.stepText && H.stepText.indexOf(tbl+'::'+FIELD_MISSING)!==-1)?FIELD_MISSING:UNKNOWN;
+    emitRef(ctx,'field',{fm:fm,name:null,to:tbl,raw:tbl+'::'+marker}); }
+  else { const marker=(H.stepText && H.stepText.indexOf(TABLE_MISSING)!==-1)?TABLE_MISSING:UNKNOWN;
+    emitRef(ctx,'field',{fm:fm,name:null,to:null,raw:marker}); } }
 function splitQ(q){ if(q==null) return [null,null]; const i=q.indexOf('::');
   return i===-1?[null,q]:[q.slice(0,i),q.slice(i+2)]; }
 // v1.14.0: raw menu flags ({in_menu, run_full_access}, keys only when true; null when none)
@@ -325,7 +332,7 @@ const H={
   cap:null, capAttrs:null, buf:[],
   trigEv:[], deadAE:false,
   // v1.13.0: per-step state (reset on ANY <Step>, cleared when it closes)
-  stepText:null, layoutDest:null, stepTable:null,
+  stepText:null, layoutDest:null, stepTable:null, stepRestore:null,
 };
 function ptag(){ return H.tagstack.length>=2?H.tagstack[H.tagstack.length-2]:''; }
 function anc(t){ for(let k=0;k<H.tagstack.length-1;k++) if(H.tagstack[k]===t) return true; return false; }
@@ -394,16 +401,20 @@ function onStart(tag,a){
     const nm=a.name||null; H.stepTable=nm;
     emitRef('step_table','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
     return; }
-  // v1.15.1: Import Records' field mapping (TO = the step's <Table>; DoNotImport is no usage)
-  // and Export Records' field order and group-by fields; an empty name emits nothing
-  if(tag==='Field' && a.name && ((parent==='TargetFields' && (a.map==='Import'||a.map==='Match'))
-                                 || parent==='ExportEntry' || parent==='SummaryFields')){
-    const imp=parent==='TargetFields', tbl=imp?H.stepTable:a.table;
-    emitRef(imp?'import_field':'export_field','field',{fm:a.id,name:a.name,to:tbl,raw:(tbl||'')+'::'+a.name});
-    return; }
-  // v1.15.1: a stored find request's field (Query/RequestRow/Criteria); an empty name emits nothing
-  if(tag==='Field' && parent==='Criteria' && a.name){
-    emitRef('find_request','field',{fm:a.id,name:a.name,to:a.table,raw:(a.table||'')+'::'+a.name});
+  // v1.15.1: a step's stored request (import mapping, TO = the step's <Table>; export order and
+  // group-by; find criteria), counted only when the step restores it (<Restore state="True">).
+  // DoNotImport is no usage; an Import map with id 0 and no name emits nothing; any other empty
+  // name takes the step field marker rule
+  if(tag==='Field' && (parent==='TargetFields'||parent==='ExportEntry'||parent==='SummaryFields'||parent==='Criteria')){
+    if(H.stepRestore!=='True') return;
+    let ctx, tbl;
+    if(parent==='TargetFields'){
+      if(a.map!=='Import' && a.map!=='Match') return;
+      if(!a.name && a.id==='0') return;
+      ctx='import_field'; tbl=H.stepTable; }
+    else { ctx=parent==='Criteria'?'find_request':'export_field'; tbl=a.table; }
+    if(a.name) emitRef(ctx,'field',{fm:a.id,name:a.name,to:tbl,raw:(tbl||'')+'::'+a.name});
+    else markerFieldRef(ctx,a.id,tbl);
     return; }
   // v1.14.0: the "starting from" TO of a related-values value list; empty name = a TO this file lacks
   if(tag==='Table' && parent==='ShowRelated' && H.estack.length && H.estack[H.estack.length-1].k==='value_list'){
@@ -411,7 +422,8 @@ function onStart(tag,a){
     emitRef('value_list_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
     return; }
   // v1.13.0: per-step state; every <Step> (StepList, ButtonObj, GroupButtonObj, MenuItem) resets it
-  if(tag==='Step'){ H.stepText=null; H.layoutDest=null; H.stepTable=null; }
+  if(tag==='Step'){ H.stepText=null; H.layoutDest=null; H.stepTable=null; H.stepRestore=null; }
+  if(tag==='Restore' && parent==='Step') H.stepRestore=a.state!=null?a.state:null;
   if(tag==='LayoutDestination'){ H.layoutDest=a.value!=null?a.value:null; return; }
   if(tag==='Step' && parent==='StepList'){
     let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
@@ -492,12 +504,7 @@ function onStart(tag,a){
     else if(ctx==='value_list_field' && (parent==='SecondaryField'
             || (H.estack.length && H.estack[H.estack.length-1].k==='value_list'
                 && H.estack[H.estack.length-1]._vlSrc!=='Field'))){ }
-    else if(tbl){
-      const marker=(H.stepText && H.stepText.indexOf(tbl+'::'+FIELD_MISSING)!==-1)?FIELD_MISSING:UNKNOWN;
-      emitRef(ctx,'field',{fm:a.id,name:null,to:tbl,raw:tbl+'::'+marker}); }
-    else if(!(parent==='Step' && !('id' in a))){
-      const marker=(H.stepText && H.stepText.indexOf(TABLE_MISSING)!==-1)?TABLE_MISSING:UNKNOWN;
-      emitRef(ctx,'field',{fm:a.id,name:null,to:null,raw:marker}); }
+    else if(tbl || !(parent==='Step' && !('id' in a))) markerFieldRef(ctx,a.id,tbl);
     const qn=(tbl||'')+'::'+(nm||'');
     if(ctx==='join_predicate'){
       for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='relationship'){

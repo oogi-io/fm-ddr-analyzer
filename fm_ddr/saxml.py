@@ -1771,23 +1771,22 @@ class SaXMLHandler(_parse.DDRHandler):
                 self._field_ref("sort", slot, fr, fr["to"])
         elif self._step is not None and slot == "Parameter":
             self._step_field("step_target", fr)      # Set Field, Go to Field, ...
-        elif self._step is not None and slot == "find":
-            # v1.15.1: a stored find request's field (FindRequestSet), as
-            # the DDR's Query/Criteria; the DDR writes no repetition there,
-            # so neither does target_raw; an empty name emits nothing
-            if fr["name"]:
-                self._step_ref("find_request", "field", fm_id=fr["id"], name=fr["name"],
-                               to_name=fr["to"], raw=(fr["to"] or "") + "::" + fr["name"])
         elif self._step is not None and (
-                (slot == "Map" and self._map_kind != "1")
+                slot == "find" or (slot == "Map" and self._map_kind != "1")
                 or (slot == "Field" and anc3 == "Order")):
-            # v1.15.1: Import Records' mapped fields (kind 1 = "not import
-            # to": no usage) and Export Records' field order, as the DDR's
-            # TargetFields and ExportEntries; an empty name emits nothing
-            if fr["name"]:
-                ctx = "import_field" if slot == "Map" else "export_field"
-                self._step_ref(ctx, "field", fm_id=fr["id"], name=fr["name"],
-                               to_name=fr["to"], raw=(fr["to"] or "") + "::" + fr["name"])
+            # v1.15.1: a stored find request's field (FindRequestSet), an
+            # Import Records mapped field (kind 1 = "not import to": no
+            # usage) and Export Records' field order, as the DDR's Criteria,
+            # TargetFields and ExportEntries. An Import map with id 0 and no
+            # name emits nothing (the DDR's optional slot); everything else
+            # is the step field rule, markers and external files included.
+            # The export writes no Restore for these steps, so a stale
+            # request counts here (COVERAGE.md); no repetition in raw, as
+            # the DDR writes none in a criterion
+            if not (slot == "Map" and not fr["name"] and fr["id"] == "0"):
+                ctx = ("find_request" if slot == "find"
+                       else "import_field" if slot == "Map" else "export_field")
+                self._step_field(ctx, fr)
         elif (self._step is not None and slot == "PrimaryField"
               and anc3 == "Sort"):
             self._step_field("sort", fr)             # Sort Records

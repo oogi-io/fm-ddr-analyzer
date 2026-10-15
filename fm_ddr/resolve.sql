@@ -392,7 +392,8 @@ JOIN entities t ON t.file_id = r.file_id AND t.kind = 'table_occurrence'
      AND t.name = r.target_to_name AND json_extract(t.extra_json, '$.external') = 1
 LEFT JOIN entities se ON se.entity_id = r.source_entity_id
 LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
-WHERE r.context IN ('layout_object', 'step_target') AND r.target_kind = 'field'
+WHERE r.context IN ('layout_object', 'step_target', 'import_field', 'export_field',
+                    'find_request') AND r.target_kind = 'field'
   AND r.target_entity_id IS NULL AND r.target_raw IS NULL
 UNION ALL
 SELECT NULL, e.file_id,

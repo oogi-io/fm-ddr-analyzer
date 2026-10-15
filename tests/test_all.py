@@ -5478,8 +5478,9 @@ class TestVersionFlag(unittest.TestCase):
 
 FIXTURE_E = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_e.xml")
 
-# The Save a Copy as XML twin of micro_ddr_e.xml (no Match map and no
-# group-by: neither shape is in a measured export)
+# The Save a Copy as XML twin of micro_ddr_e.xml (no Match map, no group-by,
+# no deleted-TO export field: none of these shapes is in a measured export;
+# no Restore: the export writes none for these steps)
 SAXML_IMPORT_EXPORT = (
     '<BaseTableCatalog><BaseTable id="1" name="CUS"/></BaseTableCatalog>'
     '<TableOccurrenceCatalog>'
@@ -5496,6 +5497,7 @@ SAXML_IMPORT_EXPORT = (
     '<Field id="5" name="skipped" datatype="Text" fieldtype="Normal"/>'
     '<Field id="6" name="matchkey" datatype="Text" fieldtype="Normal"/>'
     '<Field id="7" name="disabledonly" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="9" name="stale" datatype="Text" fieldtype="Normal"/>'
     '</ObjectList></FieldCatalog></FieldsForTables>'
     '<ScriptCatalog><Script id="1" name="Import customers"/>'
     '<Script id="2" name="Export customers"/><Script id="3" name="Find customers"/>'
@@ -5505,7 +5507,7 @@ SAXML_IMPORT_EXPORT = (
     '<Step index="0" id="35" name="Import Records" enable="True"><ParameterValues>'
     '<Parameter type="ImportField"><ImportField addasnew="False">'
     '<Target><TableOccurrenceReference id="1" name="CUS"/></Target>'
-    '<Field membercount="4">'
+    '<Field membercount="5">'
     '<Map New="False" name="Source field 1 import to " index="1" id="1" kind="0" Options="0">'
     '<FieldReference id="1" name="id"><TableOccurrenceReference id="1" name="CUS"/>'
     '</FieldReference></Map>'
@@ -5518,12 +5520,18 @@ SAXML_IMPORT_EXPORT = (
     '<Map New="False" name="Source field 4 not import to " index="4" id="0" kind="1" Options="0">'
     '<FieldReference id="0" name=""><TableOccurrenceReference id="1" name="CUS"/>'
     '</FieldReference></Map>'
+    # an import arrow whose target field is gone: id 0, no name (synthetic)
+    '<Map New="False" name="Source field 5 import to " index="5" id="0" kind="0" Options="0">'
+    '<FieldReference id="0" name=""><TableOccurrenceReference id="1" name="CUS"/>'
+    '</FieldReference></Map>'
     '</Field></ImportField></Parameter></ParameterValues></Step>'
     '</ObjectList></Script>'
     '<Script><ScriptReference id="2" name="Export customers"/><ObjectList>'
     '<Step index="0" id="36" name="Export Records" enable="True"><ParameterValues>'
     '<Parameter type="Export"><Export><Order type="Group"></Order><Order type="Field">'
     '<Field value="1"><FieldReference id="3" name="email">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Field>'
+    '<Field value="2"><FieldReference id="8" name="">'
     '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Field>'
     '</Order></Export></Parameter></ParameterValues></Step>'
     '</ObjectList></Script>'
@@ -5600,11 +5608,47 @@ class TestImportExportFind(unittest.TestCase):
         self.assertEqual(self.refs("sax", "import_field"), want)
 
     def test_export_fields(self):
-        # The field order, and on the DDR the group-by field
+        # The field order, and on the DDR the group-by field; a field slot
+        # with no name is a deleted field, marked as in a step's <Field>
         want = [("Export customers", "CUS::email", "email", 0)]
-        self.assertEqual(self.refs("ddr", "export_field"),
-                         want + [("Export customers", "CUS_alt::total", "total", 0)])
-        self.assertEqual(self.refs("sax", "export_field"), want)
+        self.assertEqual(self.refs("ddr", "export_field"), want + [
+            ("Export customers", "<Table Missing>", None, 0),
+            ("Export customers", "CUS::<Field Missing>", None, 0),
+            ("Export customers", "CUS_alt::total", "total", 0)])
+        self.assertEqual(self.refs("sax", "export_field"),
+                         want + [("Export customers", "CUS::<unknown>", None, 0)])
+
+    def dangling(self, kind):
+        return self.q(kind, "SELECT context, marker, marker_class FROM v_dangling"
+                            " WHERE context IN ('import_field', 'export_field', 'find_request')"
+                            " ORDER BY ref_id")
+
+    def test_import_arrow_to_nothing_emits_nothing(self):
+        # An Import map with id 0 and no name (an arrow whose target field is
+        # gone) is an optional slot: no ref, no dangling row, on both inputs
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.q(kind, "SELECT COUNT(*) FROM refs WHERE"
+                                          " context = 'import_field' AND target_name IS NULL"),
+                             [(0,)], kind)
+
+    def test_marker_routing(self):
+        # A deleted TO (table="", step text <Table Missing>) and a deleted
+        # field (step text TO::<Field Missing>) are listed by v_dangling; the
+        # export without step text reads TO::<unknown>
+        self.assertEqual(self.dangling("ddr"), [
+            ("export_field", "<Table Missing>", "<Table Missing>"),
+            ("export_field", "CUS::<Field Missing>", "<Field Missing>")])
+        self.assertEqual(self.dangling("sax"), [
+            ("export_field", "CUS::<unknown>", "<unknown>")])
+
+    def test_restore_rule(self):
+        # A stored request counts only when its step restores it: a Perform
+        # Script button's leftover <Query> (no <Restore>) and a Perform Find
+        # with Restore off name "stale", which stays unused, unflagged
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs WHERE target_raw LIKE '%stale'"),
+                         [(0,)])
+        self.assertEqual(self.q("ddr", "SELECT name, only_disabled_refs FROM v_unused_fields"
+                                       " WHERE name = 'stale'"), [("stale", 0)])
 
     def test_unused_import_export(self):
         for kind in ("ddr", "sax"):

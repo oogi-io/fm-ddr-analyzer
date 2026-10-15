@@ -25,6 +25,9 @@
 				<Field id="7" dataType="Text" fieldType="Normal" name="disabledonly">
 					<Comment>Only a disabled Perform Find uses it</Comment>
 				</Field>
+				<Field id="9" dataType="Text" fieldType="Normal" name="stale">
+					<Comment>Only stale stored requests name it (a button with no Restore, a Perform Find with Restore off): unused</Comment>
+				</Field>
 			</FieldCatalog>
 		</BaseTable>
 	</BaseTableCatalog>
@@ -35,6 +38,29 @@
 		</TableList>
 		<RelationshipList/>
 	</RelationshipGraph>
+	<LayoutCatalog>
+		<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Customers">
+			<Table id="1" name="CUS"/>
+			<Object type="Button" key="1" LabelKey="0" name="btnFind" flags="0" rotation="0">
+				<Bounds top="10" left="10" bottom="30" right="120"/>
+				<ButtonObj buttonFlags="0" iconSize="16" displayType="4">
+					<Step enable="True" id="1" name="Perform Script"><StepText>Perform Script [ &#8220;Find customers&#8221; ]</StepText>
+						<DisableStepCollapsed state="False"/>
+						<CurrentScript value="Pause"/>
+						<Script id="3" name="Find customers"/>
+						<Query>
+							<RequestRow operation="Include">
+								<Criteria>
+									<Field tableId="1" table="CUS" id="9" name="stale"/>
+									<Text>left over</Text>
+								</Criteria>
+							</RequestRow>
+						</Query>
+					</Step>
+				</ButtonObj>
+			</Object>
+		</Layout>
+	</LayoutCatalog>
 	<ScriptCatalog>
 		<Script includeInMenu="True" runFullAccess="False" id="1" name="Import customers">
 			<StepList>
@@ -52,6 +78,7 @@
 						<Field FieldOptions="0" map="DoNotImport" id="5" name="skipped"/>
 						<Field FieldOptions="0" map="Match" id="6" name="matchkey"/>
 						<Field FieldOptions="0" map="DoNotImport" id="0" name=""/>
+						<Field FieldOptions="0" map="Import" id="0" name=""/>
 					</TargetFields>
 				</Step>
 			</StepList>
@@ -59,7 +86,7 @@
 		<Script includeInMenu="True" runFullAccess="False" id="2" name="Export customers">
 			<StepList>
 				<Step enable="True" id="36" name="Export Records">
-					<StepText>Export Records [ With dialog: Off; &#8220;customers.tab&#8221;; Field Order: CUS::email; Group By: CUS_alt::total ]</StepText>
+					<StepText>Export Records [ With dialog: Off; &#8220;customers.tab&#8221;; Field Order: CUS::email &lt;Table Missing&gt; CUS::&lt;Field Missing&gt;; Group By: CUS_alt::total ]</StepText>
 					<NoInteract state="True"/>
 					<Restore state="True"/>
 					<Profile FieldDelimiter="	" IsPredefined="-1" FieldNameRow="-1" DataType="TABS"/>
@@ -68,6 +95,12 @@
 					<ExportEntries>
 						<ExportEntry>
 							<Field table="CUS" id="3" name="email"/>
+						</ExportEntry>
+						<ExportEntry>
+							<Field table="" id="0" name=""/>
+						</ExportEntry>
+						<ExportEntry>
+							<Field table="CUS" id="8" name=""/>
 						</ExportEntry>
 					</ExportEntries>
 					<SummaryFields>
@@ -92,6 +125,18 @@
 							<Criteria>
 								<Field tableId="2" table="CUS_alt" id="3" name="email"/>
 								<Text>=</Text>
+							</Criteria>
+						</RequestRow>
+					</Query>
+				</Step>
+				<Step enable="True" id="28" name="Perform Find">
+					<StepText>Perform Find [  ]</StepText>
+					<Restore state="False"/>
+					<Query>
+						<RequestRow operation="Include">
+							<Criteria>
+								<Field tableId="1" table="CUS" id="9" name="stale"/>
+								<Text>old</Text>
 							</Criteria>
 						</RequestRow>
 					</Query>

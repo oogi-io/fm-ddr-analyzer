@@ -84,6 +84,7 @@ class DDRHandler(xml.sax.ContentHandler):
         self._step_text_cur = None             # the current step's StepText
         self._layout_dest_cur = None           # <LayoutDestination value>
         self._step_table_cur = None            # the step's <Table name> (Import Records)
+        self._step_restore_cur = None          # the step's <Restore state> (stored requests)
 
         self.ent_rows: list[tuple] = []
         self.ref_rows: list[tuple] = []
@@ -266,25 +267,35 @@ class DDRHandler(xml.sax.ContentHandler):
                           name=nm, raw=nm or UNKNOWN)
             return
 
-        # v1.15.1: Import Records' field mapping (<TargetFields>, the TO is
-        # the step's <Table>) and Export Records' field order and group-by
-        # fields. A DoNotImport map is no usage; an empty name emits nothing.
-        if tag == "Field" and a.get("name") and (
-                (parent == "TargetFields" and a.get("map") in ("Import", "Match"))
-                or parent in ("ExportEntry", "SummaryFields")):
-            ctx = "import_field" if parent == "TargetFields" else "export_field"
-            tbl = self._step_table_cur if parent == "TargetFields" else a.get("table")
-            self.emit_ref(ctx, "field", fm_id=a.get("id"), name=a["name"],
-                          to_name=tbl, raw=(tbl or "") + "::" + a["name"])
-            return
-
-        # v1.15.1: a stored find request's field (Perform Find, Constrain /
-        # Extend Found Set: Query/RequestRow/Criteria); an empty name emits
-        # nothing
-        if tag == "Field" and parent == "Criteria" and a.get("name"):
-            tbl = a.get("table")
-            self.emit_ref("find_request", "field", fm_id=a.get("id"), name=a["name"],
-                          to_name=tbl, raw=(tbl or "") + "::" + a["name"])
+        # v1.15.1: a step's stored request. Import Records' field mapping
+        # (<TargetFields>, the TO is the step's <Table>), Export Records'
+        # field order and group-by fields, a stored find request's fields
+        # (Query/RequestRow/Criteria). It counts only when the step restores
+        # it (<Restore state="True">, always written before the request): a
+        # Perform Script button keeps a stale <Query> with no <Restore>, a
+        # Perform Find with Restore off keeps its last request. A DoNotImport
+        # map is no usage; an Import map with id 0 and no name is an arrow
+        # whose target field is gone, an optional slot that emits nothing.
+        # Any other empty name takes the step field marker rule.
+        if tag == "Field" and parent in ("TargetFields", "ExportEntry",
+                                         "SummaryFields", "Criteria"):
+            if self._step_restore_cur != "True":
+                return
+            if parent == "TargetFields":
+                if a.get("map") not in ("Import", "Match"):
+                    return
+                if not a.get("name") and a.get("id") == "0":
+                    return
+                ctx, tbl = "import_field", self._step_table_cur
+            else:
+                ctx = "find_request" if parent == "Criteria" else "export_field"
+                tbl = a.get("table")
+            nm = a.get("name")
+            if nm:
+                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=nm,
+                              to_name=tbl, raw=(tbl or "") + "::" + nm)
+            else:
+                self._marker_field_ref(ctx, a.get("id"), tbl)
             return
 
         # v1.14.0: the "starting from" TO of a related-values value list
@@ -303,6 +314,9 @@ class DDRHandler(xml.sax.ContentHandler):
             self._step_text_cur = None
             self._layout_dest_cur = None
             self._step_table_cur = None
+            self._step_restore_cur = None
+        if tag == "Restore" and parent == "Step":
+            self._step_restore_cur = a.get("state")
         if tag == "LayoutDestination":
             self._layout_dest_cur = a.get("value")
             return
@@ -507,17 +521,8 @@ class DDRHandler(xml.sax.ContentHandler):
                         and self.entity_stack[-1]["kind"] == "value_list"
                         and self.entity_stack[-1].get("_vl_source") != "Field")):
                 pass
-            elif tbl:
-                marker = (FIELD_MISSING if self._step_text_cur
-                          and (tbl + "::" + FIELD_MISSING) in self._step_text_cur
-                          else UNKNOWN)
-                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
-                              to_name=tbl, raw=tbl + "::" + marker)
-            elif not (parent == "Step" and "id" not in a):
-                marker = (TABLE_MISSING if self._step_text_cur
-                          and TABLE_MISSING in self._step_text_cur else UNKNOWN)
-                self.emit_ref(ctx, "field", fm_id=a.get("id"), name=None,
-                              to_name=None, raw=marker)
+            elif tbl or not (parent == "Step" and "id" not in a):
+                self._marker_field_ref(ctx, a.get("id"), tbl)
             qname = (tbl or "") + "::" + (nm or "")
             if ctx == "join_predicate":
                 # v1.10.0: record the predicate field pair on the relationship
@@ -705,6 +710,20 @@ class DDRHandler(xml.sax.ContentHandler):
                            else "calc")
                     self.emit_ref(ctx, "field", name=leaf, to_name=to, raw=text)
             # plain built-in FunctionRef / NoRef chunks are left to FTS search.
+
+    def _marker_field_ref(self, ctx, fm_id, tbl):
+        """A field slot with no name: a deleted field. With a TO it reads
+        TO::<Field Missing> when the step text says so, else TO::<unknown>;
+        with no TO <Table Missing> or <unknown>. Unresolved, in v_dangling."""
+        text = self._step_text_cur
+        if tbl:
+            marker = (FIELD_MISSING if text and (tbl + "::" + FIELD_MISSING) in text
+                      else UNKNOWN)
+            self.emit_ref(ctx, "field", fm_id=fm_id, name=None, to_name=tbl,
+                          raw=tbl + "::" + marker)
+        else:
+            marker = TABLE_MISSING if text and TABLE_MISSING in text else UNKNOWN
+            self.emit_ref(ctx, "field", fm_id=fm_id, name=None, to_name=None, raw=marker)
 
     def _finalize_entity(self, ent):
         import json as _j
