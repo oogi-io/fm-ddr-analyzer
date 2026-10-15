@@ -592,7 +592,9 @@ function consumeText(tag,attrs,text){
     // layout TEXT-object character runs (merge fields / merge formulas)
     if(src && src.k==='layout_object' && anc('TextObj'))
       (src._txt=src._txt||[]).push(text); }
-  else if(tag==='Name' && ptag()==='FieldObj'){ const [to,leaf]=splitQ(text);
+  else if(tag==='Name' && ptag()==='FieldObj'){ let [to,leaf]=splitQ(text);
+    // a repetition other than 1 is written Field[n]: the name resolves without it, raw keeps it
+    if(leaf) leaf=leaf.replace(/\[\d+\]$/,'');
     if(leaf) emitRef('layout_object','field',{name:leaf,to:to,raw:text}); }
   else if(tag==='Chunk'){ const ct=attrs&&attrs.type;
     if(ct==='CustomFunctionRef') emitRef('function_ref','custom_function',{name:text,raw:text});

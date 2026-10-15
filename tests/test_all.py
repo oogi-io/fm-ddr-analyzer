@@ -752,6 +752,15 @@ class TestJSParity(unittest.TestCase):
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_D], 13))
 
+    def test_parity_lab_ddr(self):
+        # The lab file's real DDR (UTF-16): a field object on repetition 3
+        # (FieldObj/Name "...Phone_r[3]") resolves in both parsers
+        lab = os.path.join(ROOT, "tests", "fixtures", "saxml_lab_ddr.xml")
+        db = os.path.join(self.tmp, "lab_parity.db")
+        build(lab, db, label="lab")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([lab], 13))
+
 
 @unittest.skipUnless(shutil.which("node"), "node not available")
 class TestViewerSaXMLRefusal(unittest.TestCase):
@@ -2845,12 +2854,12 @@ class TestSaXMLRules(unittest.TestCase):
             " WHERE r.context = ?", context))
 
     def test_object_refs(self):
-        # Field objects, the repetition suffix as the DDR writes it (its
-        # FieldObj/Name, so the name keeps [3] and stays unresolved as in
-        # the DDR), the portal, buttons, object and layout triggers
+        # Field objects, the repetition suffix in target_raw as the DDR
+        # writes it (its FieldObj/Name) and a bare name that resolves, the
+        # portal, buttons, object and layout triggers
         self.assertEqual(self.obj_refs("layout_object"), [
             ("2", "Name_First", "CUS__Customer::Name_First", 1, None),
-            ("4", "Phone_r[3]", "CUS__Customer::Phone_r[3]", 0, None),
+            ("4", "Phone_r", "CUS__Customer::Phone_r[3]", 1, None),
             ("8", "SoldOn", "CUS_SAL__Sale::SoldOn", 1, None),
         ])
         self.assertEqual(self.obj_refs("portal"),
@@ -3529,7 +3538,7 @@ class TestSaXMLLab3(unittest.TestCase):
             ("layout_object", "CUS__Customer::ID", 1),
             ("layout_object", "CUS__Customer::Name_Full_c", 1),
             ("layout_object", "CUS__Customer::Name_Last", 1),
-            ("layout_object", "CUS__Customer::Phone_r[2]", 0),
+            ("layout_object", "CUS__Customer::Phone_r[2]", 1),
             ("perform_script", "Target", 1),
         ])
 
@@ -4675,6 +4684,17 @@ class TestSaXMLLabPair(unittest.TestCase):
         self.assertEqual({k: norm(sax.get(k)) for k in with_text},
                          {k: norm(v) for k, v in with_text.items()})
         self.assertEqual({k for k, v in sax.items() if v}, set(with_text))
+
+    def test_repetition_field_object_resolves(self):
+        # A field object showing repetition 3: the DDR writes TO::Field[3],
+        # the export repetition="3". Both resolve to the field; the
+        # repetition stays in target_raw only
+        q = ("SELECT r.target_name, r.target_to_name, r.target_raw, t.kind, t.name"
+             " FROM refs r LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+             " WHERE r.context = 'layout_object' AND r.target_raw LIKE '%Phone_r%'")
+        want = [("Phone_r", "CUS__Customer", "CUS__Customer::Phone_r[3]", "field", "Phone_r")]
+        self.assertEqual(self.q("ddr", q), want)
+        self.assertEqual(self.q("sax", q), want)
 
     def test_auto_enter_as_ddr(self):
         # The DDR writes always_evaluate / overwrite_existing only for an

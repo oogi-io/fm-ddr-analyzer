@@ -9,12 +9,16 @@ calculation / step text is mirrored into an FTS5 index for text-fallback search.
 from __future__ import annotations
 
 import os
+import re
 import sqlite3
 import tempfile
 import xml.sax
 from datetime import datetime, timezone
 
 SCHEMA_PATH = os.path.join(os.path.dirname(__file__), "schema.sql")
+
+# A field object's repetition suffix in the DDR's FieldObj/Name ("Phone[3]")
+_REP_SUFFIX = re.compile(r"\[\d+\]$")
 
 # Entity kinds that a reference edge can be attributed to (the "source").
 # Ordered by preference: the nearest one on the stack wins.
@@ -659,6 +663,9 @@ class DDRHandler(xml.sax.ContentHandler):
                 src.setdefault("_text_runs", []).append(text)
         elif tag == "Name" and self.parent_tag() == "FieldObj":
             to, leaf = _split_qualified(text)
+            # A repetition other than 1 is written as Field[n]: the name
+            # resolves without it, target_raw keeps it
+            leaf = _REP_SUFFIX.sub("", leaf) if leaf else leaf
             if leaf:
                 self.emit_ref("layout_object", "field", name=leaf,
                               to_name=to, raw=text)

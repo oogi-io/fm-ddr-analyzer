@@ -1392,9 +1392,9 @@ class SaXMLHandler(_parse.DDRHandler):
             self._capture("Data")
 
     def _field_object(self, fr):
-        """A field object's field: TO::Field, [n] appended to the name when
-        the repetition is not 1 (the DDR's FieldObj/Name text, split as the
-        DDR splits it). No TO (or a deleted-TO marker): '<unknown>'. An empty
+        """A field object's field: TO::Field, [n] appended to target_raw when
+        the repetition is not 1 (the DDR's FieldObj/Name text); the name
+        stays bare so it resolves, as on the DDR. No TO (or a deleted-TO marker): '<unknown>'. An empty
         name through an external TO with no data source: a field in another
         file, unresolved; v_dangling lists it as unverifiable_xfile."""
         nm, to, rep = fr["name"], fr["to"], fr.get("rep")
@@ -1403,7 +1403,7 @@ class SaXMLHandler(_parse.DDRHandler):
             self.emit_ref("layout_object", "field", fm_id=fr["id"], name=None,
                           to_name=None, raw=_parse.UNKNOWN)
         elif nm:
-            self.emit_ref("layout_object", "field", fm_id=fr["id"], name=nm + suffix,
+            self.emit_ref("layout_object", "field", fm_id=fr["id"], name=nm,
                           to_name=to, raw=f"{to}::{nm}{suffix}")
         elif to in self._ext_empty_tos:
             self.emit_ref("layout_object", "field", fm_id=fr["id"], name=None,
