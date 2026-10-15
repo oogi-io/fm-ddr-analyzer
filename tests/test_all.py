@@ -5615,6 +5615,18 @@ class TestImportExportFind(unittest.TestCase):
         self.assertNotIn("matchkey", self.unused("ddr"))
         self.assertNotIn("total", self.unused("ddr"))
 
+    def test_find_requests(self):
+        # A stored find request's fields (find and omit rows alike); a
+        # disabled Perform Find's refs are disabled = 1
+        want = [("Find customers", "CUS::name", "name", 0),
+                ("Find customers", "CUS_alt::email", "email", 0),
+                ("Find customers", "CUS::disabledonly", "disabledonly", 1)]
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.refs(kind, "find_request"), want, kind)
+            only_disabled = self.q(kind, "SELECT name, only_disabled_refs FROM v_unused_fields"
+                                         " WHERE name = 'disabledonly'")
+            self.assertEqual(only_disabled, [("disabledonly", 1)], kind)
+
 
 if __name__ == "__main__":
     unittest.main()

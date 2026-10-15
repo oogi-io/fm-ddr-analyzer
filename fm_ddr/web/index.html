@@ -401,6 +401,10 @@ function onStart(tag,a){
     const imp=parent==='TargetFields', tbl=imp?H.stepTable:a.table;
     emitRef(imp?'import_field':'export_field','field',{fm:a.id,name:a.name,to:tbl,raw:(tbl||'')+'::'+a.name});
     return; }
+  // v1.15.1: a stored find request's field (Query/RequestRow/Criteria); an empty name emits nothing
+  if(tag==='Field' && parent==='Criteria' && a.name){
+    emitRef('find_request','field',{fm:a.id,name:a.name,to:a.table,raw:(a.table||'')+'::'+a.name});
+    return; }
   // v1.14.0: the "starting from" TO of a related-values value list; empty name = a TO this file lacks
   if(tag==='Table' && parent==='ShowRelated' && H.estack.length && H.estack[H.estack.length-1].k==='value_list'){
     const nm=a.name||null;
@@ -1083,7 +1087,7 @@ function initViewer(DATA){
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
     to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order',
     step_table:'step table',portal:'portal',value_list_context:'value list context',
-    part_break:'sub-summary break field',import_field:'import field',export_field:'export field'};
+    part_break:'sub-summary break field',import_field:'import field',export_field:'export field',find_request:'find request'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can

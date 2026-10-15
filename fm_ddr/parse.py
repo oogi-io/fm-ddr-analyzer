@@ -278,6 +278,15 @@ class DDRHandler(xml.sax.ContentHandler):
                           to_name=tbl, raw=(tbl or "") + "::" + a["name"])
             return
 
+        # v1.15.1: a stored find request's field (Perform Find, Constrain /
+        # Extend Found Set: Query/RequestRow/Criteria); an empty name emits
+        # nothing
+        if tag == "Field" and parent == "Criteria" and a.get("name"):
+            tbl = a.get("table")
+            self.emit_ref("find_request", "field", fm_id=a.get("id"), name=a["name"],
+                          to_name=tbl, raw=(tbl or "") + "::" + a["name"])
+            return
+
         # v1.14.0: the "starting from" TO of a related-values value list
         # (<ShowRelated value="True"><Table id name/>). An empty name is a TO
         # the file does not have (a cloned list): '<unknown>', in v_dangling.

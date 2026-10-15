@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS entities (
 --            Save a Copy as XML input only, the DDR has no Part element; v1.15.0)
 --          | import_field (an Import Records target field mapped Import or
 --            Match) | export_field (an Export Records field or group-by field)
+--            | find_request (a stored find request's field)
 --            (v1.15.1; source the step, or a button / menu item)
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
 --  lookup = the source field a looked-up value copies FROM; a field's full
