@@ -93,6 +93,13 @@ WHERE target_kind = 'field' AND target_raw LIKE 'CONTACT::email';
 -- tables (every table's `id`, `email`, ...). Qualify with the table occurrence
 -- (target_raw 'TO::field') or GROUP BY base_table unless you truly mean all of
 -- them. `Set Field` writes specifically: add AND context='step_target'.
+-- Writes including imports (v1.15.1): an Import Records mapped field writes,
+-- except a Match field (compared, not written; its step text reads
+-- "match with TO::field"):
+--   AND (context = 'step_target'
+--        OR (context = 'import_field' AND source_id NOT IN (
+--              SELECT entity_id FROM entities WHERE json_extract(extra_json, '$.step_text')
+--                     LIKE '%match with ' || v_usage.target_raw || '%')))
 ```
 
 Who **calls a script** (and via triggers)?

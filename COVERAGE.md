@@ -19,7 +19,7 @@ outputs as review lists, never as delete lists.
 | `value_list_field` | Field feeding a field-based value list | `PrimaryField`/`SecondaryField` inside `ValueList` |
 | `value_list_source` | Value list bound to a layout object | `ValueList` bindings outside the catalog |
 | `layout_object` entities (v1.3.0) | Every layout object as an entity: name, type, key, bounds, button launch step+params (`extra_json.step_text`), hide condition (`extra_json.hide_calc`), tooltip calc | `Object` elements inside `Layout`, nested |
-| `layout_object` | Field placed on a layout. A field object showing a repetition other than 1 keeps `[n]` in `target_raw` (`TO::Field[3]`, as the DDR writes it) and resolves by the bare name (v1.15.1; before, it stayed unresolved) | `FieldObj > Name`, `FieldReference` under `Layout` |
+| `layout_object` | Field placed on a layout. A field object showing a repetition other than 1 keeps `[n]` in `target_raw` (`TO::Field[3]`, as the DDR writes it) and resolves by the bare name: a trailing `[digits]` is stripped from the DDR's name (v1.15.1; before, it stayed unresolved; a field literally named `X[2]` would lose its match, none seen) | `FieldObj > Name`, `FieldReference` under `Layout` |
 | `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
 | `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
 | `perform_script` | Script called by a script step | `Script` reference elements |
@@ -31,9 +31,9 @@ outputs as review lists, never as delete lists.
 | `portal` (v1.14.0) | The table occurrence a portal shows. Source = the portal's layout object. Resolved by name within the file (the element carries no id). An empty key is a portal whose TO was deleted: `<unknown>`, see Dangling references | `TableAliasKey` under `PortalObj` |
 | `value_list_context` (v1.14.0) | The "starting from" table occurrence of a related-values value list. Source = the value list (`extra_json.show_related` stays as it was). Resolved by name within the file (`target_fm_id` kept). An empty name is `<unknown>`, see Dangling references | The `<Table id name/>` under `<ShowRelated value="True">` in the catalog |
 | `part_break` (v1.15.0, SaXML only) | A sub-summary part's break field ("when sorted by"). Source = the layout. A field used only to break a sub-summary is not "unused" on a SaXML index. A break field through a deleted TO arrives as `<Table Missing>::<unknown>` and is listed in `v_dangling`; through an external TO with no data source it stays unresolved with `target_raw` NULL. The DDR has no element for layout parts, so a DDR index never has this context | SaXML: the `FieldReference` under `Part/Definition` |
-| `import_field` (v1.15.1) | An Import Records target field mapped Import or Match. Source = the step (or the button / menu item). A DoNotImport map (SaXML `Map kind="1"`, "not import to") is no usage and emits nothing, nor does a map with no field (`id="0"`, empty name). The DDR names the target TO once, on the step's `<Table>`. A SaXML Match map is not yet measured; any kind other than 1 counts as a usage | DDR: `TargetFields/Field[@map]`; SaXML: `ImportField/Field/Map/FieldReference` |
-| `export_field` (v1.15.1) | An Export Records field (the field order) or group-by field. Source = the step. The SaXML group-by shape (`Order type="Group"`) is not yet measured with a field in it | DDR: `ExportEntries/ExportEntry/Field`, `SummaryFields/Field`; SaXML: `Export/Order/Field/FieldReference` |
-| `find_request` (v1.15.1) | A field in a stored find request (Perform Find, Constrain Found Set, Extend Found Set with Restore), find and omit rows alike. Source = the step. The DDR writes no repetition for a criterion, so `target_raw` carries none on either input; an empty name emits nothing | DDR: `Query/RequestRow/Criteria/Field`; SaXML: `FindRequestSet/FindRequest/find/FieldReference` |
+| `import_field` (v1.15.1) | An Import Records target field mapped Import or Match (Match is compared, not written). Source = the step (or the button / menu item). A DoNotImport map (SaXML `Map kind="1"`, "not import to") is no usage and emits nothing; an Import map with `id="0"` and no name is optional slot 6 (see Dangling references). The DDR names the target TO once, on the step's `<Table>`. Counted only when the step restores the request (below). A SaXML Match map is not yet measured; any kind other than 1 counts as a usage | DDR: `TargetFields/Field[@map]`; SaXML: `ImportField/Field/Map/FieldReference` |
+| `export_field` (v1.15.1) | An Export Records field (the field order) or group-by field (every `SummaryFields` field counts; only `GroupByFieldIsSelected="True"` has been seen). Source = the step (or the button). Counted only when the step restores the request (below). The SaXML group-by shape (`Order type="Group"`) is not yet measured with a field in it | DDR: `ExportEntries/ExportEntry/Field`, `SummaryFields/Field`; SaXML: `Export/Order/Field/FieldReference` |
+| `find_request` (v1.15.1) | A field in a stored find request (Perform Find, Constrain Found Set, Extend Found Set, Enter Find Mode), find and omit rows alike. Source = the step (or the button). **Restore rule (DDR):** an import, export or find ref counts only when its step has `<Restore state="True">`: a Perform Script button keeps a stale `<Query>` with no `<Restore>`, and a Perform Find with Restore off (step text `Perform Find [  ]`) keeps its last request; neither is a usage. **SaXML:** the export writes no Restore for a step that carries a request, so a stale request counts there (a known parity gap; not seen on a measured export). The DDR writes no repetition for a criterion, so `target_raw` carries none on either input | DDR: `Query/RequestRow/Criteria/Field`; SaXML: `FindRequestSet/FindRequest/find/FieldReference` |
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
 possible. Unresolvable targets stay `NULL` — usually **legitimately**:
@@ -162,7 +162,7 @@ DDR's marker arrives as `target_name = '<unknown>'`, fmsonar's rewrite leaves
 One rule for every reference slot, in both parsers: **an empty or missing name
 on a required slot is `<unknown>`; an empty name on an optional slot emits
 nothing.** The optional slots, each identified by the DDR's own convention, are
-exactly these five:
+exactly these six:
 
 1. a value list's `SecondaryField` (an unset second display field; the id is
    non-zero and plays no part);
@@ -176,14 +176,18 @@ exactly these five:
 5. a `<Layout>` whose step's `LayoutDestination` is `OriginalLayout`,
    `CurrentLayout`, `LayoutNameByCalc` or `LayoutNumberByCalc` (a runtime
    destination; the by-calc `<Calculation>` still lands in the step's
-   `calc_text`).
+   `calc_text`);
+6. an Import Records map `Import` (or Match) with `id="0"` and no name (an
+   import arrow whose target field is gone: the step text says `import to ;`)
+   (v1.15.1, both inputs; the SaXML shape `Map kind="0" id="0"` is synthetic).
 
 Everything else with an empty name is a deleted target and emits an
 unresolved ref: a step field with an id and no name reads `<Table Missing>`
 when the step text carries that literal, else `<unknown>`; a field with a
 table and no name reads `TO::<Field Missing>` when the step text carries that
 literal, else `TO::<unknown>` (sort criteria in steps, portals and
-relationships, join predicates); a `<Layout>` with any other destination reads
+relationships, join predicates; since v1.15.1 also `import_field`, whose TO is
+the step's `<Table>`, `export_field` and `find_request`); a `<Layout>` with any other destination reads
 `<unknown>`; a `<Script>` with a non-zero id and no name reads `<unknown>`; a
 table occurrence slot with no name reads `<unknown>` **whatever the id**: a
 layout's context `<Table>`, a step's `<Table>` (the step text says `From
@@ -657,7 +661,9 @@ prints one line and continues). Views added per version: `v_cascades`
 `value_list_context` refs, the `<unknown>` field objects and the menu flags
 (1.14.0), SaXML input with `ddr_run.source_format` and `source_version`, the
 per-object UUID keys in `extra_json`, the `unverifiable_xfile` context of
-`v_dangling` and the SaXML-only `part_break` context (1.15.0). For 1.16.0: a `text_mention`
+`v_dangling` and the SaXML-only `part_break` context (1.15.0), the `import_field`,
+`export_field` and `find_request` contexts and resolved repeating-field
+objects (1.15.1: `v_unused_fields` on an older index overstates unused). For 1.16.0: a `text_mention`
 ref counts as a use only when `target_entity_id IS NOT NULL`; an unresolved
 mention never does.
 

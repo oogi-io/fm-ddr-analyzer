@@ -80,7 +80,11 @@ per file, listed by `stats`). Before comparing a SaXML index with a DDR index, r
   function_ref, layout_context` (a layout's own context TO; unresolved =
   the TO was deleted), and since v1.14.0 `step_table` (the TO a Go to Related
   Record or Import Records step acts on), `portal` (the TO a portal shows) and
-  `value_list_context` (the "starting from" TO of a related-values list); an
+  `value_list_context` (the "starting from" TO of a related-values list), and
+  since v1.15.1 `import_field` (an Import Records target field mapped Import
+  or Match), `export_field` (an Export Records field or group-by field) and
+  `find_request` (a field in a stored find request), each counted only when
+  its step restores the request (`<Restore state="True">`, DDR); an
   empty name on any of these is `<unknown>` in `v_dangling`, as is a layout
   field object whose field is gone (`layout_object` to `field`, `<unknown>`).
 - **`files`** — one row per FileMaker file in a multi-file solution.
@@ -147,8 +151,8 @@ index before crediting them in the merge.
   say so when those rows matter to the answer.
 - Built-in FileMaker functions are deliberately NOT edges; find them via FTS.
 - **The index is a model, not the whole DDR.** Auto-enter/validation details,
-  layout geometry, custom-menu internals, and import/export orders are not
-  extracted. For questions outside the model, say so and read the original
+  layout geometry and custom-menu internals are not extracted (import/export
+  field orders and stored find requests are, since v1.15.1). For questions outside the model, say so and read the original
   DDR XML directly (stream it - it is large UTF-16-LE) rather than guessing.
 
 ## Practical notes
