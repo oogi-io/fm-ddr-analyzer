@@ -246,7 +246,10 @@ writes to — e.g. Set Field), `join_predicate`, `perform_script`, `go_to_layout
 `value_list_field`, `sort`, `to_reference`, `function_ref`, `layout_context`
 (a layout's own context table occurrence, v1.12.0), `step_table`, `portal`,
 `value_list_context` (the table occurrence a step acts on, a portal shows, a
-related-values list starts from, v1.14.0).
+related-values list starts from, v1.14.0), `part_break` (a sub-summary part's
+break field, Save a Copy as XML only, v1.15.0), `import_field`, `export_field`,
+`find_request` (an Import Records mapped field, an Export Records field, a
+field in a stored find request, v1.15.1).
 
 ### How references resolve
 

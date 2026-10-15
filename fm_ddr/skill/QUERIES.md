@@ -97,9 +97,12 @@ WHERE target_kind = 'field' AND target_raw LIKE 'CONTACT::email';
 -- except a Match field (compared, not written; its step text reads
 -- "match with TO::field"):
 --   AND (context = 'step_target'
---        OR (context = 'import_field' AND source_id NOT IN (
---              SELECT entity_id FROM entities WHERE json_extract(extra_json, '$.step_text')
---                     LIKE '%match with ' || v_usage.target_raw || '%')))
+--        OR (context = 'import_field' AND NOT EXISTS (
+--              SELECT 1 FROM entities s WHERE s.entity_id = v_usage.source_id
+--                AND (json_extract(s.extra_json, '$.step_text')
+--                       LIKE '%match with ' || v_usage.target_raw || ';%'
+--                     OR json_extract(s.extra_json, '$.step_text')
+--                       LIKE '%match with ' || v_usage.target_raw || ' ]%'))))
 ```
 
 Who **calls a script** (and via triggers)?
