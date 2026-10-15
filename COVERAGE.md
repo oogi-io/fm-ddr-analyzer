@@ -31,6 +31,8 @@ outputs as review lists, never as delete lists.
 | `portal` (v1.14.0) | The table occurrence a portal shows. Source = the portal's layout object. Resolved by name within the file (the element carries no id). An empty key is a portal whose TO was deleted: `<unknown>`, see Dangling references | `TableAliasKey` under `PortalObj` |
 | `value_list_context` (v1.14.0) | The "starting from" table occurrence of a related-values value list. Source = the value list (`extra_json.show_related` stays as it was). Resolved by name within the file (`target_fm_id` kept). An empty name is `<unknown>`, see Dangling references | The `<Table id name/>` under `<ShowRelated value="True">` in the catalog |
 | `part_break` (v1.15.0, SaXML only) | A sub-summary part's break field ("when sorted by"). Source = the layout. A field used only to break a sub-summary is not "unused" on a SaXML index. A break field through a deleted TO arrives as `<Table Missing>::<unknown>` and is listed in `v_dangling`; through an external TO with no data source it stays unresolved with `target_raw` NULL. The DDR has no element for layout parts, so a DDR index never has this context | SaXML: the `FieldReference` under `Part/Definition` |
+| `import_field` (v1.15.1) | An Import Records target field mapped Import or Match. Source = the step (or the button / menu item). A DoNotImport map (SaXML `Map kind="1"`, "not import to") is no usage and emits nothing, nor does a map with no field (`id="0"`, empty name). The DDR names the target TO once, on the step's `<Table>`. A SaXML Match map is not yet measured; any kind other than 1 counts as a usage | DDR: `TargetFields/Field[@map]`; SaXML: `ImportField/Field/Map/FieldReference` |
+| `export_field` (v1.15.1) | An Export Records field (the field order) or group-by field. Source = the step. The SaXML group-by shape (`Order type="Group"`) is not yet measured with a field in it | DDR: `ExportEntries/ExportEntry/Field`, `SummaryFields/Field`; SaXML: `Export/Order/Field/FieldReference` |
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
 possible. Unresolvable targets stay `NULL` — usually **legitimately**:
@@ -109,7 +111,6 @@ auto-enter calcs: `lookup_active=false`, ref `disabled=1`.
 | Detailed validation rules (unique, existing, range, strict type, not-empty) | Only validation *calcs* (and value-list bindings) are captured | inspect in FileMaker |
 | Fields/scripts named in **any calculated string** (`GetField`, `Evaluate`, script names built at runtime) | Same: text, not structure | `search` |
 | **Built-in function** usage as edges | Deliberately excluded (tens of thousands of `Get()` edges would drown the graph) | `search db "ExecuteSQL"` |
-| **Import/export field orders** | Not yet mapped | `search` |
 | The **table occurrence of a lookup** (`<Table>` under `<Lookup>`) as a TO reference | Only the source field is captured (`lookup` context, whose `target_to_name` keeps the TO off the unused list); `where <TO>` does not show the lookup | `search` |
 
 **Captured but easy to miss** (verified against a real solution, v1.9.1): conditional-formatting

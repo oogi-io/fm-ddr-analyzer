@@ -752,6 +752,15 @@ class TestJSParity(unittest.TestCase):
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([FIXTURE, FIXTURE_D], 13))
 
+    def test_parity_import_export_find(self):
+        # v1.15.1: Import Records mappings, Export Records orders and stored
+        # find requests, edge by edge
+        fx = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_e.xml")
+        db = os.path.join(self.tmp, "e_parity.db")
+        build(fx, db, label="e")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([fx], 13))
+
     def test_parity_lab_ddr(self):
         # The lab file's real DDR (UTF-16): a field object on repetition 3
         # (FieldObj/Name "...Phone_r[3]") resolves in both parsers
@@ -5465,6 +5474,146 @@ class TestVersionFlag(unittest.TestCase):
                 main([flag])
             self.assertEqual(cm.exception.code, 0)
             self.assertEqual(out.getvalue(), f"fmsonar {__version__}\n")
+
+
+FIXTURE_E = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_e.xml")
+
+# The Save a Copy as XML twin of micro_ddr_e.xml (no Match map and no
+# group-by: neither shape is in a measured export)
+SAXML_IMPORT_EXPORT = (
+    '<BaseTableCatalog><BaseTable id="1" name="CUS"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="CUS" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="CUS"/></BaseTableSourceReference></TableOccurrence>'
+    '<TableOccurrence id="2" name="CUS_alt" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="CUS"/></BaseTableSourceReference></TableOccurrence>'
+    '</TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="CUS"/><ObjectList>'
+    '<Field id="1" name="id" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="2" name="name" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="3" name="email" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="4" name="total" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="5" name="skipped" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="6" name="matchkey" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="7" name="disabledonly" datatype="Text" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="Import customers"/>'
+    '<Script id="2" name="Export customers"/><Script id="3" name="Find customers"/>'
+    '</ScriptCatalog>'
+    '<StepsForScripts>'
+    '<Script><ScriptReference id="1" name="Import customers"/><ObjectList>'
+    '<Step index="0" id="35" name="Import Records" enable="True"><ParameterValues>'
+    '<Parameter type="ImportField"><ImportField addasnew="False">'
+    '<Target><TableOccurrenceReference id="1" name="CUS"/></Target>'
+    '<Field membercount="4">'
+    '<Map New="False" name="Source field 1 import to " index="1" id="1" kind="0" Options="0">'
+    '<FieldReference id="1" name="id"><TableOccurrenceReference id="1" name="CUS"/>'
+    '</FieldReference></Map>'
+    '<Map New="False" name="Source field 2 import to " index="2" id="2" kind="0" Options="0">'
+    '<FieldReference id="2" name="name"><TableOccurrenceReference id="1" name="CUS"/>'
+    '</FieldReference></Map>'
+    '<Map New="False" name="Source field 3 not import to " index="3" id="5" kind="1" Options="0">'
+    '<FieldReference id="5" name="skipped"><TableOccurrenceReference id="1" name="CUS"/>'
+    '</FieldReference></Map>'
+    '<Map New="False" name="Source field 4 not import to " index="4" id="0" kind="1" Options="0">'
+    '<FieldReference id="0" name=""><TableOccurrenceReference id="1" name="CUS"/>'
+    '</FieldReference></Map>'
+    '</Field></ImportField></Parameter></ParameterValues></Step>'
+    '</ObjectList></Script>'
+    '<Script><ScriptReference id="2" name="Export customers"/><ObjectList>'
+    '<Step index="0" id="36" name="Export Records" enable="True"><ParameterValues>'
+    '<Parameter type="Export"><Export><Order type="Group"></Order><Order type="Field">'
+    '<Field value="1"><FieldReference id="3" name="email">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Field>'
+    '</Order></Export></Parameter></ParameterValues></Step>'
+    '</ObjectList></Script>'
+    '<Script><ScriptReference id="3" name="Find customers"/><ObjectList>'
+    '<Step index="0" id="28" name="Perform Find" enable="True"><ParameterValues>'
+    '<Parameter type="FindRequest"><FindRequestSet membercount="2">'
+    '<FindRequest membercount="1" action="find" index="1"><find criteria="0">'
+    '<FieldReference id="2" name="name" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></find></FindRequest>'
+    '<FindRequest membercount="1" action="omit" index="2"><find criteria="0">'
+    '<FieldReference id="3" name="email" repetition="1">'
+    '<TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference></find></FindRequest>'
+    '</FindRequestSet></Parameter></ParameterValues></Step>'
+    '<Step index="1" id="28" name="Perform Find" enable="False"><ParameterValues>'
+    '<Parameter type="FindRequest"><FindRequestSet membercount="1">'
+    '<FindRequest membercount="1" action="find" index="1"><find criteria="0">'
+    '<FieldReference id="7" name="disabledonly" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></find></FindRequest>'
+    '</FindRequestSet></Parameter></ParameterValues></Step>'
+    '</ObjectList></Script>'
+    '</StepsForScripts>' + SAXML_TAIL)
+
+
+class TestImportExportFind(unittest.TestCase):
+    """Import Records field mappings, Export Records field orders and stored
+    find requests are field usages, on the DDR (micro_ddr_e.xml) and on its
+    Save a Copy as XML twin."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_iefind_")
+        sax = os.path.join(cls.tmp, "e_saxml.xml")
+        with open(sax, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_IMPORT_EXPORT)
+        cls.dbs = {}
+        for kind, src in (("ddr", FIXTURE_E), ("sax", sax)):
+            db = os.path.join(cls.tmp, kind + ".db")
+            with contextlib.redirect_stderr(io.StringIO()):
+                build(src, db, label=kind)
+            cls.dbs[kind] = db
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, kind, sql):
+        conn = sqlite3.connect(self.dbs[kind])
+        try:
+            return conn.execute(sql).fetchall()
+        finally:
+            conn.close()
+
+    def refs(self, kind, context):
+        return self.q(kind,
+            "SELECT p.name, r.target_raw, t.name, r.disabled FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " JOIN entities p ON p.entity_id = s.parent_entity_id"
+            " LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+            f" WHERE r.context = '{context}' ORDER BY r.ref_id")
+
+    def unused(self, kind):
+        return [r[0] for r in self.q(kind, "SELECT name FROM v_unused_fields ORDER BY name")]
+
+    def test_import_fields(self):
+        # Import and Match maps are usages; a DoNotImport map (and its empty
+        # row) emits nothing. The DDR names the TO once, on the step's
+        # <Table>; the export names it on every map
+        want = [("Import customers", "CUS::id", "id", 0),
+                ("Import customers", "CUS::name", "name", 0)]
+        self.assertEqual(self.refs("ddr", "import_field"),
+                         want + [("Import customers", "CUS::matchkey", "matchkey", 0)])
+        self.assertEqual(self.refs("sax", "import_field"), want)
+
+    def test_export_fields(self):
+        # The field order, and on the DDR the group-by field
+        want = [("Export customers", "CUS::email", "email", 0)]
+        self.assertEqual(self.refs("ddr", "export_field"),
+                         want + [("Export customers", "CUS_alt::total", "total", 0)])
+        self.assertEqual(self.refs("sax", "export_field"), want)
+
+    def test_unused_import_export(self):
+        for kind in ("ddr", "sax"):
+            unused = self.unused(kind)
+            self.assertIn("skipped", unused)
+            for used in ("id", "email"):
+                self.assertNotIn(used, unused, kind)
+        self.assertNotIn("matchkey", self.unused("ddr"))
+        self.assertNotIn("total", self.unused("ddr"))
 
 
 if __name__ == "__main__":

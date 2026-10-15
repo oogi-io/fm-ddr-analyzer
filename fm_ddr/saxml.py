@@ -673,6 +673,7 @@ class SaXMLHandler(_parse.DDRHandler):
         self._chunkless = set()      # (key, hash) of calculations with no list
         self._refless = set()        # keys whose every chunk list names nothing
         self._fref = None            # the open FieldReference
+        self._map_kind = None        # the open import Map's kind ("1" = not imported)
         self._side = None            # the open LeftTable / RightTable tag
         self._ext_empty = 0          # external TOs with no data source
         self._ext_empty_tos = set()  # their names
@@ -1740,6 +1741,9 @@ class SaXMLHandler(_parse.DDRHandler):
                       "to": None, "slot": self.parent_tag(),
                       "rep": a.get("repetition")}
 
+    def _start_Map(self, a):
+        self._map_kind = a.get("kind")
+
     def _end_FieldReference(self):
         fr, self._fref = self._fref, None
         if fr is None:
@@ -1767,6 +1771,16 @@ class SaXMLHandler(_parse.DDRHandler):
                 self._field_ref("sort", slot, fr, fr["to"])
         elif self._step is not None and slot == "Parameter":
             self._step_field("step_target", fr)      # Set Field, Go to Field, ...
+        elif self._step is not None and (
+                (slot == "Map" and self._map_kind != "1")
+                or (slot == "Field" and anc3 == "Order")):
+            # v1.15.1: Import Records' mapped fields (kind 1 = "not import
+            # to": no usage) and Export Records' field order, as the DDR's
+            # TargetFields and ExportEntries; an empty name emits nothing
+            if fr["name"]:
+                ctx = "import_field" if slot == "Map" else "export_field"
+                self._step_ref(ctx, "field", fm_id=fr["id"], name=fr["name"],
+                               to_name=fr["to"], raw=(fr["to"] or "") + "::" + fr["name"])
         elif (self._step is not None and slot == "PrimaryField"
               and anc3 == "Sort"):
             self._step_field("sort", fr)             # Sort Records

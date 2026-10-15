@@ -83,6 +83,7 @@ class DDRHandler(xml.sax.ContentHandler):
         # cleared when it closes; steps never nest, so one pair serves all.
         self._step_text_cur = None             # the current step's StepText
         self._layout_dest_cur = None           # <LayoutDestination value>
+        self._step_table_cur = None            # the step's <Table name> (Import Records)
 
         self.ent_rows: list[tuple] = []
         self.ref_rows: list[tuple] = []
@@ -260,8 +261,21 @@ class DDRHandler(xml.sax.ContentHandler):
         # <unknown>"): '<unknown>', id kept, unresolved, in v_dangling.
         if tag == "Table" and parent == "Step":
             nm = a.get("name") or None
+            self._step_table_cur = nm
             self.emit_ref("step_table", "table_occurrence", fm_id=a.get("id"),
                           name=nm, raw=nm or UNKNOWN)
+            return
+
+        # v1.15.1: Import Records' field mapping (<TargetFields>, the TO is
+        # the step's <Table>) and Export Records' field order and group-by
+        # fields. A DoNotImport map is no usage; an empty name emits nothing.
+        if tag == "Field" and a.get("name") and (
+                (parent == "TargetFields" and a.get("map") in ("Import", "Match"))
+                or parent in ("ExportEntry", "SummaryFields")):
+            ctx = "import_field" if parent == "TargetFields" else "export_field"
+            tbl = self._step_table_cur if parent == "TargetFields" else a.get("table")
+            self.emit_ref(ctx, "field", fm_id=a.get("id"), name=a["name"],
+                          to_name=tbl, raw=(tbl or "") + "::" + a["name"])
             return
 
         # v1.14.0: the "starting from" TO of a related-values value list
@@ -279,6 +293,7 @@ class DDRHandler(xml.sax.ContentHandler):
         if tag == "Step":
             self._step_text_cur = None
             self._layout_dest_cur = None
+            self._step_table_cur = None
         if tag == "LayoutDestination":
             self._layout_dest_cur = a.get("value")
             return

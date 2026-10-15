@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-10-15" type="Report" version="99.9.9">
+<File name="MicroE.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="2" name="CUS">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="id">
+					<Comment>Import Records maps it (Import)</Comment>
+				</Field>
+				<Field id="2" dataType="Text" fieldType="Normal" name="name">
+					<Comment>Import Records maps it (Import); a stored find request</Comment>
+				</Field>
+				<Field id="3" dataType="Text" fieldType="Normal" name="email">
+					<Comment>Exported; a stored find request through CUS_alt</Comment>
+				</Field>
+				<Field id="4" dataType="Number" fieldType="Normal" name="total">
+					<Comment>Export group-by field only</Comment>
+				</Field>
+				<Field id="5" dataType="Text" fieldType="Normal" name="skipped">
+					<Comment>Listed by Import Records as DoNotImport: no usage</Comment>
+				</Field>
+				<Field id="6" dataType="Text" fieldType="Normal" name="matchkey">
+					<Comment>Import Records match field</Comment>
+				</Field>
+				<Field id="7" dataType="Text" fieldType="Normal" name="disabledonly">
+					<Comment>Only a disabled Perform Find uses it</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="CUS" name="CUS"/>
+			<Table id="2" color="#CCBBAA" baseTableId="1" baseTable="CUS" name="CUS_alt"/>
+		</TableList>
+		<RelationshipList/>
+	</RelationshipGraph>
+	<ScriptCatalog>
+		<Script includeInMenu="True" runFullAccess="False" id="1" name="Import customers">
+			<StepList>
+				<Step enable="True" id="35" name="Import Records">
+					<StepText>Import Records [ With dialog: Off; Source: &#8220;customers.fmp12&#8221;; Target: &#8220;CUS&#8221;; Method: Update matching; Field Mapping: Source field 1 import to CUS::id; Source field 2 import to CUS::name; Source field 3 not import to CUS::skipped; Source field 4 match with CUS::matchkey ]</StepText>
+					<NoInteract state="True"/>
+					<Restore state="True"/>
+					<DataSourceType value="File"/>
+					<UniversalPathList>customers.fmp12</UniversalPathList>
+					<ImportOptions CharacterSet="Macintosh" MatchFieldNames="True" AutoEnter="False" method="UpdateMatching"/>
+					<Table id="1" name="CUS"/>
+					<TargetFields>
+						<Field FieldOptions="0" map="Import" id="1" name="id"/>
+						<Field FieldOptions="0" map="Import" id="2" name="name"/>
+						<Field FieldOptions="0" map="DoNotImport" id="5" name="skipped"/>
+						<Field FieldOptions="0" map="Match" id="6" name="matchkey"/>
+						<Field FieldOptions="0" map="DoNotImport" id="0" name=""/>
+					</TargetFields>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" runFullAccess="False" id="2" name="Export customers">
+			<StepList>
+				<Step enable="True" id="36" name="Export Records">
+					<StepText>Export Records [ With dialog: Off; &#8220;customers.tab&#8221;; Field Order: CUS::email; Group By: CUS_alt::total ]</StepText>
+					<NoInteract state="True"/>
+					<Restore state="True"/>
+					<Profile FieldDelimiter="	" IsPredefined="-1" FieldNameRow="-1" DataType="TABS"/>
+					<UniversalPathList>customers.tab</UniversalPathList>
+					<ExportOptions ExportFieldNames="False" FormatUsingCurrentLayout="False" CharacterSet="UTF-8"/>
+					<ExportEntries>
+						<ExportEntry>
+							<Field table="CUS" id="3" name="email"/>
+						</ExportEntry>
+					</ExportEntries>
+					<SummaryFields>
+						<Field GroupByFieldIsSelected="True" table="CUS_alt" id="4" name="total"/>
+					</SummaryFields>
+				</Step>
+			</StepList>
+		</Script>
+		<Script includeInMenu="True" runFullAccess="False" id="3" name="Find customers">
+			<StepList>
+				<Step enable="True" id="28" name="Perform Find">
+					<StepText>Perform Find [ Restore ]</StepText>
+					<Restore state="True"/>
+					<Query>
+						<RequestRow operation="Include">
+							<Criteria>
+								<Field tableId="1" table="CUS" id="2" name="name"/>
+								<Text>A*</Text>
+							</Criteria>
+						</RequestRow>
+						<RequestRow operation="Exclude">
+							<Criteria>
+								<Field tableId="2" table="CUS_alt" id="3" name="email"/>
+								<Text>=</Text>
+							</Criteria>
+						</RequestRow>
+					</Query>
+				</Step>
+				<Step enable="False" id="28" name="Perform Find">
+					<StepText>Perform Find [ Restore ]</StepText>
+					<Restore state="True"/>
+					<Query>
+						<RequestRow operation="Include">
+							<Criteria>
+								<Field tableId="1" table="CUS" id="7" name="disabledonly"/>
+								<Text>x</Text>
+							</Criteria>
+						</RequestRow>
+					</Query>
+				</Step>
+			</StepList>
+		</Script>
+	</ScriptCatalog>
+</File>
+</FMPReport>

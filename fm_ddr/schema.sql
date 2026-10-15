@@ -100,6 +100,9 @@ CREATE TABLE IF NOT EXISTS entities (
 --            three resolve by name within the file, an empty name is '<unknown>')
 --          | part_break (a sub-summary part's break field, source the layout;
 --            Save a Copy as XML input only, the DDR has no Part element; v1.15.0)
+--          | import_field (an Import Records target field mapped Import or
+--            Match) | export_field (an Export Records field or group-by field)
+--            (v1.15.1; source the step, or a button / menu item)
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
 --  lookup = the source field a looked-up value copies FROM; a field's full
 --  dependency set is context IN ('calc','auto_enter','validation','lookup'))

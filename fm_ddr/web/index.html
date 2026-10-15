@@ -325,7 +325,7 @@ const H={
   cap:null, capAttrs:null, buf:[],
   trigEv:[], deadAE:false,
   // v1.13.0: per-step state (reset on ANY <Step>, cleared when it closes)
-  stepText:null, layoutDest:null,
+  stepText:null, layoutDest:null, stepTable:null,
 };
 function ptag(){ return H.tagstack.length>=2?H.tagstack[H.tagstack.length-2]:''; }
 function anc(t){ for(let k=0;k<H.tagstack.length-1;k++) if(H.tagstack[k]===t) return true; return false; }
@@ -391,8 +391,15 @@ function onStart(tag,a){
     return; }
   // v1.14.0: the TO a step acts on (Go to Related Record, Import Records); empty name = deleted TO
   if(tag==='Table' && parent==='Step'){
-    const nm=a.name||null;
+    const nm=a.name||null; H.stepTable=nm;
     emitRef('step_table','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
+    return; }
+  // v1.15.1: Import Records' field mapping (TO = the step's <Table>; DoNotImport is no usage)
+  // and Export Records' field order and group-by fields; an empty name emits nothing
+  if(tag==='Field' && a.name && ((parent==='TargetFields' && (a.map==='Import'||a.map==='Match'))
+                                 || parent==='ExportEntry' || parent==='SummaryFields')){
+    const imp=parent==='TargetFields', tbl=imp?H.stepTable:a.table;
+    emitRef(imp?'import_field':'export_field','field',{fm:a.id,name:a.name,to:tbl,raw:(tbl||'')+'::'+a.name});
     return; }
   // v1.14.0: the "starting from" TO of a related-values value list; empty name = a TO this file lacks
   if(tag==='Table' && parent==='ShowRelated' && H.estack.length && H.estack[H.estack.length-1].k==='value_list'){
@@ -400,7 +407,7 @@ function onStart(tag,a){
     emitRef('value_list_context','table_occurrence',{fm:a.id,name:nm,raw:nm||UNKNOWN});
     return; }
   // v1.13.0: per-step state; every <Step> (StepList, ButtonObj, GroupButtonObj, MenuItem) resets it
-  if(tag==='Step'){ H.stepText=null; H.layoutDest=null; }
+  if(tag==='Step'){ H.stepText=null; H.layoutDest=null; H.stepTable=null; }
   if(tag==='LayoutDestination'){ H.layoutDest=a.value!=null?a.value:null; return; }
   if(tag==='Step' && parent==='StepList'){
     let owner=null; for(let k=H.estack.length-1;k>=0;k--) if(H.estack[k].k==='script'){owner=H.estack[k];break;}
@@ -1076,7 +1083,7 @@ function initViewer(DATA){
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
     to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order',
     step_table:'step table',portal:'portal',value_list_context:'value list context',
-    part_break:'sub-summary break field'};
+    part_break:'sub-summary break field',import_field:'import field',export_field:'export field'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can
