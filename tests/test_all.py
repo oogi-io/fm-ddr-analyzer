@@ -5432,5 +5432,20 @@ class TestSaXMLDDRForms(unittest.TestCase):
         ])
 
 
+class TestVersionFlag(unittest.TestCase):
+    """--version and -V print the bare version on stdout and exit 0."""
+
+    def test_version_flags(self):
+        import io, contextlib
+        from fm_ddr import __version__
+        from fm_ddr.cli import main
+        for flag in ("--version", "-V"):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
+                main([flag])
+            self.assertEqual(cm.exception.code, 0)
+            self.assertEqual(out.getvalue(), f"fmsonar {__version__}\n")
+
+
 if __name__ == "__main__":
     unittest.main()

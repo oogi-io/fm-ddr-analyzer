@@ -1242,6 +1242,9 @@ def main(argv=None):
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--debug", action="store_true",
                    help="show the full Python traceback on error")
+    from fm_ddr import __version__
+    p.add_argument("-V", "--version", action="version",
+                   version=f"fmsonar {__version__}")
     sub = p.add_subparsers(dest="cmd")
 
     b = sub.add_parser("build",
