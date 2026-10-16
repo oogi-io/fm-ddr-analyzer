@@ -25,11 +25,15 @@ CREATE TABLE IF NOT EXISTS ddr_run (
                                 -- before these columns): DDRREF elements read
     ddrinfo_missing_steps INTEGER,  -- of those, steps whose DDR_INFO entry is
                                     -- absent: no step text
-    ddrinfo_missing_calcs INTEGER   -- calculations whose chunk list is absent: no
+    ddrinfo_missing_calcs INTEGER,  -- calculations whose chunk list is absent: no
                                     -- field or custom function references; one per
                                     -- distinct (key, hash) pair, not per DDRREF; a key
                                     -- whose list under another hash names nothing
                                     -- is not counted (nothing lost)
+    build_key     TEXT          -- v1.16.0: SHA-256 over the fmsonar version and the
+                                -- SHA-256 of each source's bytes, in build order; `build`
+                                -- skips when -o holds the same key. NULL on an older
+                                -- index (never skipped)
 );
 
 -- One FileMaker file within a run (a solution can span several files).

@@ -6246,5 +6246,121 @@ class TestButtonLabelMergeFields(Test116Base):
             self.assertNotIn("", raws, os.path.basename(path))
 
 
+
+class TestUnchangedSkip(unittest.TestCase):
+    """v1.16.0 D5: `build` keeps an index whose build_key (fmsonar version +
+    source bytes) equals the one it would write, says Unchanged: and ends in
+    Done: with the two resolution lines; anything else builds."""
+
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp(prefix="fmddr_skip_")
+        self.src = os.path.join(self.tmp, "MicroF_fmp12.xml")
+        shutil.copy(FIXTURE_F, self.src)
+        self.out = os.path.join(self.tmp, "f.db")
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp, ignore_errors=True)
+
+    def run_cli(self, *argv):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            main(list(argv))
+        return out.getvalue(), err.getvalue()
+
+    def build(self, *extra, src=None):
+        return self.run_cli("build", src or self.src, "-o", self.out, *extra)
+
+    def skipped(self, result):
+        return "Unchanged:" in result[1]
+
+    def edit_same_size(self, path, old, new):
+        assert len(old) == len(new)
+        data = open(path, "rb").read()
+        assert data.count(old) >= 1
+        open(path, "wb").write(data.replace(old, new, 1))
+
+    def test_same_bytes_skip(self):
+        self.build("--label", "first")
+        conn = sqlite3.connect(self.out)
+        refs, res = conn.execute("SELECT COUNT(*), COUNT(target_entity_id) FROM refs").fetchone()
+        built = conn.execute("SELECT parsed_at FROM ddr_run").fetchone()[0]
+        conn.close()
+        out, err = self.build()
+        self.assertEqual(out, f"Done: {self.out}\n  {'_refs':24s} {refs}\n"
+                              f"  {'_refs_resolved':24s} {res}\n")
+        self.assertEqual(err, f"Unchanged: {self.out} is the build of {built} from the same"
+                              ' source by the same fmsonar (label "first"); not rebuilt'
+                              " (--rebuild builds anyway).\n")
+        # another label: the same bytes, the same build; the index keeps its own
+        out, err = self.build("--label", "second")
+        self.assertIn('(label "first")', err)
+        conn = sqlite3.connect(self.out)
+        self.assertEqual(conn.execute("SELECT label FROM ddr_run").fetchone(), ("first",))
+        conn.close()
+
+    def test_changed_bytes_build(self):
+        self.build()
+        self.edit_same_size(self.src, b'name="Customers"', b'name="Customerz"')
+        result = self.build()
+        self.assertFalse(self.skipped(result))
+        self.assertIn("Parsing 1 file(s)", result[1])
+
+    def test_summary_sibling_change_builds(self):
+        other = os.path.join(self.tmp, "MicroE_fmp12.xml")
+        shutil.copy(FIXTURE_E, other)
+        summary = os.path.join(self.tmp, "Summary.xml")
+        with open(summary, "w") as f:
+            f.write('<?xml version="1.0"?><FMPReport type="Summary">'
+                    '<File link="MicroF_fmp12.xml"/><File link="MicroE_fmp12.xml"/>'
+                    '</FMPReport>')
+        self.build(src=summary)
+        self.assertTrue(self.skipped(self.build(src=summary)))
+        self.edit_same_size(other, b'name="Customers"', b'name="Customerz"')
+        self.assertFalse(self.skipped(self.build(src=summary)))
+
+    def test_other_version_builds(self):
+        self.build()
+        with mock.patch("fm_ddr.__version__", "0.0.0-other"):
+            self.assertFalse(self.skipped(self.build()))
+        # the index now holds the other version's key
+        self.assertFalse(self.skipped(self.build()))
+
+    def test_rebuild_flag_builds(self):
+        self.build()
+        result = self.build("--rebuild")
+        self.assertFalse(self.skipped(result))
+        self.assertIn("Parsing", result[1])
+
+    def test_older_index_never_skips(self):
+        self.build()
+        conn = sqlite3.connect(self.out)
+        conn.execute("UPDATE ddr_run SET build_key = NULL")
+        conn.commit()
+        conn.close()
+        self.assertFalse(self.skipped(self.build()))
+
+    def test_not_an_index_builds(self):
+        with open(self.out, "w") as f:
+            f.write("not a database")
+        with self.assertRaises(SystemExit):
+            self.build()
+        result = self.build("--force")
+        self.assertFalse(self.skipped(result))
+
+    def test_skip_refreshes_list(self):
+        # a copied or touched source reads "newer than index" in `list`; the
+        # skip records a fresh build time, so `list` stops flagging it
+        self.build()
+        conn = sqlite3.connect(self.out)
+        conn.execute("UPDATE ddr_run SET parsed_at = '2000-01-01T00:00:00+00:00'")
+        conn.commit()
+        conn.close()
+        self.assertIn("source newer than index", self.run_cli("list", self.tmp)[0])
+        self.assertTrue(self.skipped(self.build()))
+        self.assertNotIn("source newer than index", self.run_cli("list", self.tmp)[0])
+
+
 if __name__ == "__main__":
     unittest.main()

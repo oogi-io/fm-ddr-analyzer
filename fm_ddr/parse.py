@@ -1035,6 +1035,59 @@ def expand_summary(path: str) -> list[str] | None:
     return out
 
 
+def expand_paths(paths) -> list[str]:
+    """The source list a build reads: a single Summary.xml manifest becomes
+    the DDR files it links; anything else is returned as given."""
+    if isinstance(paths, str):
+        paths = [paths]
+    if len(paths) == 1:
+        linked = expand_summary(paths[0])
+        if linked:
+            return linked
+    return list(paths)
+
+
+def build_key(paths) -> str:
+    """v1.16.0: the key of a build, SHA-256 over the fmsonar version and the
+    SHA-256 of each source's bytes, in order. No path, label or mtime: a
+    copied index or a relabelled build of the same bytes is the same build."""
+    import hashlib
+    key = hashlib.sha256(f"fmsonar {_parser_version()}\n".encode())
+    for p in paths:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for chunk in iter(lambda: f.read(1 << 20), b""):
+                h.update(chunk)
+        key.update(h.hexdigest().encode() + b"\n")
+    return key.hexdigest()
+
+
+def unchanged_build(db_path: str, key: str) -> dict | None:
+    """If db_path is an fmsonar index whose build_key equals key, refresh its
+    recorded build time (so `list`, which compares source mtimes with it,
+    stops flagging it) and return {parsed_at (the build's), label, _refs,
+    _refs_resolved}; else None. An index built before the column never
+    matches."""
+    if not key or not os.path.exists(db_path) or not _is_fmsonar_db(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    try:
+        try:
+            row = conn.execute("SELECT build_key, parsed_at, label FROM ddr_run").fetchall()
+        except sqlite3.OperationalError:
+            return None
+        if len(row) != 1 or row[0][0] != key:
+            return None
+        out = {"parsed_at": row[0][1], "label": row[0][2]}
+        out.update({k: v for k, v in _summarize(conn).items() if k.startswith("_refs")})
+        conn.execute("UPDATE ddr_run SET parsed_at = ?",
+                     (datetime.now(timezone.utc).isoformat(),))
+        conn.commit()
+        return out
+    finally:
+        conn.close()
+
+
 def _is_fmsonar_db(path: str) -> bool:
     """True if `path` looks like a database this tool produced — a SQLite file
     with a ddr_run table. Used to avoid clobbering an unrelated file at -o."""
@@ -1054,7 +1107,7 @@ def _is_fmsonar_db(path: str) -> bool:
 
 
 def build(ddr_paths, db_path: str, label: str | None = None,
-          force: bool = False) -> dict:
+          force: bool = False, key: str | None = None) -> dict:
     """Parse one or more DDR files (or a Summary.xml manifest) into a fresh
     SQLite DB. Returns a summary dict: entity counts per kind, _refs,
     _refs_resolved, and _warnings (a list of warning texts, maybe empty).
@@ -1063,14 +1116,10 @@ def build(ddr_paths, db_path: str, label: str | None = None,
     only on success, so a malformed DDR (or a typo'd -o path) never destroys an
     existing file, and two concurrent builds can't corrupt each other's output.
     An existing file at db_path that is not itself an fmsonar DB is left intact
-    unless force=True.
+    unless force=True. key (build_key of the same paths) is stored in
+    ddr_run.build_key, in the same transaction as the rest.
     """
-    if isinstance(ddr_paths, str):
-        ddr_paths = [ddr_paths]
-    if len(ddr_paths) == 1:
-        linked = expand_summary(ddr_paths[0])
-        if linked:
-            ddr_paths = linked
+    ddr_paths = expand_paths(ddr_paths)
 
     from fm_ddr import saxml   # here, not at the top: saxml imports this module
 
@@ -1122,10 +1171,10 @@ def build(ddr_paths, db_path: str, label: str | None = None,
             fmt, src_ver = "ddr", None
         cur = conn.execute(
             "INSERT INTO ddr_run(source_path,ddr_version,creation_time,parsed_at,parser_version,"
-            "source_format,source_version,label) VALUES (?,?,?,?,?,?,?,?)",
+            "source_format,source_version,label,build_key) VALUES (?,?,?,?,?,?,?,?,?)",
             (";".join(os.path.abspath(p) for p in ddr_paths), ver, ctime,
              datetime.now(timezone.utc).isoformat(), _parser_version(), fmt, src_ver,
-             label or os.path.basename(ddr_paths[0])))
+             label or os.path.basename(ddr_paths[0]), key))
         run_id = cur.lastrowid
 
         # One handler across all files: entity/ref ids stay a single space, and

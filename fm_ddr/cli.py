@@ -41,10 +41,28 @@ def _print_table(cols, rows, limit=200, full=False):
 
 
 def cmd_build(args):
-    from .parse import build
+    from .parse import build, build_key, expand_paths, unchanged_build
     out = args.out or os.path.splitext(args.ddr[0])[0] + ".db"
+    # v1.16.0: the key covers every DDR behind a Summary.xml, so expand first
+    try:
+        paths = expand_paths(args.ddr)
+        key = build_key(paths)
+    except OSError:
+        # A missing or unreadable source: the build reports it, as before
+        paths, key = args.ddr, None
+    if key is not None and not getattr(args, "rebuild", False):
+        prev = unchanged_build(out, key)
+        if prev is not None:
+            print(f"Unchanged: {out} is the build of {prev['parsed_at']} from the same "
+                  f"source by the same fmsonar (label \"{prev['label']}\"); not rebuilt "
+                  "(--rebuild builds anyway).", file=sys.stderr)
+            print(f"Done: {out}")
+            for k in ("_refs", "_refs_resolved"):
+                print(f"  {k:24s} {prev[k]}")
+            return
     print(f"Parsing {len(args.ddr)} file(s) -> {out} ...", file=sys.stderr)
-    summary = build(args.ddr, out, label=args.label, force=getattr(args, "force", False))
+    summary = build(paths, out, label=args.label, force=getattr(args, "force", False),
+                    key=key)
     # Every warning in one block, before "Done:": a caller that stops
     # reading there has seen them all
     warnings = summary.pop("_warnings", [])
@@ -1257,6 +1275,9 @@ def main(argv=None):
     b.add_argument("--label")
     b.add_argument("--force", action="store_true",
                    help="overwrite the -o file even if it is not an fmsonar database")
+    b.add_argument("--rebuild", action="store_true",
+                   help="build even when the -o file holds a build of the same source "
+                        "by this fmsonar (otherwise that build is kept: Unchanged:)")
     b.set_defaults(func=cmd_build)
 
     w = sub.add_parser("where", help="where is a field/script/layout/TO/CF used")
