@@ -1,0 +1,98 @@
+<?xml version="1.0"?>
+<FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-10-16" type="Report" version="99.9.9">
+<File name="MicroF.fmp12" path="/fixtures">
+	<BaseTableCatalog>
+		<BaseTable id="1" records="2" name="CUS">
+			<FieldCatalog>
+				<Field id="1" dataType="Number" fieldType="Normal" name="id">
+					<Comment>Key</Comment>
+				</Field>
+				<Field id="2" dataType="Text" fieldType="Normal" name="name">
+					<Comment>A merge field named twice in one text object: one ref</Comment>
+				</Field>
+				<Field id="3" dataType="Text" fieldType="Normal" name="note">
+					<Comment>A merge field of a text object inside a portal</Comment>
+				</Field>
+				<Field id="4" dataType="Text" fieldType="Normal" name="city">
+					<Comment>A merge field on repetition 2</Comment>
+				</Field>
+				<Field id="5" dataType="Text" fieldType="Normal" name="secret">
+					<Comment>Only in a privilege set's field access list: unused</Comment>
+				</Field>
+				<Field id="6" dataType="Text" fieldType="Normal" name="portalonly">
+					<Comment>Only in a portal's own field list: unused</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
+	</BaseTableCatalog>
+	<RelationshipGraph>
+		<TableList>
+			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="CUS" name="CUS"/>
+			<Table id="2" color="#CCBBAA" baseTableId="1" baseTable="CUS" name="CUS_alt"/>
+		</TableList>
+		<RelationshipList/>
+	</RelationshipGraph>
+	<LayoutCatalog>
+		<Layout width="800" quickFind="True" includeInMenu="True" id="1" name="Customers">
+			<Table id="1" name="CUS"/>
+			<Object type="Text" key="1" LabelKey="0" name="txtMerge" flags="0" rotation="0">
+				<Bounds top="10" left="10" bottom="30" right="300"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;name&gt;&gt; &lt;&lt;CUS::name&gt;&gt; &lt;&lt;CUS::city[2]&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+					<FieldList quickFind="True"><Field table="CUS" id="2" name="name"></Field><Field table="CUS" id="2" name="name"></Field><Field table="CUS" id="4" repetition="2" name="city"></Field></FieldList>
+				</TextObj>
+			</Object>
+			<Object type="Text" key="2" LabelKey="0" name="txtLost" flags="0" rotation="0">
+				<Bounds top="40" left="10" bottom="60" right="300"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;CUS::&lt;Field Missing&gt;&gt;&gt; &lt;&lt;&lt;Table Missing&gt;::x&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+					<FieldList quickFind="True"><Field table="CUS" id="9" name=""></Field><Field table="" id="0" name=""></Field></FieldList>
+				</TextObj>
+			</Object>
+			<Object type="Portal" key="3" LabelKey="0" name="portalAlt" flags="0" rotation="0">
+				<Bounds top="70" left="10" bottom="170" right="400"/>
+				<PortalObj portalFlags="17" numOfRows="3" initialRow="1">
+					<TableAliasKey>CUS_alt</TableAliasKey>
+					<FieldList><Field table="CUS_alt" id="6" name="portalonly"></Field><FieldReference id="6" name="portalonly" repetition="1" UUID=""><TableOccurrenceReference id="2" name="CUS_alt" UUID=""></TableOccurrenceReference></FieldReference></FieldList>
+					<Object type="Text" key="4" LabelKey="0" name="txtInPortal" flags="0" rotation="0">
+						<Bounds top="72" left="12" bottom="90" right="200"/>
+						<TextObj flags="0">
+							<CharacterStyleVector>
+								<Style>
+									<Data>&lt;&lt;CUS_alt::note&gt;&gt;</Data>
+								</Style>
+							</CharacterStyleVector>
+							<FieldList quickFind="True"><Field table="CUS_alt" id="3" name="note"></Field></FieldList>
+						</TextObj>
+					</Object>
+				</PortalObj>
+			</Object>
+		</Layout>
+	</LayoutCatalog>
+	<ScriptCatalog/>
+	<PrivilegesCatalog>
+		<PrivilegeSet comment="" id="2" menu="Minimal" name="Limited">
+			<Records value="CustomPrivileges">
+				<TableList>
+					<BaseTable id="1" name="CUS">
+						<View value="True"/>
+						<FieldAccess value="Limited">
+							<FieldList>
+								<Field accessRestriction="ViewOnly" id="5" name="secret"/>
+							</FieldList>
+						</FieldAccess>
+					</BaseTable>
+				</TableList>
+			</Records>
+		</PrivilegeSet>
+	</PrivilegesCatalog>
+</File>
+</FMPReport>

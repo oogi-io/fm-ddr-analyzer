@@ -761,6 +761,14 @@ class TestJSParity(unittest.TestCase):
         py = normalize(*read_sqlite(db))
         self.assertEqual(py, self.run_js([fx], 13))
 
+    def test_parity_116_fixture(self):
+        # v1.16.0: merge fields, button labels, summary sources and sort by
+        # summary field, edge by edge
+        db = os.path.join(self.tmp, "f_parity.db")
+        build(FIXTURE_F, db, label="f")
+        py = normalize(*read_sqlite(db))
+        self.assertEqual(py, self.run_js([FIXTURE_F], 13))
+
     def test_parity_lab_ddr(self):
         # The lab file's real DDR (UTF-16): a field object on repetition 3
         # (FieldObj/Name "...Phone_r[3]") resolves in both parsers
@@ -5705,6 +5713,184 @@ class TestCompareResolutionGate(unittest.TestCase):
             self.assertIn("lost: 0  changed: 0  fewer edges: 1", out.stdout)
         finally:
             shutil.rmtree(tmp, ignore_errors=True)
+
+
+
+FIXTURE_F = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_f.xml")
+
+# The Save a Copy as XML twin of micro_ddr_f.xml (v1.16.0). The export writes
+# a merge field in a Text object's FieldList, as the DDR does; it has no
+# FieldList on a portal or a privilege set. Shapes the DDR fixture lacks:
+# a field through an empty external TO, two marker TOs, and a table-view
+# column whose field is also a merge field (it keeps its synthetic column).
+SAXML_116 = (
+    '<BaseTableCatalog><BaseTable id="1" name="CUS"/></BaseTableCatalog>'
+    '<TableOccurrenceCatalog>'
+    '<TableOccurrence id="1" name="CUS" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="CUS"/></BaseTableSourceReference></TableOccurrence>'
+    '<TableOccurrence id="2" name="CUS_alt" type="Local"><BaseTableSourceReference>'
+    '<BaseTableReference id="1" name="CUS"/></BaseTableSourceReference></TableOccurrence>'
+    '<TableOccurrence id="3" name="ext_X" type="External">'
+    '<BaseTableSourceReference type="ExternalDataSourceReference">'
+    '</BaseTableSourceReference></TableOccurrence>'
+    '</TableOccurrenceCatalog>'
+    '<FieldsForTables><FieldCatalog><BaseTableReference id="1" name="CUS"/><ObjectList>'
+    '<Field id="1" name="id" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="2" name="name" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="3" name="note" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="4" name="city" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="5" name="secret" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="6" name="portalonly" datatype="Text" fieldtype="Normal"/>'
+    '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<LayoutCatalog><Layout id="1" name="Customers">'
+    '<TableOccurrenceReference id="1" name="CUS"/>'
+    '<PartsList><Part type="Body"><ObjectList>'
+    '<LayoutObject id="1" type="Text" name="txtMerge"><FieldList>'
+    '<FieldReference id="2" name="name" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference>'
+    '<FieldReference id="2" name="name" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference>'
+    '<FieldReference id="4" name="city" repetition="2">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference>'
+    '</FieldList></LayoutObject>'
+    '<LayoutObject id="2" type="Text" name="txtLost"><FieldList>'
+    '<FieldReference id="9" name="" repetition="1">'
+    '<TableOccurrenceReference id="3" name="ext_X"/></FieldReference>'
+    '<FieldReference id="3" name="note" repetition="1">'
+    '<TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;"/></FieldReference>'
+    '</FieldList></LayoutObject>'
+    '<LayoutObject id="5" type="Text" name="txtOdd"><FieldList>'
+    '<FieldReference id="3" name="note" repetition="1">'
+    '<TableOccurrenceReference id="7" name="&lt;Gone&gt;"/></FieldReference>'
+    '</FieldList></LayoutObject>'
+    '<LayoutObject id="3" type="Portal" name="portalAlt"><Portal>'
+    '<TableOccurrenceReference id="2" name="CUS_alt"/><ObjectList>'
+    '<LayoutObject id="4" type="Text" name="txtInPortal"><FieldList>'
+    '<FieldReference id="3" name="note" repetition="1">'
+    '<TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference>'
+    '</FieldList></LayoutObject>'
+    '</ObjectList></Portal></LayoutObject>'
+    '</ObjectList></Part></PartsList>'
+    '<TableView><ObjectList membercount="1">'
+    # the merge field of txtMerge as a table-view column: its own ref
+    '<TableViewLayoutObject hidden="False" id="60" name="name" width="75">'
+    '<FieldReference id="2" name="name" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference>'
+    '</TableViewLayoutObject>'
+    '</ObjectList></TableView>'
+    '<Options hidden="False">0</Options>'
+    '</Layout></LayoutCatalog>' + SAXML_TAIL)
+
+
+class Test116Base(unittest.TestCase):
+    """Builds micro_ddr_f.xml and its SaXML twin once per class."""
+
+    @classmethod
+    def setUpClass(cls):
+        import contextlib
+        import io
+        cls.tmp = tempfile.mkdtemp(prefix="fmddr_116_")
+        sax = os.path.join(cls.tmp, "f_saxml.xml")
+        with open(sax, "w", encoding="utf-8") as f:
+            f.write(SAXML_HEAD + SAXML_116)
+        cls.dbs = {}
+        for kind, src in (("ddr", FIXTURE_F), ("sax", sax)):
+            db = os.path.join(cls.tmp, kind + ".db")
+            with contextlib.redirect_stderr(io.StringIO()):
+                build(src, db, label=kind)
+            cls.dbs[kind] = db
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp, ignore_errors=True)
+
+    def q(self, kind, sql):
+        conn = sqlite3.connect(self.dbs[kind])
+        try:
+            return conn.execute(sql).fetchall()
+        finally:
+            conn.close()
+
+    def obj_refs(self, kind, obj, context="layout_object"):
+        """(raw, to_name, resolved target) of an object's refs, ref order."""
+        return self.q(kind,
+            "SELECT r.target_raw, r.target_to_name, t.base_table || '::' || t.name"
+            " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+            f" WHERE s.name = '{obj}' AND r.context = '{context}'"
+            " AND json_extract(s.extra_json, '$.table_view_only') IS NULL"
+            " ORDER BY r.ref_id")
+
+
+class TestMergeFields(Test116Base):
+    """v1.16.0 D1: a merge field in a text object's FieldList is a
+    layout_object ref of that object, once per (field id, TO), on the DDR,
+    on SaXML and in the viewer (TestJSParity)."""
+
+    def test_text_object(self):
+        # Named twice, one ref; repetition 2 keeps [2] in target_raw and
+        # resolves by the bare name
+        want = [("CUS::name", "CUS", "CUS::name"), ("CUS::city[2]", "CUS", "CUS::city")]
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.obj_refs(kind, "txtMerge"), want, kind)
+
+    def test_innermost_object(self):
+        # The text object inside a portal is the source, never the portal
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.obj_refs(kind, "txtInPortal"),
+                             [("CUS_alt::note", "CUS_alt", "CUS::note")], kind)
+
+    def test_other_field_lists_are_not_merge_fields(self):
+        # A privilege set's field access list and a portal's own list name
+        # no merge field: no ref from the privilege set, no Field-shaped
+        # ref from the portal
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs WHERE source_kind = 'privilege_set'"),
+                         [(0,)])
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs"
+                                       " WHERE target_raw = 'CUS_alt::portalonly'"), [(0,)])
+        self.assertIn(("secret",), self.q("ddr", "SELECT name FROM v_unused_fields"))
+
+    def test_empty_names(self):
+        # DDR: a deleted field with and without a TO, the field marker rule
+        self.assertEqual(self.obj_refs("ddr", "txtLost"),
+                         [("CUS::<unknown>", "CUS", None), ("<unknown>", None, None)])
+        # SaXML: a field through an empty external TO (raw NULL, listed as
+        # unverifiable_xfile) and a deleted TO (the marker element)
+        self.assertEqual(self.obj_refs("sax", "txtLost"),
+                         [(None, "ext_X", None), ("<unknown>", None, None)])
+
+    def test_marker_to(self):
+        # A TO whose name starts with "<" is a marker too: no TO
+        self.assertEqual(self.obj_refs("sax", "txtOdd"), [("<unknown>", None, None)])
+
+    def test_dangling(self):
+        self.assertEqual(self.q("ddr", "SELECT source_name, context, marker FROM v_dangling"
+                                       " ORDER BY ref_id"),
+                         [("txtLost", "layout_object", "CUS::<unknown>"),
+                          ("txtLost", "layout_object", "<unknown>")])
+        self.assertEqual(self.q("sax", "SELECT source_name, context, marker FROM v_dangling"
+                                       " ORDER BY ref_id"),
+                         [("txtLost", "unverifiable_xfile", "ext_X::<unknown>"),
+                          ("txtLost", "layout_object", "<unknown>"),
+                          ("txtOdd", "layout_object", "<unknown>")])
+
+    def test_table_view_column_kept(self):
+        # The merge-backed table-view column keeps its synthetic ref: the
+        # field has two refs on SaXML, one on the DDR
+        self.assertEqual(self.q("sax",
+            "SELECT json_extract(s.extra_json, '$.table_view_only'), r.target_raw"
+            " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " JOIN entities t ON t.entity_id = r.target_entity_id"
+            " WHERE t.name = 'name' ORDER BY r.ref_id"), [(None, "CUS::name"), (1, "CUS::name")])
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs r JOIN entities t"
+                                       " ON t.entity_id = r.target_entity_id WHERE t.name = 'name'"),
+                         [(1,)])
+
+    def test_unused(self):
+        for kind in ("ddr", "sax"):
+            unused = [r[0] for r in self.q(kind, "SELECT name FROM v_unused_fields")]
+            for used in ("name", "city", "note"):
+                self.assertNotIn(used, unused, kind)
 
 
 if __name__ == "__main__":

@@ -460,6 +460,16 @@ class DDRHandler(xml.sax.ContentHandler):
                           fm_id=a.get("id"), name=a.get("name"), raw=a.get("name"))
             return
 
+        # v1.16.0: a merge field <<TO::Field>> of a text object, listed in
+        # its TextObj/FieldList. Source = the innermost object; one ref per
+        # (field id, TO) per object. A FieldList elsewhere (a privilege
+        # set's FieldAccess, a portal's own list) is not a merge field.
+        if (tag == "Field" and parent == "FieldList"
+                and len(self.tagstack) >= 3 and self.tagstack[-3] == "TextObj"):
+            self._merge_field(a.get("id"), a.get("name"), a.get("table") or None,
+                              a.get("repetition"))
+            return
+
         # A <Field table id name/> reference element appears in several places:
         #   - relationship join predicates (LeftField/RightField)
         #   - inside a <Chunk type="FieldRef"> within a calculation
@@ -710,6 +720,24 @@ class DDRHandler(xml.sax.ContentHandler):
                            else "calc")
                     self.emit_ref(ctx, "field", name=leaf, to_name=to, raw=text)
             # plain built-in FunctionRef / NoRef chunks are left to FTS search.
+
+    def _merge_field(self, fm_id, nm, tbl, rep):
+        """A merge field of a text or button label: layout_object, TO::Field
+        ([n] in target_raw for a repetition other than 1, the name bare);
+        an empty name is the field marker rule. Once per (field id, TO)."""
+        src = self.current_source()
+        if src is not None:
+            seen = src.setdefault("_merge_seen", set())
+            if (fm_id, tbl) in seen:
+                return
+            seen.add((fm_id, tbl))
+        if nm:
+            suffix = f"[{rep}]" if rep and rep != "1" else ""
+            self.emit_ref("layout_object", "field", fm_id=fm_id, name=nm,
+                          to_name=tbl,
+                          raw=f"{tbl}::{nm}{suffix}" if tbl else nm + suffix)
+        else:
+            self._marker_field_ref("layout_object", fm_id, tbl)
 
     def _marker_field_ref(self, ctx, fm_id, tbl):
         """A field slot with no name: a deleted field. With a TO it reads

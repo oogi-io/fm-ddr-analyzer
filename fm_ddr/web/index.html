@@ -317,6 +317,13 @@ function markerFieldRef(ctx,fm,tbl){
     emitRef(ctx,'field',{fm:fm,name:null,to:tbl,raw:tbl+'::'+marker}); }
   else { const marker=(H.stepText && H.stepText.indexOf(TABLE_MISSING)!==-1)?TABLE_MISSING:UNKNOWN;
     emitRef(ctx,'field',{fm:fm,name:null,to:null,raw:marker}); } }
+// v1.16.0: a merge field of a text or button label (mirrors parse.py _merge_field)
+function mergeField(fm,nm,tbl,rep){ const src=curSource();
+  if(src){ const k=JSON.stringify([fm==null?null:fm,tbl]); src._mseen=src._mseen||new Set();
+    if(src._mseen.has(k)) return; src._mseen.add(k); }
+  if(nm){ const sfx=(rep&&rep!=='1')?'['+rep+']':'';
+    emitRef('layout_object','field',{fm:fm,name:nm,to:tbl,raw:tbl?tbl+'::'+nm+sfx:nm+sfx}); }
+  else markerFieldRef('layout_object',fm,tbl); }
 function splitQ(q){ if(q==null) return [null,null]; const i=q.indexOf('::');
   return i===-1?[null,q]:[q.slice(0,i),q.slice(i+2)]; }
 // v1.14.0: raw menu flags ({in_menu, run_full_access}, keys only when true; null when none)
@@ -477,6 +484,10 @@ function onStart(tag,a){
   if(tag==='FieldReference'){ const [to,leaf]=splitQ(a.name);
     emitRef(anc('Layout')?'layout_object':'field_reference','field',{fm:a.id,name:leaf,to:to,raw:a.name}); return; }
   if(tag==='TableOccurrenceReference'){ emitRef('to_reference','table_occurrence',{fm:a.id,name:a.name,raw:a.name}); return; }
+  // v1.16.0: a text object's merge field (TextObj/FieldList/Field), once per (field id, TO) per
+  // object; a FieldList elsewhere (FieldAccess, a portal's own list) is not a merge field
+  if(tag==='Field' && parent==='FieldList' && H.tagstack.length>=3 && H.tagstack[H.tagstack.length-3]==='TextObj'){
+    mergeField(a.id,a.name,a.table||null,a.repetition); return; }
   // Lookup source field (v1.9.1): the field a looked-up value copies FROM.
   // Configured-but-switched-off lookup = residue -> ref flagged disabled.
   if(tag==='Field' && parent==='Lookup' && anc('AutoEnter')){

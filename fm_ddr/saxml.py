@@ -1760,6 +1760,16 @@ class SaXMLHandler(_parse.DDRHandler):
         elif (slot == "TableViewLayoutObject" and self._tvcol is not None
               and self._top("layout") is not None):
             self._table_view_column(fr)
+        elif (slot == "FieldList" and anc3 == "LayoutObject"
+              and self._top("layout_object") is not None):
+            # v1.16.0: a text object's merge field <<TO::Field>>, as the
+            # DDR's TextObj/FieldList; once per (field id, TO) per object.
+            # A merge-backed table-view column keeps its own synthetic
+            # column ref (the DDR omits the column)
+            seen = self._top("layout_object").setdefault("_merge_seen", set())
+            if (fr["id"], fr["to"]) not in seen:
+                seen.add((fr["id"], fr["to"]))
+                self._field_object(fr)
         elif (self._step is None and slot == "PrimaryField" and anc3 == "Sort"
               and self.has_ancestor("Portal")
               and self._top("layout_object") is not None):
@@ -1868,7 +1878,8 @@ class SaXMLHandler(_parse.DDRHandler):
                 # In a step or a field object a deleted TO is a marker
                 # element: no TO
                 marker = ((self._step is not None
-                           or self._fref["slot"] in ("Field", "TableViewLayoutObject"))
+                           or self._fref["slot"] in ("Field", "TableViewLayoutObject",
+                                                     "FieldList"))
                           and _marker_to(a))
                 self._fref["to"] = None if marker else a.get("name") or None
                 self._fref["to_id"] = a.get("id")
