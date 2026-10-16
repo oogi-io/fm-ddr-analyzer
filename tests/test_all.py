@@ -6290,9 +6290,10 @@ class TestUnchangedSkip(unittest.TestCase):
         out, err = self.build()
         self.assertEqual(out, f"Done: {self.out}\n  {'_refs':24s} {refs}\n"
                               f"  {'_refs_resolved':24s} {res}\n")
-        self.assertEqual(err, f"Unchanged: {self.out} is the build of {built} from the same"
+        self.assertEqual(err, f"Unchanged: {self.out} holds a build of the same"
                               ' source by the same fmsonar (label "first"); not rebuilt'
                               " (--rebuild builds anyway).\n")
+        self.assertNotIn(built, err)  # A skip names no timestamp: it refreshes parsed_at
         # another label: the same bytes, the same build; the index keeps its own
         out, err = self.build("--label", "second")
         self.assertIn('(label "first")', err)

@@ -38,9 +38,12 @@ outputs as review lists, never as delete lists.
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
 possible. `target_raw` is the name as written, a marker, or NULL, never empty
-(v1.16.0); NULL means one thing only: a field in another file through an
-external TO with no data source, which the export cannot see
-(`unverifiable_xfile` in `v_dangling`). Unresolvable targets stay `NULL` —
+(v1.16.0). NULL means a target the export cannot see: a field through an
+external TO with no data source, or a script in another file. `v_dangling`
+lists the `layout_object`, `step_target`, `import_field`, `export_field` and
+`find_request` cases as `unverifiable_xfile`; sort fields, join predicates,
+part breaks and cross-file script calls with a NULL raw have no row there.
+Unresolvable targets stay `NULL` —
 usually **legitimately**:
 scripts in other files, calculated layout destinations, unbound globals.
 Ambiguous picks (several same-named candidates, no qualifier) are flagged
@@ -165,6 +168,10 @@ written into `target_raw`, `ext_file` or `target_file` wherever the DDR left a
 REQUIRED name empty or missing. A ref's `target_name` tells them apart: the
 DDR's marker arrives as `target_name = '<unknown>'`, fmsonar's rewrite leaves
 `target_name` NULL.
+
+An element fmsonar does not read at all (a portal's own `FieldList`, a
+privilege set's `FieldAccess` list) is not a slot and emits nothing, empty
+name or not.
 
 One rule for every reference slot, in both parsers: **an empty or missing name
 on a required slot is `<unknown>`; an empty name on an optional slot emits

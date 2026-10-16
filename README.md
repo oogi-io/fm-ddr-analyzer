@@ -102,6 +102,9 @@ solution, or a single `*_fmp12.xml`:
 fmsonar build /path/to/DDR/Summary.xml -o solution.db
 ```
 
+Running `build` again on the same source with the same fmsonar keeps the index
+and prints `Unchanged:` in well under a second; `--rebuild` builds anyway.
+
 **Or from a Save a Copy as XML export (FileMaker 26, CLI only, v1.15.0).** `build`
 also reads FileMaker's own XML export, made with FileMaker 26 (format
 versions 2.3.0.0 and 2.3.0.1) and with **"Include details for analysis

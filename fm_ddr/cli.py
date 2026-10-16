@@ -53,7 +53,7 @@ def cmd_build(args):
     if key is not None and not getattr(args, "rebuild", False):
         prev = unchanged_build(out, key)
         if prev is not None:
-            print(f"Unchanged: {out} is the build of {prev['parsed_at']} from the same "
+            print(f"Unchanged: {out} holds a build of the same "
                   f"source by the same fmsonar (label \"{prev['label']}\"); not rebuilt "
                   "(--rebuild builds anyway).", file=sys.stderr)
             print(f"Done: {out}")
@@ -1277,7 +1277,8 @@ def main(argv=None):
                    help="overwrite the -o file even if it is not an fmsonar database")
     b.add_argument("--rebuild", action="store_true",
                    help="build even when the -o file holds a build of the same source "
-                        "by this fmsonar (otherwise that build is kept: Unchanged:)")
+                        "by this fmsonar (otherwise that build is kept: Unchanged:); "
+                        "a rebuild is a full build, so pass --label to keep your label")
     b.set_defaults(func=cmd_build)
 
     w = sub.add_parser("where", help="where is a field/script/layout/TO/CF used")

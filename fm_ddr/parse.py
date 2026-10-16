@@ -1065,9 +1065,10 @@ def build_key(paths) -> str:
 def unchanged_build(db_path: str, key: str) -> dict | None:
     """If db_path is an fmsonar index whose build_key equals key, refresh its
     recorded build time (so `list`, which compares source mtimes with it,
-    stops flagging it) and return {parsed_at (the build's), label, _refs,
+    stops flagging it; after a skip parsed_at is the time the build was last
+    confirmed, not when it was parsed) and return {parsed_at, label, _refs,
     _refs_resolved}; else None. An index built before the column never
-    matches."""
+    matches. A read-only index still skips, without the refresh."""
     if not key or not os.path.exists(db_path) or not _is_fmsonar_db(db_path):
         return None
     conn = sqlite3.connect(db_path)
@@ -1080,9 +1081,12 @@ def unchanged_build(db_path: str, key: str) -> dict | None:
             return None
         out = {"parsed_at": row[0][1], "label": row[0][2]}
         out.update({k: v for k, v in _summarize(conn).items() if k.startswith("_refs")})
-        conn.execute("UPDATE ddr_run SET parsed_at = ?",
-                     (datetime.now(timezone.utc).isoformat(),))
-        conn.commit()
+        try:
+            conn.execute("UPDATE ddr_run SET parsed_at = ?",
+                         (datetime.now(timezone.utc).isoformat(),))
+            conn.commit()
+        except sqlite3.OperationalError:
+            pass  # Read-only file: the skip stands, the build time stays
         return out
     finally:
         conn.close()
