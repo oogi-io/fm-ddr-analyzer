@@ -616,6 +616,11 @@ LAYOUT_UNKNOWN = re.compile(r"(?:layout: |Go to Layout \[ )<unknown>")
 FROM_FILE = re.compile(r'from file: ["“]([^"”]+)["”]')
 
 
+# A sort order's field slots: the sort field and (v1.16.0) the "reorder
+# based on summary field" slot
+SORT_SLOTS = ("PrimaryField", "SummaryField")
+
+
 def _marker_to(a) -> bool:
     """A TableOccurrenceReference that stands for a deleted TO (the lab:
     id="-1" name="<Table Missing>")."""
@@ -1770,7 +1775,7 @@ class SaXMLHandler(_parse.DDRHandler):
             if (fr["id"], fr["to"]) not in seen:
                 seen.add((fr["id"], fr["to"]))
                 self._field_object(fr)
-        elif (self._step is None and slot == "PrimaryField" and anc3 == "Sort"
+        elif (self._step is None and slot in SORT_SLOTS and anc3 == "Sort"
               and self.has_ancestor("Portal")
               and self._top("layout_object") is not None):
             # Portal sort: the portal object is the source
@@ -1797,7 +1802,7 @@ class SaXMLHandler(_parse.DDRHandler):
                 ctx = ("find_request" if slot == "find"
                        else "import_field" if slot == "Map" else "export_field")
                 self._step_field(ctx, fr)
-        elif (self._step is not None and slot == "PrimaryField"
+        elif (self._step is not None and slot in SORT_SLOTS
               and anc3 == "Sort"):
             self._step_field("sort", fr)             # Sort Records
         elif (slot == "Definition" and anc3 == "Part"
@@ -1838,7 +1843,7 @@ class SaXMLHandler(_parse.DDRHandler):
             q = self._field_ref("value_list_field", slot, fr, fr["to"])
             # which field each slot displays
             vl.setdefault("_vl_fields", {})[slot] = q
-        elif (slot == "PrimaryField" and len(st) >= 4 and anc3 == "Sort"
+        elif (slot in SORT_SLOTS and len(st) >= 4 and anc3 == "Sort"
               and self._side is not None):
             rel = self._top("relationship")
             if rel is not None:

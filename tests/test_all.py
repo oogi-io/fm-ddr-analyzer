@@ -5774,6 +5774,23 @@ SAXML_116 = (
     '<Field id="2" name="amount" datatype="Number" fieldtype="Normal"/>'
     '<Field id="3" name="oldname" datatype="Text" fieldtype="Normal"/>'
     '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<ScriptCatalog><Script id="1" name="Sort customers"/></ScriptCatalog>'
+    '<StepsForScripts>'
+    '<Script><ScriptReference id="1" name="Sort customers"/><ObjectList>'
+    '<Step index="0" id="39" name="Sort Records" enable="True"><ParameterValues>'
+    '<Parameter type="SortSpecification">'
+    '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+    '<PrimaryField><FieldReference id="1" name="id"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></PrimaryField><SummaryField><FieldReference id="9" name="amount_total"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</Sort></SortList></SortSpecification>'
+    '</Parameter></ParameterValues></Step>'
+    '<Step index="1" id="39" name="Sort Records" enable="False"><ParameterValues>'
+    '<Parameter type="SortSpecification">'
+    '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+    '<PrimaryField><FieldReference id="1" name="id"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></PrimaryField><SummaryField><FieldReference id="10" name="stale_total"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</Sort></SortList></SortSpecification>'
+    '</Parameter></ParameterValues></Step>'
+    '</ObjectList></Script>'
+    '</StepsForScripts>'
     '<LayoutCatalog><Layout id="1" name="Customers">'
     '<TableOccurrenceReference id="1" name="CUS"/>'
     '<PartsList><Part type="Body"><ObjectList>'
@@ -5796,12 +5813,24 @@ SAXML_116 = (
     '<TableOccurrenceReference id="7" name="&lt;Gone&gt;"/></FieldReference>'
     '</FieldList></LayoutObject>'
     '<LayoutObject id="3" type="Portal" name="portalAlt"><Portal>'
-    '<TableOccurrenceReference id="2" name="CUS_alt"/><ObjectList>'
+    '<TableOccurrenceReference id="2" name="CUS_alt"/>'
+    '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+    '<PrimaryField><FieldReference id="3" name="note"><TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference></PrimaryField><SummaryField><FieldReference id="13" name="running_count"><TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference></SummaryField>'
+    '</Sort></SortList></SortSpecification>'
+    '<ObjectList>'
     '<LayoutObject id="4" type="Text" name="txtInPortal"><FieldList>'
     '<FieldReference id="3" name="note" repetition="1">'
     '<TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference>'
     '</FieldList></LayoutObject>'
     '</ObjectList></Portal></LayoutObject>'
+    '<LayoutObject id="10" type="Button" name="btnSort"><Button><action>'
+    '<Step index="0" id="39" name="Sort Records" enable="True"><ParameterValues>'
+    '<Parameter type="SortSpecification">'
+    '<SortSpecification value="True"><SortList><Sort type="Ascending">'
+    '<PrimaryField><FieldReference id="4" name="city"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></PrimaryField><SummaryField><FieldReference id="9" name="amount_total"><TableOccurrenceReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</Sort></SortList></SortSpecification>'
+    '</Parameter></ParameterValues></Step>'
+    '</action></Button></LayoutObject>'
     '</ObjectList></Part></PartsList>'
     '<TableView><ObjectList membercount="1">'
     # the merge field of txtMerge as a table-view column: its own ref
@@ -5989,6 +6018,47 @@ class TestSummarySources(Test116Base):
             self.assertNotIn(("CUS", "amount"), unused, kind)
             self.assertIn(("INV", "amount"), unused, kind)
             self.assertIn(("INV", "oldname"), unused, kind)
+
+
+class TestSortBySummary(Test116Base):
+    """v1.16.0 D4: a sort order's "reorder based on summary field" slot is a
+    sort ref, on a script step, a button and a portal, DDR and SaXML; the
+    same element name under SummaryInfo is a summary source, never a sort."""
+
+    def sort_refs(self, kind):
+        return self.q(kind,
+            "SELECT s.kind, COALESCE(p.name, s.name), r.target_raw,"
+            " t.base_table || '::' || t.name, r.disabled FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " LEFT JOIN entities p ON p.entity_id = s.parent_entity_id AND s.kind = 'script_step'"
+            " LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+            " WHERE r.context = 'sort' ORDER BY s.kind, COALESCE(p.name, s.name), r.ref_id")
+
+    def test_sort_refs(self):
+        want = [("layout_object", "btnSort", "CUS::city", "CUS::city", 0),
+                ("layout_object", "btnSort", "CUS::amount_total", "CUS::amount_total", 0),
+                ("layout_object", "portalAlt", "CUS_alt::note", "CUS::note", 0),
+                ("layout_object", "portalAlt", "CUS_alt::running_count",
+                 "CUS::running_count", 0),
+                ("script_step", "Sort customers", "CUS::id", "CUS::id", 0),
+                ("script_step", "Sort customers", "CUS::amount_total", "CUS::amount_total", 0),
+                ("script_step", "Sort customers", "CUS::id", "CUS::id", 1),
+                ("script_step", "Sort customers", "CUS::stale_total", "CUS::stale_total", 1)]
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.sort_refs(kind), want, kind)
+
+    def test_summary_info_is_not_a_sort(self):
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.q(kind, "SELECT COUNT(*) FROM refs WHERE context = 'sort'"
+                                          " AND source_kind = 'field'"), [(0,)], kind)
+            self.assertEqual(self.q(kind, "SELECT COUNT(*) FROM refs"
+                                          " WHERE context = 'summary_source'"), [(5,)], kind)
+
+    def test_only_disabled(self):
+        # stale_total is sorted on only by a disabled step
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.q(kind, "SELECT name, only_disabled_refs FROM v_unused_fields"
+                                          " WHERE name = 'stale_total'"), [("stale_total", 1)], kind)
 
 
 class TestButtonLabelMergeFields(Test116Base):

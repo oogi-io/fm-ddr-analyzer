@@ -114,6 +114,16 @@
 				<Bounds top="70" left="10" bottom="170" right="400"/>
 				<PortalObj portalFlags="17" numOfRows="3" initialRow="1">
 					<TableAliasKey>CUS_alt</TableAliasKey>
+					<SortList BlanksLast="False" Maintain="True" value="True">
+						<Sort type="Ascending">
+							<PrimaryField>
+								<Field table="CUS_alt" id="3" name="note"/>
+							</PrimaryField>
+							<SummaryField>
+								<Field table="CUS_alt" id="13" name="running_count"/>
+							</SummaryField>
+						</Sort>
+					</SortList>
 					<FieldList><Field table="CUS_alt" id="6" name="portalonly"></Field><FieldReference id="6" name="portalonly" repetition="1" UUID=""><TableOccurrenceReference id="2" name="CUS_alt" UUID=""></TableOccurrenceReference></FieldReference></FieldList>
 					<Object type="Text" key="4" LabelKey="0" name="txtInPortal" flags="0" rotation="0">
 						<Bounds top="72" left="12" bottom="90" right="200"/>
@@ -179,9 +189,64 @@
 					</PopoverObj>
 				</Object>
 			</Object>
+			<Object type="Button" key="10" LabelKey="0" name="btnSort" flags="0" rotation="0">
+				<Bounds top="380" left="10" bottom="400" right="120"/>
+				<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
+					<Step enable="True" id="39" name="Sort Records">
+						<StepText>Sort Records [ Restore; No dialog ]</StepText>
+						<NoInteract state="True"/>
+						<Restore state="True"/>
+						<SortList BlanksLast="False" Maintain="True" value="True">
+							<Sort type="Descending">
+								<PrimaryField>
+									<Field table="CUS" id="4" name="city"/>
+								</PrimaryField>
+								<SummaryField>
+									<Field table="CUS" id="9" name="amount_total"/>
+								</SummaryField>
+							</Sort>
+						</SortList>
+					</Step>
+				</ButtonObj>
+			</Object>
 		</Layout>
 	</LayoutCatalog>
-	<ScriptCatalog/>
+	<ScriptCatalog>
+		<Script includeInMenu="True" runFullAccess="False" id="1" name="Sort customers">
+			<StepList>
+				<Step enable="True" id="39" name="Sort Records">
+					<StepText>Sort Records [ Restore; No dialog ]</StepText>
+					<NoInteract state="True"/>
+					<Restore state="True"/>
+					<SortList BlanksLast="False" Maintain="True" value="True">
+						<Sort type="Ascending">
+							<PrimaryField>
+								<Field table="CUS" id="1" name="id"/>
+							</PrimaryField>
+							<SummaryField>
+								<Field table="CUS" id="9" name="amount_total"/>
+							</SummaryField>
+						</Sort>
+					</SortList>
+				</Step>
+				<Step enable="False" id="39" name="Sort Records">
+					<StepText>// Sort Records [ Restore; No dialog ]</StepText>
+					<NoInteract state="True"/>
+					<Restore state="True"/>
+					<SortList BlanksLast="False" Maintain="True" value="True">
+						<Sort type="Ascending">
+							<PrimaryField>
+								<Field table="CUS" id="1" name="id"/>
+							</PrimaryField>
+							<SummaryField>
+								<Field table="CUS" id="10" name="stale_total"/>
+							</SummaryField>
+						</Sort>
+					</SortList>
+				</Step>
+			</StepList>
+		</Script>
+	</ScriptCatalog>
 	<PrivilegesCatalog>
 		<PrivilegeSet comment="" id="2" menu="Minimal" name="Limited">
 			<Records value="CustomPrivileges">

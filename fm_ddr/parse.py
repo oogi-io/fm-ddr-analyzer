@@ -521,9 +521,10 @@ class DDRHandler(xml.sax.ContentHandler):
             # grandparent: a summary field's source (SummaryInfo) or a sort
             # order's "reorder by summary field"; any other is not read
             gp = self.tagstack[-3] if len(self.tagstack) >= 3 else None
-            if parent in ("SummaryField", "AdditionalField") and gp != "SummaryInfo":
+            if (parent in ("SummaryField", "AdditionalField") and gp != "SummaryInfo"
+                    and not (parent == "SummaryField" and gp == "Sort")):
                 return
-            if parent in ("SummaryField", "AdditionalField"):
+            if parent in ("SummaryField", "AdditionalField") and gp == "SummaryInfo":
                 # the summarized field and the restart ("summary by") field,
                 # both in the summary field's own table: no TO, resolved
                 # there (resolve.sql), never a file-wide guess
@@ -550,6 +551,9 @@ class DDRHandler(xml.sax.ContentHandler):
                 ctx = "step_target"
             elif parent in ("PrimaryField", "SecondaryField"):
                 ctx = "value_list_field" if self.has_ancestor("ValueList") else "sort"
+            elif parent == "SummaryField":
+                # v1.16.0: a sort order's "reorder based on summary field"
+                ctx = "sort"
             else:
                 ctx = "join_predicate"
             nm, tbl = a.get("name"), a.get("table")
