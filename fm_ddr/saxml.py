@@ -1809,6 +1809,11 @@ class SaXMLHandler(_parse.DDRHandler):
                               to_name=fr["to"], raw=None)
             else:
                 self._field_ref("part_break", slot, fr, fr["to"])
+        elif (slot in ("SummaryField", "AdditionalField") and anc3 == "SummaryInfo"
+              and self._top("field") is not None):
+            # v1.16.0: a summary field's source and restart field, in its own
+            # table (resolve.sql): the BaseTableReference / TO child is not kept
+            self._field_ref("summary_source", slot, fr, None)
         elif slot == "Looked_up":
             self._lookup(fr)
         elif slot in ("LeftField", "RightField"):

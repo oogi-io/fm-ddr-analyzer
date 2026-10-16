@@ -5724,7 +5724,8 @@ FIXTURE_F = os.path.join(ROOT, "tests", "fixtures", "micro_ddr_f.xml")
 # a field through an empty external TO, two marker TOs, and a table-view
 # column whose field is also a merge field (it keeps its synthetic column).
 SAXML_116 = (
-    '<BaseTableCatalog><BaseTable id="1" name="CUS"/></BaseTableCatalog>'
+    '<BaseTableCatalog><BaseTable id="1" name="CUS"/><BaseTable id="2" name="INV"/>'
+    '</BaseTableCatalog>'
     '<TableOccurrenceCatalog>'
     '<TableOccurrence id="1" name="CUS" type="Local"><BaseTableSourceReference>'
     '<BaseTableReference id="1" name="CUS"/></BaseTableSourceReference></TableOccurrence>'
@@ -5741,6 +5742,37 @@ SAXML_116 = (
     '<Field id="4" name="city" datatype="Text" fieldtype="Normal"/>'
     '<Field id="5" name="secret" datatype="Text" fieldtype="Normal"/>'
     '<Field id="6" name="portalonly" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="8" name="amount" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="9" name="amount_total" datatype="Number" fieldtype="Summary">'
+    '<SummaryInfo restartEachGroup="False" summarizeRepetition="Together" operation="Total">'
+    '<SummaryField><FieldReference id="8" name="amount">'
+    '<BaseTableReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</SummaryInfo></Field>'
+    '<Field id="13" name="running_count" datatype="Number" fieldtype="Summary">'
+    '<SummaryInfo restartEachGroup="True" summarizeRepetition="Together" operation="RunningCount">'
+    '<SummaryField><FieldReference id="2" name="name">'
+    '<BaseTableReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '<AdditionalField><FieldReference id="1" name="id">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></AdditionalField>'
+    '</SummaryInfo></Field>'
+    # a renamed source (the slot keeps the old name) and a deleted one
+    # (an id, no name): the export's shape is not measured (A6), both
+    # branches are covered
+    '<Field id="10" name="stale_total" datatype="Number" fieldtype="Summary">'
+    '<SummaryInfo restartEachGroup="False" summarizeRepetition="Together" operation="Total">'
+    '<SummaryField><FieldReference id="11" name="oldname">'
+    '<BaseTableReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</SummaryInfo></Field>'
+    '<Field id="12" name="lost_total" datatype="Number" fieldtype="Summary">'
+    '<SummaryInfo restartEachGroup="False" summarizeRepetition="Together" operation="Total">'
+    '<SummaryField><FieldReference id="14" name="">'
+    '<BaseTableReference id="1" name="CUS"/></FieldReference></SummaryField>'
+    '</SummaryInfo></Field>'
+    '</ObjectList></FieldCatalog>'
+    '<FieldCatalog><BaseTableReference id="2" name="INV"/><ObjectList>'
+    '<Field id="1" name="title" datatype="Text" fieldtype="Normal"/>'
+    '<Field id="2" name="amount" datatype="Number" fieldtype="Normal"/>'
+    '<Field id="3" name="oldname" datatype="Text" fieldtype="Normal"/>'
     '</ObjectList></FieldCatalog></FieldsForTables>'
     '<LayoutCatalog><Layout id="1" name="Customers">'
     '<TableOccurrenceReference id="1" name="CUS"/>'
@@ -5876,7 +5908,7 @@ class TestMergeFields(Test116Base):
                          [("txtLost", "layout_object", "CUS::<unknown>"),
                           ("txtLost", "layout_object", "<unknown>")])
         self.assertEqual(self.q("sax", "SELECT source_name, context, marker FROM v_dangling"
-                                       " ORDER BY ref_id"),
+                                       " WHERE source_name LIKE 'txt%' ORDER BY ref_id"),
                          [("txtLost", "unverifiable_xfile", "ext_X::<unknown>"),
                           ("txtLost", "layout_object", "<unknown>"),
                           ("txtOdd", "layout_object", "<unknown>")])
@@ -5888,7 +5920,8 @@ class TestMergeFields(Test116Base):
             "SELECT json_extract(s.extra_json, '$.table_view_only'), r.target_raw"
             " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
             " JOIN entities t ON t.entity_id = r.target_entity_id"
-            " WHERE t.name = 'name' ORDER BY r.ref_id"), [(None, "CUS::name"), (1, "CUS::name")])
+            " WHERE t.name = 'name' AND r.context = 'layout_object' ORDER BY r.ref_id"),
+            [(None, "CUS::name"), (1, "CUS::name")])
         self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM entities"
                                        " WHERE json_extract(extra_json, '$.table_view_only')"),
                          [(0,)])
@@ -5898,6 +5931,64 @@ class TestMergeFields(Test116Base):
             unused = [r[0] for r in self.q(kind, "SELECT name FROM v_unused_fields")]
             for used in ("name", "city", "note"):
                 self.assertNotIn(used, unused, kind)
+
+
+class TestSummarySources(Test116Base):
+    """v1.16.0 D3: a summary field's summarized field and restart field are
+    summary_source refs of the summary field, resolved in its own base
+    table (never a file-wide guess), on the DDR, SaXML and the viewer."""
+
+    def summary_refs(self, kind):
+        return self.q(kind,
+            "SELECT s.name, r.target_raw, r.target_to_name, t.base_table || '::' || t.name,"
+            " r.ambiguous FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
+            " LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+            " WHERE r.context = 'summary_source' ORDER BY s.name, r.ref_id")
+
+    def test_refs(self):
+        # INV::amount comes first in the file; the summary of CUS::amount
+        # resolves in CUS and is no guess (ambiguous 0). The restart field's
+        # TO (DDR table attribute, SaXML TableOccurrenceReference) is dropped
+        # on both, so both write ::id
+        want = [("amount_total", "::amount", None, "CUS::amount", 0),
+                ("lost_total", "<unknown>", None, None, 0),
+                ("running_count", "::name", None, "CUS::name", 0),
+                ("running_count", "::id", None, "CUS::id", 0),
+                ("stale_total", "::oldname", None, None, 0)]
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.summary_refs(kind), want, kind)
+
+    def test_deleted_or_renamed_source_dangles(self):
+        # An unresolved summary source is always a defect: listed whatever
+        # its raw says (a stale name keeps it in marker)
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.q(kind,
+                "SELECT source_name, marker, marker_class FROM v_dangling"
+                " WHERE context = 'summary_source' ORDER BY source_name"),
+                [("lost_total", "<unknown>", "<unknown>"),
+                 ("stale_total", "::oldname", "<unknown>")], kind)
+
+    def test_explained_in_resolution_warning(self):
+        # resolution_warning's explained set reads v_dangling ref_ids
+        from fm_ddr import saxml
+        conn = sqlite3.connect(self.dbs["sax"])
+        try:
+            stale = conn.execute("SELECT ref_id FROM refs WHERE context = 'summary_source'"
+                                 " AND target_entity_id IS NULL").fetchall()
+            listed = conn.execute("SELECT ref_id FROM v_dangling WHERE ref_id IS NOT NULL"
+                                  ).fetchall()
+            self.assertEqual(len(stale), 2)
+            self.assertTrue(set(stale) <= set(listed))
+            self.assertIsNone(saxml.resolution_warning(conn))
+        finally:
+            conn.close()
+
+    def test_unused(self):
+        for kind in ("ddr", "sax"):
+            unused = {r for r in self.q(kind, "SELECT base_table, name FROM v_unused_fields")}
+            self.assertNotIn(("CUS", "amount"), unused, kind)
+            self.assertIn(("INV", "amount"), unused, kind)
+            self.assertIn(("INV", "oldname"), unused, kind)
 
 
 class TestButtonLabelMergeFields(Test116Base):

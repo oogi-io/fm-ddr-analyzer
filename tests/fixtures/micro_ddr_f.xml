@@ -7,6 +7,12 @@
 				<Field id="1" dataType="Text" fieldType="Normal" name="title">
 					<Comment>Same name as CUS::title, first in the file: a bare-name guess picks it</Comment>
 				</Field>
+				<Field id="2" dataType="Number" fieldType="Normal" name="amount">
+					<Comment>Same name as CUS::amount, first in the file: the summary of CUS::amount must not pick it</Comment>
+				</Field>
+				<Field id="3" dataType="Text" fieldType="Normal" name="oldname">
+					<Comment>The stale name a CUS summary still names: never its source</Comment>
+				</Field>
 			</FieldCatalog>
 		</BaseTable>
 		<BaseTable id="1" records="2" name="CUS">
@@ -31,6 +37,42 @@
 				</Field>
 				<Field id="7" dataType="Text" fieldType="Normal" name="title">
 					<Comment>A button label's merge field on repetition 3 through CUS_alt</Comment>
+				</Field>
+				<Field id="8" dataType="Number" fieldType="Normal" name="amount">
+					<Comment>Summarized by amount_total</Comment>
+				</Field>
+				<Field id="9" dataType="Number" fieldType="Summary" name="amount_total">
+					<SummaryInfo restartForEachSortedGroup="False" summarizeRepetition="Together" operation="Total">
+						<SummaryField>
+							<Field id="8" name="amount"/>
+						</SummaryField>
+					</SummaryInfo>
+				</Field>
+				<Field id="13" dataType="Number" fieldType="Summary" name="running_count">
+					<SummaryInfo restartForEachSortedGroup="True" summarizeRepetition="Together" operation="RunningCount">
+						<SummaryField>
+							<Field id="2" name="name"/>
+						</SummaryField>
+						<AdditionalField>
+							<Field table="CUS" id="1" name="id"/>
+						</AdditionalField>
+					</SummaryInfo>
+				</Field>
+				<Field id="10" dataType="Number" fieldType="Summary" name="stale_total">
+					<Comment>Its source was renamed: the slot keeps the old name</Comment>
+					<SummaryInfo restartForEachSortedGroup="False" summarizeRepetition="Together" operation="Total">
+						<SummaryField>
+							<Field id="11" name="oldname"/>
+						</SummaryField>
+					</SummaryInfo>
+				</Field>
+				<Field id="12" dataType="Number" fieldType="Summary" name="lost_total">
+					<Comment>Its source was deleted: the slot keeps an id and no name</Comment>
+					<SummaryInfo restartForEachSortedGroup="False" summarizeRepetition="Together" operation="Total">
+						<SummaryField>
+							<Field id="14" name=""/>
+						</SummaryField>
+					</SummaryInfo>
 				</Field>
 			</FieldCatalog>
 		</BaseTable>

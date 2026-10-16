@@ -512,7 +512,16 @@ function onStart(tag,a){
     }
     return; }
   if(tag==='Field' && (parent==='LeftField'||parent==='RightField'||parent==='Chunk'
-                       ||parent==='PrimaryField'||parent==='SecondaryField'||parent==='Step')){
+                       ||parent==='PrimaryField'||parent==='SecondaryField'||parent==='Step'
+                       ||parent==='SummaryField'||parent==='AdditionalField')){
+    // v1.16.0: SummaryField is two slots, told apart by the grandparent: a summary field's
+    // source (SummaryInfo, with the restart AdditionalField) or a sort's summary field
+    const gp=H.tagstack.length>=3?H.tagstack[H.tagstack.length-3]:null;
+    if((parent==='SummaryField'||parent==='AdditionalField') && gp!=='SummaryInfo') return;
+    if(parent==='SummaryField'||parent==='AdditionalField'){
+      if(a.name) emitRef('summary_source','field',{fm:a.id,name:a.name,to:null,raw:'::'+a.name});
+      else markerFieldRef('summary_source',a.id,null);
+      return; }
     let ctx;
     if(parent==='Chunk') ctx=anc('AutoEnter')?'auto_enter':(anc('Validation')?'validation':'calc');
     else if(parent==='Step') ctx='step_target';
@@ -746,6 +755,8 @@ function feed(buffer){
 function resolve(){
   const SEP1=String.fromCharCode(1);
   const K=(f,x)=>f+SEP1+x;
+  const btById={}, fieldByBtFirst={};
+  for(const e of H.entities) btById[e.id]=e.bt;
   const toBase={}, toByName={}, toByFm={}, toExt={}, fieldByBtName={}, fieldByName={}, fieldNameCount={},
         scriptByFm={}, scriptByName={}, scriptNameCount={},
         layoutByFm={}, layoutByName={}, layoutNameCount={}, vlByName={}, cfByName={};
@@ -754,6 +765,7 @@ function resolve(){
       if(e.fm!=null && !(K(e.f,e.fm) in toByFm)) toByFm[K(e.f,e.fm)]=e.id;
       if(e.ef!=null) toExt[K(e.f,e.n)]=e.ef; }
     else if(e.k==='field'){ fieldByBtName[K(e.f,e.bt+SEP1+e.n)]=e.id;
+      if(!(K(e.f,e.bt+SEP1+e.n) in fieldByBtFirst)) fieldByBtFirst[K(e.f,e.bt+SEP1+e.n)]=e.id;
       const k=K(e.f,e.n); if(!(k in fieldByName)) fieldByName[k]=e.id;
       fieldNameCount[k]=(fieldNameCount[k]||0)+1; }
     else if(e.k==='script'){ if(e.fm!=null && !(K(e.f,e.fm) in scriptByFm)) scriptByFm[K(e.f,e.fm)]=e.id;
@@ -798,7 +810,11 @@ function resolve(){
       if(id!=null) r.t=id;
       r.amb=0; continue;
     }
-    if(r.tk==='field'){
+    if(r.tk==='field' && r.c==='summary_source'){
+      // v1.16.0: in the summary field's own base table, never a guess
+      const sb=btById[r.s];
+      if(sb!=null && r.name!=null) id=fieldByBtFirst[K(f,sb+SEP1+r.name)] ?? null; }
+    else if(r.tk==='field'){
       if(r.to!=null){
         const bt=toBase[K(f,r.to)], ef=toExt[K(f,r.to)];
         if(bt!=null && r.name!=null){
@@ -1120,7 +1136,7 @@ function initViewer(DATA){
     value_list_source:'value list binding',join_predicate:'relationship',function_ref:'function call',
     to_reference:'TO reference',layout_context:'layout context',value_list_field:'value list source',sort:'sort order',
     step_table:'step table',portal:'portal',value_list_context:'value list context',
-    part_break:'sub-summary break field',import_field:'import field',export_field:'export field',find_request:'find request'};
+    part_break:'sub-summary break field',import_field:'import field',export_field:'export field',find_request:'find request',summary_source:'summary source'};
   const ctxLabel=c=>CTXL[c]||c;
   const ctxLabelFor=x=>ctxLabel(x.c)+(x.dis?' \u00b7 in disabled step':'');
   // Owning table + file for a resolved entity, so a reference list can

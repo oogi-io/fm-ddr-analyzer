@@ -73,6 +73,15 @@
    ""
   ],
   [
+   "field|Price_Total_s|base_table|WAT__Watch||0|0",
+   "summary_source",
+   "field",
+   "::Price",
+   1,
+   0,
+   ""
+  ],
+  [
    "field|Price|base_table|SAL__Sale||0|0",
    "lookup",
    "field",

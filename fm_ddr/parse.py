@@ -515,7 +515,25 @@ class DDRHandler(xml.sax.ContentHandler):
             return
 
         if tag == "Field" and parent in ("LeftField", "RightField", "Chunk",
-                                         "PrimaryField", "SecondaryField", "Step"):
+                                         "PrimaryField", "SecondaryField", "Step",
+                                         "SummaryField", "AdditionalField"):
+            # v1.16.0: SummaryField is two slots, told apart by the
+            # grandparent: a summary field's source (SummaryInfo) or a sort
+            # order's "reorder by summary field"; any other is not read
+            gp = self.tagstack[-3] if len(self.tagstack) >= 3 else None
+            if parent in ("SummaryField", "AdditionalField") and gp != "SummaryInfo":
+                return
+            if parent in ("SummaryField", "AdditionalField"):
+                # the summarized field and the restart ("summary by") field,
+                # both in the summary field's own table: no TO, resolved
+                # there (resolve.sql), never a file-wide guess
+                nm = a.get("name")
+                if nm:
+                    self.emit_ref("summary_source", "field", fm_id=a.get("id"), name=nm,
+                                  to_name=None, raw="::" + nm)
+                else:
+                    self._marker_field_ref("summary_source", a.get("id"), None)
+                return
             if parent == "Chunk":
                 # a field's own formula, an auto-enter calc, or a validation
                 # calc — distinct mechanisms, distinct contexts

@@ -57,6 +57,20 @@ FROM resolved r;
 DROP TABLE IF EXISTS temp.ds_file;
 CREATE TEMP TABLE ds_file AS SELECT * FROM v_data_sources;
 
+-- Summary sources (v1.16.0): a summary field's summarized field and restart
+-- field live in the summary field's own base table; matched there by name,
+-- never by the file-wide guess below. An unresolved one is a deleted or
+-- renamed field: v_dangling lists it whatever its raw says.
+UPDATE refs
+SET target_entity_id = (
+    SELECT f.entity_id FROM entities f
+    WHERE f.file_id = refs.file_id AND f.kind = 'field'
+      AND f.base_table = (SELECT s.base_table FROM entities s
+                          WHERE s.entity_id = refs.source_entity_id)
+      AND f.name = refs.target_name
+    ORDER BY f.entity_id LIMIT 1)
+WHERE context = 'summary_source' AND target_kind = 'field' AND target_entity_id IS NULL;
+
 -- Fields: match by leaf name, disambiguated by the base table behind the TO.
 -- A TO on an external data source (ext_file set) never resolves locally, even
 -- when a local base table carries the same name (v1.13.0).
@@ -73,7 +87,7 @@ SET target_entity_id = (
               AND t.name = refs.target_to_name AND t.ext_file IS NULL LIMIT 1)
       )
     ORDER BY f.entity_id LIMIT 1)
-WHERE target_kind = 'field' AND target_entity_id IS NULL;
+WHERE target_kind = 'field' AND target_entity_id IS NULL AND context <> 'summary_source';
 
 -- Fields reached through an EXTERNAL table occurrence resolve against the
 -- file its data source points at (ds_file: catalog link, then name).
@@ -94,7 +108,7 @@ WHERE target_kind = 'field' AND target_entity_id IS NULL
 UPDATE refs
 SET ambiguous = 1
 WHERE target_kind = 'field' AND target_entity_id IS NOT NULL
-  AND target_to_name IS NULL
+  AND target_to_name IS NULL AND context <> 'summary_source'
   AND (SELECT COUNT(*) FROM entities f
        WHERE f.file_id = refs.file_id AND f.kind = 'field'
          AND f.name = refs.target_name) > 1;
@@ -344,6 +358,9 @@ CREATE VIEW v_ambiguous AS
 SELECT * FROM v_usage WHERE ambiguous = 1;
 
 -- Dangling references (v1.13.0): one row per defect the DDR itself marks.
+-- v1.16.0: an unresolved summary_source is always a deleted or renamed field
+-- (its only home is the summary field's own table): listed whatever its raw
+-- says; a stale name keeps the name in `marker`, marker_class '<unknown>'.
 -- Three branches: (1) unresolved refs whose target_raw carries a marker
 -- (fmsonar's '<unknown>' or the DDR's <Table Missing> / <Field Missing>) or
 -- whose target_file is '<unknown>'; (2) broken calculations, one row per
@@ -382,7 +399,8 @@ WHERE r.target_entity_id IS NULL
   AND (r.target_raw LIKE '%<unknown>%'
        OR r.target_raw LIKE '%<Table Missing>%'
        OR r.target_raw LIKE '%<Field Missing>%'
-       OR r.target_file = '<unknown>')
+       OR r.target_file = '<unknown>'
+       OR r.context = 'summary_source')
 UNION ALL
 SELECT r.ref_id, r.file_id, 'unverifiable_xfile', r.source_kind,
        se.name, sp.name, se.step_type, r.target_kind,
