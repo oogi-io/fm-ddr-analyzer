@@ -108,9 +108,16 @@ CREATE TABLE IF NOT EXISTS entities (
 --            Match) | export_field (an Export Records field or group-by field)
 --            | find_request (a stored find request's field)
 --            (v1.15.1; source the step, or a button / menu item)
+--          | summary_source (a summary field's summarized and restart field;
+--            source the summary field, raw ::name, resolved in its own base
+--            table; unresolved = in v_dangling) (v1.16.0)
 -- (auto_enter/validation = field refs inside an AutoEnter / Validation calc;
 --  lookup = the source field a looked-up value copies FROM; a field's full
---  dependency set is context IN ('calc','auto_enter','validation','lookup'))
+--  dependency set is context IN ('calc','auto_enter','validation','lookup',
+--  'summary_source'). v1.16.0: layout_object also from a merge field of a
+--  text object or button label (source = that object); sort also from a sort
+--  order's summary-field slot; SaXML calc / function_ref also from a text
+--  object's display calculation)
 CREATE TABLE IF NOT EXISTS refs (
     ref_id           INTEGER PRIMARY KEY,
     file_id          INTEGER NOT NULL REFERENCES files(file_id),

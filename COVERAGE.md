@@ -9,17 +9,17 @@ outputs as review lists, never as delete lists.
 
 | Context | What it means | Source |
 |---------|---------------|--------|
-| `calc` | Field used in a calculation (field's own calc, script step calc, layout object calc) | `Chunk type="FieldRef"` (both element and text forms) |
-| `auto_enter` (v1.9.0) | Field used in an **auto-enter** calculation — distinct from `calc` so a Normal field with auto-enter can't pose as a calc field. A field's full dependency set is `context IN ('calc','auto_enter','validation','lookup')` | `Chunk type="FieldRef"` inside `AutoEnter` |
+| `calc` | Field used in a calculation (field's own calc, script step calc, layout object calc). v1.16.0, SaXML only: a text object's display calculation `<<ƒ:...>>`, source the text object; the export writes 12 DDRREFs per object under one or two hashes (the second the empty one), each distinct hash is replayed once per object. The DDR writes the formula as text only (FTS, `extra_json.text`): an accepted parity gap | `Chunk type="FieldRef"` (both element and text forms); SaXML: `LayoutObject/DisplayCalculations` chunk lists |
+| `auto_enter` (v1.9.0) | Field used in an **auto-enter** calculation — distinct from `calc` so a Normal field with auto-enter can't pose as a calc field. A field's full dependency set is `context IN ('calc','auto_enter','validation','lookup','summary_source')` | `Chunk type="FieldRef"` inside `AutoEnter` |
 | `validation` (v1.9.0) | Field used in a validation calculation | `Chunk type="FieldRef"` inside `Validation` |
 | `lookup` (v1.9.1) | The source field a looked-up value copies FROM. A configured lookup whose option is unchecked is residue: ref flagged `disabled=1` | `Field` inside `AutoEnter > Lookup` |
-| `function_ref` | **Custom** function called in a calculation | `Chunk type="CustomFunctionRef"` |
+| `function_ref` | **Custom** function called in a calculation (v1.16.0, SaXML: also in a text object's display calculation, as `calc`) | `Chunk type="CustomFunctionRef"` |
 | `join_predicate` | Field or TO used in a relationship | `LeftField`/`RightField`/`LeftTable`/`RightTable` |
-| `sort` | Field used in a sort order: relationship sort lists, Sort Records steps, portal sort lists | `PrimaryField`/`SecondaryField` outside value lists |
+| `sort` | Field used in a sort order: relationship sort lists, Sort Records steps (script and button), portal sort lists; v1.16.0: also a sort order's "reorder based on summary field" slot (a disabled step's ref is `disabled = 1`; not seen in a relationship sort) | `PrimaryField`/`SecondaryField` outside value lists; `Sort/SummaryField` (the DDR uses the element name a summary field's source uses: the grandparent tells them apart) |
 | `value_list_field` | Field feeding a field-based value list | `PrimaryField`/`SecondaryField` inside `ValueList` |
 | `value_list_source` | Value list bound to a layout object | `ValueList` bindings outside the catalog |
 | `layout_object` entities (v1.3.0) | Every layout object as an entity: name, type, key, bounds, button launch step+params (`extra_json.step_text`), hide condition (`extra_json.hide_calc`), tooltip calc | `Object` elements inside `Layout`, nested |
-| `layout_object` | Field placed on a layout. A field object showing a repetition other than 1 keeps `[n]` in `target_raw` (`TO::Field[3]`, as the DDR writes it) and resolves by the bare name: a trailing `[digits]` is stripped from the DDR's name (v1.15.1; before, it stayed unresolved; a field literally named `X[2]` would lose its match, none seen) | `FieldObj > Name`, `FieldReference` under `Layout` |
+| `layout_object` | Field placed on a layout: a field object, and since v1.16.0 a **merge field** `<<TO::Field>>` of a text object or a button / popover button label. A repetition other than 1 keeps `[n]` in `target_raw` (`TO::Field[3]`, as the DDR writes it) and resolves by the bare name: a trailing `[digits]` is stripped from the DDR's name (v1.15.1; before, it stayed unresolved; a field literally named `X[2]` would lose its match, none seen). A merge field is a ref of the innermost object that shows it (never a container), once per (field id, TO) per object; told apart from a field object by the source's `extra_json.object_type` (`Text`, `Button`, `PopoverButton`). It comes from three encodings: a text object's `FieldList` (DDR and SaXML), a button or popover button label's `FieldReference` with a TO child (DDR only: the TO and repetition are read, so it resolves through the TO; a marker TO child is no TO), and on SaXML a merge-backed table-view column, which keeps its own synthetic ref (`table_view_only`, below): such a field has two refs on a SaXML index and one on a DDR index. A portal's own `FieldList` is a summary of its child objects and emits nothing (1.15.1 read its `FieldReference` rows as bare-name guesses). A privilege set's `FieldAccess` list is no usage. An empty name takes the field marker rule; a field through an external TO with no data source has `target_raw` NULL (`unverifiable_xfile`) | `FieldObj > Name`; `TextObj/FieldList/Field`, `TextObj/FieldList/FieldReference` (DDR); `LayoutObject/FieldList/FieldReference` (SaXML); `FieldReference` elsewhere under `Layout` |
 | `step_target` | The field a step acts on: **Set Field's write target**, Go to Field, Insert ... — combine with the step's `step_type` to tell writes from navigation | direct `<Field>` child of `<Step>` |
 | `field_reference` | Field referenced via a `FieldReference` element outside layouts | `FieldReference` |
 | `perform_script` | Script called by a script step | `Script` reference elements |
@@ -33,10 +33,15 @@ outputs as review lists, never as delete lists.
 | `part_break` (v1.15.0, SaXML only) | A sub-summary part's break field ("when sorted by"). Source = the layout. A field used only to break a sub-summary is not "unused" on a SaXML index. A break field through a deleted TO arrives as `<Table Missing>::<unknown>` and is listed in `v_dangling`; through an external TO with no data source it stays unresolved with `target_raw` NULL. The DDR has no element for layout parts, so a DDR index never has this context | SaXML: the `FieldReference` under `Part/Definition` |
 | `import_field` (v1.15.1) | An Import Records target field mapped Import or Match (Match is compared, not written). Source = the step (or the button / menu item). A DoNotImport map (SaXML `Map kind="1"`, "not import to") is no usage and emits nothing; an Import map with `id="0"` and no name is optional slot 6 (see Dangling references). The DDR names the target TO once, on the step's `<Table>`. Counted only when the step restores the request (below). A SaXML Match map is not yet measured; any kind other than 1 counts as a usage | DDR: `TargetFields/Field[@map]`; SaXML: `ImportField/Field/Map/FieldReference` |
 | `export_field` (v1.15.1) | An Export Records field (the field order) or group-by field (every `SummaryFields` field counts; only `GroupByFieldIsSelected="True"` has been seen). Source = the step (or the button). Counted only when the step restores the request (below). The SaXML group-by shape (`Order type="Group"`) is not yet measured with a field in it | DDR: `ExportEntries/ExportEntry/Field`, `SummaryFields/Field`; SaXML: `Export/Order/Field/FieldReference` |
+| `summary_source` (v1.16.0) | A summary field's summarized field and its restart ("summary by") field. Source = the summary field; `target_raw` is `::name` with no TO on both inputs (the DDR's `table` attribute and the export's base table or TO child are dropped). Resolved by name **within the summary field's own base table**, before the generic field rule, and never an unqualified guess (`ambiguous` stays 0). An unresolved one is always a deleted or renamed source: `v_dangling` lists it whatever its raw says, so `v_dangling.marker` can hold a plain name (`::oldname`, `marker_class` `<unknown>`); an empty name reads `<unknown>`. What FileMaker writes for a summary whose source field was deleted is not yet measured (no export at hand has one; the lab is a TODO): a kept id with an empty name, a kept stale name and a dropped slot (no ref) are all handled. Fraction of Total and weighted Average are not yet measured | `SummaryInfo/SummaryField/Field`, `SummaryInfo/AdditionalField/Field` (DDR); the same slots' `FieldReference` (SaXML) |
 | `find_request` (v1.15.1) | A field in a stored find request (Perform Find, Constrain Found Set, Extend Found Set, Enter Find Mode), find and omit rows alike. Source = the step (or the button). **Restore rule (DDR):** an import, export or find ref counts only when its step has `<Restore state="True">`: a Perform Script button keeps a stale `<Query>` with no `<Restore>`, and a Perform Find with Restore off (step text `Perform Find [  ]`) keeps its last request; neither is a usage. **SaXML:** the export writes no Restore for a step that carries a request, so a stale request counts there (a known parity gap; not seen on a measured export); a SaXML Enter Find Mode with a stored request is not yet measured. The DDR writes no repetition for a criterion, so `target_raw` carries none on either input | DDR: `Query/RequestRow/Criteria/Field`; SaXML: `FindRequestSet/FindRequest/find/FieldReference` |
 
 Every edge stores the raw text (`target_raw`) plus the resolved entity where
-possible. Unresolvable targets stay `NULL` — usually **legitimately**:
+possible. `target_raw` is the name as written, a marker, or NULL, never empty
+(v1.16.0); NULL means one thing only: a field in another file through an
+external TO with no data source, which the export cannot see
+(`unverifiable_xfile` in `v_dangling`). Unresolvable targets stay `NULL` —
+usually **legitimately**:
 scripts in other files, calculated layout destinations, unbound globals.
 Ambiguous picks (several same-named candidates, no qualifier) are flagged
 `ambiguous = 1` (see `v_ambiguous`); the pick is deterministic but uncertain.
@@ -95,7 +100,9 @@ predicate). Value lists carry their DEFINITION (`source`, `custom_values`,
 custom values are FTS-searchable. Layout TEXT objects' character runs (incl.
 merge fields `<<F>>` and merge formulas `<<ƒ:...>>`) land in
 `extra_json.text` and the FTS body — layout text is finally searchable.
-Merge-formula field refs are TEXT, not structured edges (stage b, future).
+Since v1.16.0 the merge fields are `layout_object` refs of the object, and on
+SaXML a display calculation's fields and custom functions are `calc` and
+`function_ref` refs; on the DDR a merge formula stays text (FTS only).
 
 **Serial numbers & lookups (v1.9.1):** serial auto-enters carry
 `auto_enter.serial` (`{increment, nextValue, generate}`); lookups carry
@@ -197,8 +204,12 @@ that dropped a layout context with id 0 is gone, it never fired on a real
 DDR). A layout field object whose `<Name>` is empty is a required slot too:
 its field or table occurrence is gone, the DDR writes the name empty with no
 other marker, and the ref reads `<unknown>` (`layout_object` context, name
-and TO NULL); 1.13.0 dropped these silently. Ids never decide: an id that
-happens to exist is never resolved behind a marker.
+and TO NULL); 1.13.0 dropped these silently. A merge field with no name
+(v1.16.0) follows the field rule: `TO::<unknown>` with a TO, `<unknown>`
+without; a button label's `FieldReference` whose TO child is a marker (`id="-1"`,
+`<Table Missing>`) reads `<unknown>` whatever its name. A `summary_source` that
+does not resolve is listed whatever its raw says (above). Ids never decide: an
+id that happens to exist is never resolved behind a marker.
 
 A value list cloned into a file that lacks its table occurrence (the usual
 satellite-file case) is one dead list with several slots: its
@@ -563,6 +574,14 @@ Different form, same usage:
 
 Present in one format only:
 
+- **Merge fields of a button label** (v1.16.0): the DDR writes them as the
+  label's `FieldList/FieldReference` (read as `layout_object` refs of the
+  button); every SaXML `FieldList` measured sits on a Text object, so a SaXML
+  index has no such ref. The text stays in FTS on both.
+- **Display calculations** (v1.16.0): the SaXML export carries their chunk
+  lists (`calc` and `function_ref` refs of the text object); the DDR writes the
+  formula as text only. A field or custom function used only in a display
+  calculation reads as unused on a DDR index.
 - **Table view columns.** The SaXML lists a layout's table view columns. A
   column whose field is not a form field object of the layout is read as a
   `layout_object` (`extra_json.table_view_only` true, `object_type` `Edit Box`,
@@ -570,7 +589,10 @@ Present in one format only:
   of another object on the layout says nothing. The DDR writes most of these
   as hidden field objects and omits some columns entirely; fmsonar reads every
   such column, so a SaXML index can list a field on a layout where the DDR
-  index does not.
+  index does not. Whether FileMaker shows such a column in Table View has not
+  been checked and nothing relies on it: a column whose field is also a merge
+  field of the layout (most of the columns the DDR omits) gives that field a
+  synthetic column ref beside its text object ref (v1.16.0).
 - **Stale residue the DDR keeps:** stale field slots on Custom value lists, stale names on field-based
   lists whose fields are gone (the SaXML gives one `<unknown>` there), and the
   custom values of a list switched to field values (`extra_json.custom_values`;
@@ -599,7 +621,7 @@ DDR). Unverified shapes: ODBC data sources, charts and conditional formatting
 
 ### SaXML has, fmsonar does not read
 
-Summary field sources, calculation context TOs, layout parts other than a
+Calculation context TOs, layout parts other than a
 sub-summary's break field, step `OwnerID`, `SourceUUID`, privilege detail
 per category, `Metadata/Defaults`, and the `Options` bitfields beyond the menu
 flags.
@@ -646,8 +668,8 @@ script and layout names built at runtime (`Perform Script [ By name ]`,
 `Go to Layout [ By name ]`), and callers outside the file (other FileMaker
 files, OData and Data API clients). fmsonar's `used` answers "is it
 referenced", not "will a rename break it": for the breakage list, the text
-gap is the FTS `search` today, and a `text_mention` context is planned for
-1.16.0.
+gap is the FTS `search` today, and a `text_mention` context is planned for a
+later release.
 
 ## Consumer contract
 
@@ -663,9 +685,13 @@ prints one line and continues). Views added per version: `v_cascades`
 per-object UUID keys in `extra_json`, the `unverifiable_xfile` context of
 `v_dangling` and the SaXML-only `part_break` context (1.15.0), the `import_field`,
 `export_field` and `find_request` contexts and resolved repeating-field
-objects (1.15.1: `v_unused_fields` on an older index overstates unused). For 1.16.0: a `text_mention`
-ref counts as a use only when `target_entity_id IS NOT NULL`; an unresolved
-mention never does.
+objects (1.15.1: `v_unused_fields` on an older index overstates unused), the
+`summary_source` context, merge-field `layout_object` refs, sort-by-summary
+`sort` refs, SaXML display-calculation `calc` and `function_ref` refs and
+`ddr_run.build_key` (1.16.0: `v_unused_fields` on an older index overstates
+unused; an index without `build_key` is always rebuilt). For the planned
+`text_mention` context: a ref counts as a use only when `target_entity_id IS
+NOT NULL`; an unresolved mention never does.
 
 ## Practical rule
 

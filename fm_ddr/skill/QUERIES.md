@@ -403,8 +403,10 @@ ORDER BY f.name, enclosing, portal;
 ```
 
 **Field objects whose field is gone** (v1.14.0+; an empty `<Name>` on a layout
-field object: its field or table occurrence was deleted). The enclosing
-object or layout is the only handle the DDR leaves:
+field object: its field or table occurrence was deleted; since v1.16.0 also a
+merge field with no name, whose source is the text object or button: tell
+them apart by `json_extract(o.extra_json,'$.object_type')` of the source). The
+enclosing object or layout is the only handle the DDR leaves:
 
 ```sql
 SELECT f.name AS file, d.source_parent_name AS enclosing, COUNT(*) AS objects
@@ -576,17 +578,18 @@ script (`parent_entity_id`) for its last change.
 
 ## Storage, auto-enter & triggers (v1.9.0+)
 
-**A field's FULL dependency set spans four contexts** — `calc` (its own
-formula), `auto_enter`, `validation`, and `lookup` (v1.9.1: the field a
-looked-up value copies from). Asking only for `calc` misses the dominant
-population mechanism on auto-enter-heavy tables:
+**A field's FULL dependency set spans five contexts** — `calc` (its own
+formula), `auto_enter`, `validation`, `lookup` (v1.9.1: the field a
+looked-up value copies from) and `summary_source` (v1.16.0: the field a
+summary field summarizes, and its restart field). Asking only for `calc` misses
+the dominant population mechanism on auto-enter-heavy tables:
 
 ```sql
 SELECT r.context, r.target_name, te.base_table
 FROM refs r JOIN entities s ON s.entity_id=r.source_entity_id
 LEFT JOIN entities te ON te.entity_id=r.target_entity_id
 WHERE s.kind='field' AND s.name='MyField' AND r.disabled=0
-  AND r.context IN ('calc','auto_enter','validation','lookup');
+  AND r.context IN ('calc','auto_enter','validation','lookup','summary_source');
 ```
 
 Unstored calc fields (the classic FM performance hazard) per table:
@@ -665,9 +668,35 @@ SELECT name, json_extract(extra_json,'$.predicates') FROM entities
 WHERE kind='relationship'
   AND json_extract(extra_json,'$.predicates') NOT LIKE '%"op": "Equal"%';
 
--- layout text (merge fields/formulas) is now in FTS + extra_json.text
+-- layout text is in FTS + extra_json.text: the merge FORMULAS <<ƒ:...>> on a
+-- DDR index (a SaXML index has their refs as calc / function_ref)
 SELECT name, json_extract(extra_json,'$.text') FROM entities
-WHERE kind='layout_object' AND json_extract(extra_json,'$.text') LIKE '%<<%';
+WHERE kind='layout_object' AND json_extract(extra_json,'$.text') LIKE '%<<ƒ:%';
+```
+
+**Which layouts show a field as a merge field** (v1.16.0: `layout_object`
+refs of the text object or button that shows `<<TO::Field>>`). `where` names
+the object and its enclosing object; a text object is usually unnamed and the
+useful part of the answer is the layout, so walk up to it:
+
+```sql
+WITH RECURSIVE up(ref_id, eid) AS (
+  SELECT r.ref_id, r.source_entity_id FROM refs r
+  JOIN entities t ON t.entity_id = r.target_entity_id
+  WHERE r.context = 'layout_object' AND t.kind = 'field'
+    AND t.base_table = 'Customers' AND t.name = 'City'
+  UNION ALL
+  SELECT up.ref_id, e.parent_entity_id FROM up
+  JOIN entities e ON e.entity_id = up.eid AND e.kind <> 'layout')
+SELECT lay.name AS layout, json_extract(o.extra_json, '$.object_type') AS object_type,
+       o.name AS object, r.target_raw
+FROM up JOIN entities lay ON lay.entity_id = up.eid AND lay.kind = 'layout'
+JOIN refs r ON r.ref_id = up.ref_id
+JOIN entities o ON o.entity_id = r.source_entity_id
+ORDER BY layout;
+-- object_type Text / Button / PopoverButton = a merge field; a field object
+-- reads Field (DDR) or Edit Box (SaXML). On SaXML a merge-backed table-view
+-- column adds an Edit Box row with extra_json.table_view_only
 ```
 
 ## Analysis-completeness recipes (stop-one-hop-short traps)

@@ -10,8 +10,9 @@ Never hand-parse DDR XML - build the SQLite index and query it.
 
 Databases live in the central cache `~/.fmsonar/dbs/<solution>.db` - create the
 directory if needed. `fm-ddr list` shows what is cached (label, build time,
-parser version, staleness) - run it first when unsure what exists. Reuse a
-cached DB if it is newer than its source DDR and not flagged stale.
+parser version, staleness) - run it first when unsure what exists. Run
+`build` on the source; it skips an unchanged one in under a second and says
+`Unchanged:` (`--rebuild` builds anyway).
 
 To build, you need the user's DDR export (FileMaker: Tools > Database Design
 Report > XML) or a Save a Copy as XML export (below). If you don't know where it is, ask - don't scan the whole disk.
@@ -84,7 +85,13 @@ is a layout field object whose field is gone). `import_field` = an Import
 Records target field mapped Import or Match (a write, except a Match field,
 which is compared), `export_field` = an Export Records field or group-by field,
 `find_request` = a field in a stored find request (v1.15.1; on a DDR index only
-when the step restores the request). Scripts, layouts and their
+when the step restores the request). `summary_source` = the field a summary
+field summarizes, and its restart field (v1.16.0; resolved in the summary
+field's own table). Since v1.16.0 a `layout_object` ref can also be a merge
+field `<<TO::Field>>` of a text object or button label (the source's
+`object_type` says which; the layout is the useful part, QUERIES.md walks up to
+it), and on SaXML a text object's display calculation gives `calc` /
+`function_ref` refs (the DDR has its text only). Scripts, layouts and their
 folders carry the raw menu flags `extra_json.in_menu` / `run_full_access`
 (v1.14.0; a flag, not menu reachability). Full recipes: QUERIES.md, installed next to this file (also in the
 repo, with COVERAGE.md stating exactly what the index does not capture). **Read QUERIES.md's Investigation protocol and recipes BEFORE writing ad-hoc SQL** — it pre-answers the schema gotchas rather than making you rediscover them by trial-and-error (triggers only via `v_triggers`; `perform_script` target names carry the parameter signature, so match with `LIKE`; `entities` has no source-parent name — use `v_usage`; `entities` and `files` both have a `name` column, so qualify every column when you join them). Also holds when you query the cached DB directly with `sqlite3` instead of the CLI.

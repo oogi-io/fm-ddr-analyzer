@@ -25,6 +25,12 @@ usually an incomplete multi-file build (missing sibling XMLs), not a broken
 solution. Every warning
 of a build prints once, in one block, before its `Done:` line.
 
+`build` into an index that already holds a build of the same source bytes by
+the same fmsonar version (v1.16.0, `ddr_run.build_key`; every DDR behind a
+`Summary.xml` counts) does not rebuild: it prints `Unchanged: ...` on stderr,
+then `Done:` and the two resolution lines, in under a second. `--rebuild`
+builds anyway; another `--label` does not count as a change.
+
 `ddr_run.source_format` says which format built an index (`ddr` or `saxml`;
 absent = `ddr`). A SaXML index made with FMDeveloperTool is blind across files
 (building the other files' exports into the same index does not cure it):
@@ -87,6 +93,12 @@ per file, listed by `stats`). Before comparing a SaXML index with a DDR index, r
   its step restores the request (`<Restore state="True">`, DDR); an
   empty name on any of these is `<unknown>` in `v_dangling`, as is a layout
   field object whose field is gone (`layout_object` to `field`, `<unknown>`).
+  Since v1.16.0: `summary_source` (a summary field's summarized and restart
+  field, resolved in the summary field's own table), `layout_object` also from
+  a merge field `<<TO::Field>>` of a text object or button label (the source's
+  `object_type` tells it from a field object), `sort` also from a sort order's
+  summary-field slot, and on SaXML `calc` / `function_ref` from a text object's
+  display calculation.
 - **`files`** — one row per FileMaker file in a multi-file solution.
 - **`text_index`** — FTS5 over every name, calculation, and step text.
 
@@ -152,7 +164,8 @@ index before crediting them in the merge.
 - Built-in FileMaker functions are deliberately NOT edges; find them via FTS.
 - **The index is a model, not the whole DDR.** Auto-enter/validation details,
   layout geometry and custom-menu internals are not extracted (import/export
-  field orders and stored find requests are, since v1.15.1). For questions outside the model, say so and read the original
+  field orders and stored find requests are, since v1.15.1; merge fields and
+  summary field sources since v1.16.0). For questions outside the model, say so and read the original
   DDR XML directly (stream it - it is large UTF-16-LE) rather than guessing.
 
 ## Practical notes
