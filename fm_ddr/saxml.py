@@ -920,6 +920,19 @@ class SaXMLHandler(_parse.DDRHandler):
         elif kind == "ChunkList" and (parent == "Calculation"
                                       or self._popover_title()):
             self._replay_chunks(payload)
+        elif (kind == "ChunkList" and parent == "DisplayCalculations"
+              and self._anc(3) == "LayoutObject"):
+            # v1.16.0: a text object's display calculation <<ƒ:...>>. The
+            # export writes 12 DDRREFs per object (one per slot, 12 keys under
+            # one or two hashes; the second is the empty one): one successful
+            # replay per (object, hash). A DDRREF with no DDR_INFO entry
+            # returned above, so the next one of the same hash tries
+            obj = self._top("layout_object")
+            if obj is not None:
+                done = obj.setdefault("_dc_done", set())
+                if hsh not in done:
+                    done.add(hsh)
+                    self._replay_chunks(payload)
 
     def _popover_title(self):
         """LayoutObject/Title (a popover's title calculation) holds its DDRREF

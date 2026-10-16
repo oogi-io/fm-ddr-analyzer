@@ -5774,6 +5774,8 @@ SAXML_116 = (
     '<Field id="2" name="amount" datatype="Number" fieldtype="Normal"/>'
     '<Field id="3" name="oldname" datatype="Text" fieldtype="Normal"/>'
     '</ObjectList></FieldCatalog></FieldsForTables>'
+    '<CustomFunctionsCatalog><CustomFunction id="1" name="FormatAmount"/>'
+    '</CustomFunctionsCatalog>'
     '<ScriptCatalog><Script id="1" name="Sort customers"/></ScriptCatalog>'
     '<StepsForScripts>'
     '<Script><ScriptReference id="1" name="Sort customers"/><ObjectList>'
@@ -5823,6 +5825,24 @@ SAXML_116 = (
     '<TableOccurrenceReference id="2" name="CUS_alt"/></FieldReference>'
     '</FieldList></LayoutObject>'
     '</ObjectList></Portal></LayoutObject>'
+    # a display calculation <<ƒ:FormatAmount ( CUS::amount )>>: 12 DDRREFs,
+    # 11 under its hash (the first, slot 11, has no DDR_INFO entry) and one
+    # under the empty hash, as the export writes them
+    '<LayoutObject id="11" type="Text" name="txtCalc">'
+    '<DisplayCalculations membercount="12">'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_11</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_10</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_9</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_8</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_7</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_6</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_5</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_4</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_3</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_2</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="H1">_DC_1</DDRREF>'
+    '<DDRREF kind="ChunkList" hash="D41D8CD98F00B204E9800998ECF8427E">_DC_0</DDRREF>'
+    '</DisplayCalculations><FieldList></FieldList></LayoutObject>'
     '<LayoutObject id="10" type="Button" name="btnSort"><Button><action>'
     '<Step index="0" id="39" name="Sort Records" enable="True"><ParameterValues>'
     '<Parameter type="SortSpecification">'
@@ -5840,7 +5860,63 @@ SAXML_116 = (
     '</TableViewLayoutObject>'
     '</ObjectList></TableView>'
     '<Options hidden="False">0</Options>'
-    '</Layout></LayoutCatalog>' + SAXML_TAIL)
+    '</Layout></LayoutCatalog>'
+    '</AddAction></Structure>'
+    '<DDR_INFO><Calculation><ObjectList>'
+    '<_DC_10 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_10>'
+    '<_DC_9 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_9>'
+    '<_DC_8 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_8>'
+    '<_DC_7 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_7>'
+    '<_DC_6 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_6>'
+    '<_DC_5 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_5>'
+    '<_DC_4 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_4>'
+    '<_DC_3 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_3>'
+    '<_DC_2 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_2>'
+    '<_DC_1 hash="H1" datatype="ChunkList"><ChunkList hash="H1">'
+    '<Chunk type="CustomFunctionRef">FormatAmount</Chunk>'
+    '<Chunk type="FieldRef"><FieldReference id="8" name="amount" repetition="1">'
+    '<TableOccurrenceReference id="1" name="CUS"/></FieldReference></Chunk>'
+    '</ChunkList></_DC_1>'
+    '<_DC_0 hash="D41D8CD98F00B204E9800998ECF8427E" datatype="ChunkList">'
+    '<ChunkList hash="D41D8CD98F00B204E9800998ECF8427E"></ChunkList></_DC_0>'
+    '</ObjectList></Calculation></DDR_INFO>'
+    '</FMSaveAsXML>\n')
 
 
 class Test116Base(unittest.TestCase):
@@ -6059,6 +6135,39 @@ class TestSortBySummary(Test116Base):
         for kind in ("ddr", "sax"):
             self.assertEqual(self.q(kind, "SELECT name, only_disabled_refs FROM v_unused_fields"
                                           " WHERE name = 'stale_total'"), [("stale_total", 1)], kind)
+
+
+class TestDisplayCalculations(Test116Base):
+    """v1.16.0 D2: a SaXML text object's display calculation is replayed as
+    any calculation (calc, function_ref), once per (object, hash); the DDR
+    writes the formula as text only (FTS), an accepted parity gap."""
+
+    def test_one_replay_per_hash(self):
+        # 12 DDRREFs: the first has no DDR_INFO entry, the next of the same
+        # hash replays, the empty hash's list names nothing
+        self.assertEqual(self.q("sax",
+            "SELECT r.context, r.target_raw, t.kind || ':' || t.name FROM refs r"
+            " JOIN entities s ON s.entity_id = r.source_entity_id"
+            " LEFT JOIN entities t ON t.entity_id = r.target_entity_id"
+            " WHERE s.name = 'txtCalc' ORDER BY r.ref_id"),
+            [("function_ref", "FormatAmount", "custom_function:FormatAmount"),
+             ("calc", "CUS::amount", "field:amount")])
+
+    def test_missing_entry_counted(self):
+        # the DDRREF with no entry is counted as before (ddrinfo_missing_calcs)
+        self.assertEqual(self.q("sax", "SELECT ddrinfo_missing_calcs FROM ddr_run"), [(1,)])
+
+    def test_ddr_text_only(self):
+        # the DDR has the formula as text: no calc or function_ref ref from
+        # the object, the custom function reads as unused, FTS finds it
+        self.assertEqual(self.obj_refs("ddr", "txtCalc", "function_ref"), [])
+        self.assertEqual(self.obj_refs("ddr", "txtCalc", "calc"), [])
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM text_index"
+                                       " WHERE text_index MATCH 'FormatAmount' AND name = 'txtCalc'"),
+                         [(1,)])
+        self.assertEqual(self.q("sax", "SELECT COUNT(*) FROM refs r JOIN entities t"
+                                       " ON t.entity_id = r.target_entity_id"
+                                       " WHERE t.kind = 'custom_function'"), [(1,)])
 
 
 class TestButtonLabelMergeFields(Test116Base):

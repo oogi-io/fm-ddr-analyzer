@@ -189,6 +189,16 @@
 					</PopoverObj>
 				</Object>
 			</Object>
+			<Object type="Text" key="11" LabelKey="0" name="txtCalc" flags="0" rotation="0">
+				<Bounds top="410" left="10" bottom="430" right="300"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;&#402;:FormatAmount ( CUS::amount )&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+				</TextObj>
+			</Object>
 			<Object type="Button" key="10" LabelKey="0" name="btnSort" flags="0" rotation="0">
 				<Bounds top="380" left="10" bottom="400" right="120"/>
 				<ButtonObj buttonFlags="0" iconSize="16" displayType="0">
@@ -247,6 +257,11 @@
 			</StepList>
 		</Script>
 	</ScriptCatalog>
+	<CustomFunctionCatalog>
+		<CustomFunction id="1" functionArity="1" visible="True" parameters="x" name="FormatAmount">
+			<Calculation><![CDATA[Round ( x ; 2 )]]></Calculation>
+		</CustomFunction>
+	</CustomFunctionCatalog>
 	<PrivilegesCatalog>
 		<PrivilegeSet comment="" id="2" menu="Minimal" name="Limited">
 			<Records value="CustomPrivileges">
