@@ -5849,6 +5849,13 @@ class TestMergeFields(Test116Base):
         self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs"
                                        " WHERE target_raw = 'CUS_alt::portalonly'"), [(0,)])
         self.assertIn(("secret",), self.q("ddr", "SELECT name FROM v_unused_fields"))
+        # D1b (A1): a portal's own FieldReference list is a summary of its
+        # children: no field ref at all from the portal; the TO child keeps
+        # its to_reference row
+        self.assertEqual(self.obj_refs("ddr", "portalAlt"), [])
+        self.assertEqual(self.obj_refs("ddr", "portalAlt", "to_reference"),
+                         [("CUS_alt", None, "CUS::CUS_alt")])
+        self.assertIn(("portalonly",), self.q("ddr", "SELECT name FROM v_unused_fields"))
 
     def test_empty_names(self):
         # DDR: a deleted field with and without a TO, the field marker rule
@@ -5865,7 +5872,7 @@ class TestMergeFields(Test116Base):
 
     def test_dangling(self):
         self.assertEqual(self.q("ddr", "SELECT source_name, context, marker FROM v_dangling"
-                                       " ORDER BY ref_id"),
+                                       " WHERE source_name LIKE 'txt%' ORDER BY ref_id"),
                          [("txtLost", "layout_object", "CUS::<unknown>"),
                           ("txtLost", "layout_object", "<unknown>")])
         self.assertEqual(self.q("sax", "SELECT source_name, context, marker FROM v_dangling"
@@ -5882,15 +5889,91 @@ class TestMergeFields(Test116Base):
             " FROM refs r JOIN entities s ON s.entity_id = r.source_entity_id"
             " JOIN entities t ON t.entity_id = r.target_entity_id"
             " WHERE t.name = 'name' ORDER BY r.ref_id"), [(None, "CUS::name"), (1, "CUS::name")])
-        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM refs r JOIN entities t"
-                                       " ON t.entity_id = r.target_entity_id WHERE t.name = 'name'"),
-                         [(1,)])
+        self.assertEqual(self.q("ddr", "SELECT COUNT(*) FROM entities"
+                                       " WHERE json_extract(extra_json, '$.table_view_only')"),
+                         [(0,)])
 
     def test_unused(self):
         for kind in ("ddr", "sax"):
             unused = [r[0] for r in self.q(kind, "SELECT name FROM v_unused_fields")]
             for used in ("name", "city", "note"):
                 self.assertNotIn(used, unused, kind)
+
+
+class TestButtonLabelMergeFields(Test116Base):
+    """v1.16.0 D1b: the DDR writes a button or popover button label's merge
+    field as FieldList/FieldReference with a TableOccurrenceReference child.
+    It is read whole: TO::name, [n] for a repetition other than 1, resolved
+    through the TO (not by the bare name); a marker TO child is no TO. The
+    SaXML export has no such shape (its FieldLists sit on Text objects)."""
+
+    def ambiguous(self, obj):
+        return self.q("ddr", "SELECT r.ambiguous FROM refs r JOIN entities s"
+                             " ON s.entity_id = r.source_entity_id"
+                             f" WHERE s.name = '{obj}' AND r.context = 'layout_object'")
+
+    def test_label_through_its_to(self):
+        # INV::title comes first in the file: a bare-name guess picks it
+        self.assertEqual(self.obj_refs("ddr", "btnLabel"),
+                         [("CUS_alt::title[3]", "CUS_alt", "CUS::title")])
+        self.assertEqual(self.ambiguous("btnLabel"), [(0,)])
+        # the TO child keeps its own to_reference row
+        self.assertEqual(self.obj_refs("ddr", "btnLabel", "to_reference"),
+                         [("CUS_alt", None, "CUS::CUS_alt")])
+
+    def test_marker_to_and_empty_names(self):
+        # A deleted TO (id -1, <Table Missing>) is no TO: <unknown>, named
+        # or not; an empty name through a real TO is TO::<unknown>
+        self.assertEqual(self.obj_refs("ddr", "btnLost"),
+                         [("<unknown>", None, None), ("<unknown>", None, None),
+                          ("CUS::<unknown>", "CUS", None)])
+        self.assertEqual(self.q("ddr", "SELECT marker FROM v_dangling"
+                                       " WHERE source_name = 'btnLost' ORDER BY ref_id"),
+                         [("<Table Missing>",), ("<unknown>",), ("<Table Missing>",),
+                          ("<unknown>",), ("CUS::<unknown>",)])
+
+    def test_popover_button_label(self):
+        # The popover button's own label and the text object inside its
+        # popover are two objects: one ref each
+        self.assertEqual(self.obj_refs("ddr", "popLabel"), [("CUS::name", "CUS", "CUS::name")])
+        self.assertEqual(self.obj_refs("ddr", "txtInPopover"),
+                         [("CUS::name", "CUS", "CUS::name")])
+
+    def test_no_empty_target_raw(self):
+        # target_raw is a name, a marker or NULL (a field the export cannot
+        # see), never empty: every fixture index, both parsers
+        import glob, contextlib, io
+        paths = sorted(glob.glob(os.path.join(ROOT, "tests", "fixtures", "*.xml")))
+        self.assertGreaterEqual(len(paths), 15)
+        for path in paths:
+            db = os.path.join(self.tmp, "raw_" + os.path.basename(path) + ".db")
+            try:
+                with contextlib.redirect_stderr(io.StringIO()):
+                    build(path, db, label="raw")
+            except ValueError:
+                continue   # a fixture of a refused export (partial): no index
+            conn = sqlite3.connect(db)
+            try:
+                n = conn.execute("SELECT COUNT(*) FROM refs WHERE target_raw = ''").fetchone()
+            finally:
+                conn.close()
+            self.assertEqual(n, (0,), os.path.basename(path))
+        for kind in ("ddr", "sax"):
+            self.assertEqual(self.q(kind, "SELECT COUNT(*) FROM refs WHERE target_raw = ''"),
+                             [(0,)], kind)
+
+    @unittest.skipUnless(shutil.which("node"), "node not available")
+    def test_no_empty_target_raw_viewer(self):
+        import glob
+        from fm_ddr.saxml import sniff
+        for path in sorted(glob.glob(os.path.join(ROOT, "tests", "fixtures", "*.xml"))):
+            if sniff(path)["fmt"] == "saxml":
+                continue
+            out = subprocess.run(["node", JS_RUNNER, WEB_APP, "65536", path],
+                                 capture_output=True, text=True, timeout=120)
+            self.assertEqual(out.returncode, 0, out.stderr)
+            raws = [e["tr"] for e in json.loads(out.stdout)["edges"]]
+            self.assertNotIn("", raws, os.path.basename(path))
 
 
 if __name__ == "__main__":

@@ -340,6 +340,7 @@ const H={
   trigEv:[], deadAE:false,
   // v1.13.0: per-step state (reset on ANY <Step>, cleared when it closes)
   stepText:null, layoutDest:null, stepTable:null, stepRestore:null,
+  labelFref:null,   // v1.16.0: an open button-label FieldReference
 };
 function ptag(){ return H.tagstack.length>=2?H.tagstack[H.tagstack.length-2]:''; }
 function anc(t){ for(let k=0;k<H.tagstack.length-1;k++) if(H.tagstack[k]===t) return true; return false; }
@@ -481,9 +482,20 @@ function onStart(tag,a){
     const top=H.estack[H.estack.length-1];
     if(top && top.k==='table_occurrence') top.ef=a.name||UNKNOWN; return; }
 
-  if(tag==='FieldReference'){ const [to,leaf]=splitQ(a.name);
+  if(tag==='FieldReference'){
+    // v1.16.0: a portal's own FieldList is a summary of its children: nothing. A button or
+    // popover button label's merge field is held to its end tag (TO child, repetition)
+    if(parent==='FieldList' && anc('Layout')){
+      const gp=H.tagstack.length>=3?H.tagstack[H.tagstack.length-3]:null;
+      if(gp==='PortalObj') return;
+      if(gp==='TextObj'){ H.labelFref={id:a.id,name:a.name||null,rep:a.repetition,to:null,marker:false}; return; } }
+    const [to,leaf]=splitQ(a.name);
     emitRef(anc('Layout')?'layout_object':'field_reference','field',{fm:a.id,name:leaf,to:to,raw:a.name}); return; }
-  if(tag==='TableOccurrenceReference'){ emitRef('to_reference','table_occurrence',{fm:a.id,name:a.name,raw:a.name}); return; }
+  if(tag==='TableOccurrenceReference'){
+    const fr=H.labelFref;
+    if(fr && parent==='FieldReference'){
+      if(a.id==='-1' || (a.name||'').startsWith('<')) fr.marker=true; else fr.to=a.name||null; }
+    emitRef('to_reference','table_occurrence',{fm:a.id,name:a.name,raw:a.name}); return; }
   // v1.16.0: a text object's merge field (TextObj/FieldList/Field), once per (field id, TO) per
   // object; a FieldList elsewhere (FieldAccess, a portal's own list) is not a merge field
   if(tag==='Field' && parent==='FieldList' && H.tagstack.length>=3 && H.tagstack[H.tagstack.length-3]==='TextObj'){
@@ -597,6 +609,9 @@ function onEnd(tag){
       emitRef('layout_object','field',{name:null,to:null,raw:UNKNOWN});
     else consumeText(tag,H.capAttrs,text);
     H.cap=null; H.buf=[]; }
+  // v1.16.0: a button label's merge field, its TO child now read
+  if(tag==='FieldReference' && H.labelFref){ const fr=H.labelFref; H.labelFref=null;
+    if(fr.marker) mergeField(fr.id,null,null,null); else mergeField(fr.id,fr.name,fr.to,fr.rep); }
   if(H.pushed.length && H.pushed.pop()) finalize(H.estack.pop());
   if(tag==='Step'){ const src=curSource(); if(src) delete src._extFile; H.stepText=null; H.layoutDest=null; }
   if(tag==='AutoEnter') H.deadAE=false;

@@ -2,6 +2,13 @@
 <FMPReport link="Summary.xml" creationTime="10:00:00" creationDate="2026-10-16" type="Report" version="99.9.9">
 <File name="MicroF.fmp12" path="/fixtures">
 	<BaseTableCatalog>
+		<BaseTable id="2" records="1" name="INV">
+			<FieldCatalog>
+				<Field id="1" dataType="Text" fieldType="Normal" name="title">
+					<Comment>Same name as CUS::title, first in the file: a bare-name guess picks it</Comment>
+				</Field>
+			</FieldCatalog>
+		</BaseTable>
 		<BaseTable id="1" records="2" name="CUS">
 			<FieldCatalog>
 				<Field id="1" dataType="Number" fieldType="Normal" name="id">
@@ -22,6 +29,9 @@
 				<Field id="6" dataType="Text" fieldType="Normal" name="portalonly">
 					<Comment>Only in a portal's own field list: unused</Comment>
 				</Field>
+				<Field id="7" dataType="Text" fieldType="Normal" name="title">
+					<Comment>A button label's merge field on repetition 3 through CUS_alt</Comment>
+				</Field>
 			</FieldCatalog>
 		</BaseTable>
 	</BaseTableCatalog>
@@ -29,6 +39,7 @@
 		<TableList>
 			<Table id="1" color="#AABBCC" baseTableId="1" baseTable="CUS" name="CUS"/>
 			<Table id="2" color="#CCBBAA" baseTableId="1" baseTable="CUS" name="CUS_alt"/>
+			<Table id="3" color="#BBAACC" baseTableId="2" baseTable="INV" name="INV"/>
 		</TableList>
 		<RelationshipList/>
 	</RelationshipGraph>
@@ -74,6 +85,57 @@
 						</TextObj>
 					</Object>
 				</PortalObj>
+			</Object>
+			<Object type="Button" key="5" LabelKey="0" name="btnLabel" flags="0" rotation="0">
+				<Bounds top="180" left="10" bottom="200" right="120"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;CUS_alt::title[3]&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+					<FieldList><FieldReference id="7" name="title" repetition="3" UUID=""><TableOccurrenceReference id="2" name="CUS_alt" UUID=""></TableOccurrenceReference></FieldReference></FieldList>
+				</TextObj>
+				<ButtonObj buttonFlags="0" iconSize="16" displayType="0"/>
+			</Object>
+			<Object type="Button" key="6" LabelKey="0" name="btnLost" flags="0" rotation="0">
+				<Bounds top="210" left="10" bottom="230" right="120"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;&lt;Table Missing&gt;::&lt;Field Missing&gt;&gt;&gt; &lt;&lt;&lt;Table Missing&gt;::title&gt;&gt; &lt;&lt;CUS::&lt;Field Missing&gt;&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+					<FieldList><FieldReference id="432" name="" repetition="1" UUID=""><TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;" UUID=""></TableOccurrenceReference></FieldReference><FieldReference id="7" name="title" repetition="1" UUID=""><TableOccurrenceReference id="-1" name="&lt;Table Missing&gt;" UUID=""></TableOccurrenceReference></FieldReference><FieldReference id="8" name="" repetition="1" UUID=""><TableOccurrenceReference id="1" name="CUS" UUID=""></TableOccurrenceReference></FieldReference></FieldList>
+				</TextObj>
+				<ButtonObj buttonFlags="0" iconSize="16" displayType="0"/>
+			</Object>
+			<Object type="PopoverButton" key="7" LabelKey="0" name="popLabel" flags="0" rotation="0">
+				<Bounds top="240" left="10" bottom="260" right="120"/>
+				<TextObj flags="0">
+					<CharacterStyleVector>
+						<Style>
+							<Data>&lt;&lt;CUS::name&gt;&gt;</Data>
+						</Style>
+					</CharacterStyleVector>
+					<FieldList><FieldReference id="2" name="name" repetition="1" UUID=""><TableOccurrenceReference id="1" name="CUS" UUID=""></TableOccurrenceReference></FieldReference></FieldList>
+				</TextObj>
+				<Object type="Popover" key="8" LabelKey="0" flags="0" rotation="0">
+					<Bounds top="270" left="10" bottom="370" right="300"/>
+					<PopoverObj>
+						<Object type="Text" key="9" LabelKey="0" name="txtInPopover" flags="0" rotation="0">
+							<Bounds top="280" left="20" bottom="300" right="200"/>
+							<TextObj flags="0">
+								<CharacterStyleVector>
+									<Style>
+										<Data>&lt;&lt;CUS::name&gt;&gt;</Data>
+									</Style>
+								</CharacterStyleVector>
+								<FieldList quickFind="True"><Field table="CUS" id="2" name="name"></Field></FieldList>
+							</TextObj>
+						</Object>
+					</PopoverObj>
+				</Object>
 			</Object>
 		</Layout>
 	</LayoutCatalog>

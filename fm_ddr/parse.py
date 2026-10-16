@@ -85,6 +85,7 @@ class DDRHandler(xml.sax.ContentHandler):
         self._layout_dest_cur = None           # <LayoutDestination value>
         self._step_table_cur = None            # the step's <Table name> (Import Records)
         self._step_restore_cur = None          # the step's <Restore state> (stored requests)
+        self._label_fref = None                # an open label FieldReference (v1.16.0)
 
         self.ent_rows: list[tuple] = []
         self.ref_rows: list[tuple] = []
@@ -449,6 +450,19 @@ class DDRHandler(xml.sax.ContentHandler):
             return
 
         if tag == "FieldReference":
+            # v1.16.0: a FieldList under a layout. A portal's own list is a
+            # summary of its child objects (their fields are read there):
+            # nothing. A button or popover button label's merge field is held
+            # to its end tag, where its TO child and repetition are known.
+            if parent == "FieldList" and self.has_ancestor("Layout"):
+                gp = self.tagstack[-3] if len(self.tagstack) >= 3 else None
+                if gp == "PortalObj":
+                    return
+                if gp == "TextObj":
+                    self._label_fref = {"id": a.get("id"), "name": a.get("name") or None,
+                                        "rep": a.get("repetition"), "to": None,
+                                        "marker": False}
+                    return
             to, leaf = _split_qualified(a.get("name"))
             ctx = "layout_object" if self.has_ancestor("Layout") else "field_reference"
             self.emit_ref(ctx, "field", fm_id=a.get("id"), name=leaf,
@@ -456,6 +470,13 @@ class DDRHandler(xml.sax.ContentHandler):
             return
 
         if tag == "TableOccurrenceReference":
+            fr = self._label_fref
+            if fr is not None and parent == "FieldReference":
+                # A deleted TO is a marker element (id -1, <Table Missing>)
+                if a.get("id") == "-1" or (a.get("name") or "").startswith("<"):
+                    fr["marker"] = True
+                else:
+                    fr["to"] = a.get("name") or None
             self.emit_ref("to_reference", "table_occurrence",
                           fm_id=a.get("id"), name=a.get("name"), raw=a.get("name"))
             return
@@ -643,6 +664,14 @@ class DDRHandler(xml.sax.ContentHandler):
                 self._consume_text(tag, self._cap_attrs, text)
             self._cap_tag = None
             self._buf = []
+
+        # v1.16.0: a button label's merge field, its TO child now read
+        if tag == "FieldReference" and self._label_fref is not None:
+            fr, self._label_fref = self._label_fref, None
+            if fr["marker"]:
+                self._merge_field(fr["id"], None, None, None)
+            else:
+                self._merge_field(fr["id"], fr["name"], fr["to"], fr["rep"])
 
         # pop the entity only if THIS element is the one that opened it
         if self.pushed and self.pushed.pop():
