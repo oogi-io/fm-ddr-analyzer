@@ -1,4 +1,4 @@
 """FM DDR Analyzer — parse FileMaker Database Design Reports into queryable SQLite."""
-__version__ = "1.15.1"
+__version__ = "1.16.0"
 
 from .parse import build  # noqa: F401
