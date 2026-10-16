@@ -3,7 +3,8 @@
 A development check for parser releases: build the same DDR with the old and the
 new parser, then run this on both indexes. Every resolved edge is keyed by content
 (file, source kind, source parent, source name, step seq, context, target kind,
-target raw, trigger event) and valued by its target (file, kind, base table, FM id).
+target raw, trigger event) and valued by its target (file, kind, base table, FM id;
+the first edge by ref_id when a key has several).
 The report lists keys LOST (resolved before, not now), CHANGED (resolved to
 something else) and GAINED (new), with the first rows of each, and FEWER: a key
 both sides have whose edges to one target dropped in number (duplicate edges,
@@ -35,6 +36,7 @@ LEFT JOIN entities sp ON sp.entity_id = se.parent_entity_id
 JOIN entities te ON te.entity_id = r.target_entity_id
 JOIN files tfl ON tfl.file_id = te.file_id
 WHERE r.target_entity_id IS NOT NULL
+ORDER BY r.ref_id
 """
 
 def source(path):
@@ -66,7 +68,8 @@ def load(path, file_name=None):
         edges[(key, val)] += 1
         if key in out:
             # duplicate edges (same step, same target twice): the first
-            # target is the key's value, every edge is counted in edges
+            # target (lowest ref_id) is the key's value, every edge is
+            # counted in edges
             dup[key] += 1
             continue
         out[key] = val
