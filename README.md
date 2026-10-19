@@ -11,10 +11,6 @@ and **a queryable index for your AI** (built from a DDR or from a FileMaker 26 S
 
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
-<p align="center">
-  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-use-web.gif" alt="Exploring a FileMaker DDR in the browser at fmsonar.com: drop a DDR, see references, scripts, and call chains" width="560">
-</p>
-
 ## The problems this solves
 
 1. **"Where is this actually used?"** A FileMaker solution's only complete map is
