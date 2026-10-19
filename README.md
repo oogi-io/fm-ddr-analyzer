@@ -6,8 +6,8 @@
 </p>
 
 **Ping your FileMaker solution — every reference echoes back.**
-One engine, two interfaces: **an explorer for you**, **a queryable index for your AI**.
-Two inputs: the **Database Design Report** and FileMaker 26's **Save a Copy as XML**.
+One engine, two interfaces: **an explorer for you** (drop a Database Design Report, DDR, in the browser)
+and **a queryable index for your AI** (built from a DDR or from a FileMaker 26 Save a Copy as XML export).
 
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
@@ -18,16 +18,17 @@ Two inputs: the **Database Design Report** and FileMaker 26's **Save a Copy as X
 ## The problems this solves
 
 1. **"Where is this actually used?"** A FileMaker solution's only complete map is
-   a design export: the Database Design Report, or since FileMaker 26 a Save a
-   Copy as XML export. Both are huge XML files (a DDR is often 400+ MB of UTF-16). Answering
+   a design export: the Database Design Report, or a Save a Copy as XML export
+   in FileMaker 26's format. Both are huge XML files (a DDR is often 400+ MB of UTF-16). Answering
    one cross-reference question by hand means text-searching that file and hoping
    you didn't miss a calculated name, a trigger, or a button parameter.
 2. **Your AI assistant *can* work with the raw XML — expensively.** It works;
    we measured it. But every question costs a fresh pass and a hand-written
    parser, an analysis needs dozens of questions, and the hard-won structure is
-   thrown away afterwards. An index turns that repeated cost into one parse and
-   millisecond queries, at roughly a third of the time and tokens. It's a
-   projection, not the whole DDR: ~98% of references resolve as typed edges,
+   thrown away afterwards. An index turns that repeated cost into one parse,
+   whichever export fed it, and millisecond queries, at roughly a third of the
+   time and tokens. It's a
+   projection, not the whole export: ~98% of references resolve as typed edges,
    text-only usage (ExecuteSQL, calculated names) is caught by full-text search,
    and [COVERAGE.md](COVERAGE.md) states exactly what isn't captured — for those
    cases the raw XML is still there, and the AI skill says when to go back to it.
@@ -60,29 +61,22 @@ CLI when you want it scriptable, add the skill when your AI should use it too.
 > guarantee: it never changes what a calculation computes.
 > [Source](https://github.com/oogi-io/fm-code-formatter), MIT.
 
-## Two inputs: the DDR or Save a Copy as XML
+## One index, two ways in
 
-fmsonar reads both of FileMaker's design exports into the same index, with the
-same entity kinds, reference contexts, views and health markers. Every command,
-every query in [QUERIES.md](QUERIES.md) and the AI skill work the same on
-either. Pick the one you can make:
+Use the DDR when you want the browser, or a multi-file index with every
+cross-file reference resolved. Use Save a Copy as XML when no one should have
+to open FileMaker Pro: a nightly or CI job, or an AI agent that exports and
+indexes on its own.
 
-| | Database Design Report (DDR) | Save a Copy as XML (SaXML) |
+| | Database Design Report | Save a Copy as XML |
 |---|---|---|
-| Made with | FileMaker Pro: **Tools → Database Design Report → XML** | FileMaker 26: the script step **Save a Copy as XML** (Pro or Server), or FileMaker Server's **FMDeveloperTool** on a closed file |
-| Needs someone at FileMaker Pro | yes | no: FMDeveloperTool and a server-side script run unattended, so a scheduled job or an AI agent can make the export and build the index |
-| Read by | the browser (fmsonar.com) and the CLI | the CLI (the browser viewer reads DDRs only) |
-| Formats | the XML DDR: one file, several, or a `Summary.xml` manifest | FileMaker 26 exports, format `2.3.0.0` and `2.3.0.1`, made with "Include details for analysis tools" on |
-| Cross-file references (multi-file solution) | resolved | resolved when exported from Pro with every file open; FMDeveloperTool leaves them empty |
-| Only here | | each object's last-change stamp, a sub-summary part's break field, every custom menu item's step text |
+| Made with | FileMaker Pro (advanced tools on): Tools → Database Design Report → XML | an export in FileMaker 26's format (2.3.0.0 or 2.3.0.1, "Include details for analysis tools" on): Tools → Save a Copy as XML or the script step of that name in FileMaker Pro, or FileMaker Server's FMDeveloperTool on a closed file; a full-access account either way |
+| Read by | the browser and the CLI | the CLI only |
+| Cross-file references | resolved | resolved when exported from Pro with every file open (measured on one file of a two-file lab); empty from FMDeveloperTool |
 
-**Rule of thumb:** use the DDR for the browser or a fully resolved multi-file
-index. Use SaXML when no one should have to open FileMaker Pro: a nightly
-build, a CI job, or an agent that exports and indexes on its own. The
-differences between the two routes, as measured, are listed in
-[COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR").
+The measured differences between the two routes are in [COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR").
 
-## Path 1 — Explore in the browser (no install, DDR)
+## Path 1 — Explore in the browser (no install)
 
 1. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
 2. Open **[fmsonar.com](https://fmsonar.com)**.
@@ -141,6 +135,9 @@ Good to know when building from Save a Copy as XML:
   together. Pro's multi-file summary (`XMLv2_Summary`) is refused, and so is
   a partial `-catalog_list` export that lacks a section every file writes or a
   catalog it refers to. Exports of the two supported versions build together.
+  Claris lists the Save a Copy as XML step as supported on FileMaker Server
+  and Cloud; fmsonar has measured exports from FileMaker Pro and
+  FMDeveloperTool only.
 - **Cross-file references.** FMDeveloperTool leaves references into other
   files empty (external table occurrences, cross-file calls), so those stay
   unresolved, also when the other files' exports are built into the same index
@@ -226,7 +223,8 @@ reference types.
   parsers (Python CLI and the browser's JS twin, parity-tested edge by edge)
   stream with SAX, so file size doesn't matter. Measured: a 510 MB 9-file
   production solution builds in ~26 s; the 416 MB main file parses in-browser
-  in ~7 s using ~80 MB of memory.
+  in ~7 s using ~80 MB of memory; a 448 MB FileMaker 26 export of one file
+  builds in ~28 s using ~230 MB.
 - **Output:** one `.db` SQLite file — `entities`, a generic `refs` edge table
   (the heart of "where used"), and an FTS5 full-text index as a catch-all.
 - **General-purpose:** no solution-specific assumptions; validated against
@@ -235,9 +233,9 @@ reference types.
 ## Data model
 
 One database holds a whole solution: all files of a multi-file solution share
-one entity space. Cross-file references resolve on a DDR build of every file;
-on SaXML only where the export filled them (FileMaker Pro with every file
-open), never on an FMDeveloperTool export. `ddr_run` holds one row
+one entity space. Cross-file references resolve on a DDR build of every file
+(and on a Save a Copy as XML export made from Pro with every file open).
+`ddr_run` holds one row
 per build: the source format (`ddr` or `saxml`), its version, and the fmsonar
 version that built the index (`parser_version`). `build` always writes a fresh
 database for one export of one solution.
@@ -294,6 +292,17 @@ every catalog count matches (base tables, table occurrences, relationships,
 layouts, value lists, custom functions). A committed micro-fixture plus a full
 test suite (structural counts, resolution semantics, UTF-16 round-trip,
 edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push.
+
+Both inputs give the same database — the same tables, views, entity kinds and
+reference contexts, so every query and the skill work unchanged;
+`ddr_run.source_format` records which export fed it, and the content differs
+only where the exports differ. The Save a Copy as XML parse is measured against
+the DDR parse, not against the file: `tools/compare_resolution.py` compares the
+two indexes of one file (it prints a cross-source banner on such a pair). On
+the lab file the pair differs by two lost keys; on a real solution's main file
+exported both ways a day apart, every lost, changed and gained key falls in one
+of the classes listed in [COVERAGE.md](COVERAGE.md) ("Expected differences
+between a DDR index and a SaXML index").
 
 The tool is also A/B tested against raw text search on real production tickets,
 and the losses shape the roadmap. The full story:
@@ -390,8 +399,8 @@ and the losses shape the roadmap. The full story:
   into Script Workspace. The transform reproduces FileMaker's own copied
   output byte-for-byte (268/268 steps on the reference script) and is
   paste-verified in Script Workspace; see SNIPPET_FORMAT.md. Browsers cannot set
-  the XMSS flavor, so the web app cannot paste directly: CLI only. It reads a
-  DDR; a Save a Copy as XML export is refused by name.
+  the XMSS flavor, so the web app cannot paste directly: CLI only. DDR input
+  only for now; a Save a Copy as XML file is refused with a message.
 - [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
   them as input for the FileMaker upgrade tool to apply. Shares the raw-XML
   prerequisite with snippet copy; parked until the read-only explorer has
