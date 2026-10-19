@@ -114,13 +114,17 @@ Build the index once, from either input:
 
 ```bash
 # From a DDR: the Summary.xml manifest of a multi-file solution, or a single *_fmp12.xml
-fmsonar build /path/to/DDR/Summary.xml -o solution.db
+fmsonar build /path/to/DDR/Summary.xml -o solution_ddr.db
 
 # From a Save a Copy as XML export, made without opening FileMaker Pro
 # (FileMaker Server's FMDeveloperTool, on a copy of the closed file)
 FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
-fmsonar build Solution_saxml.xml -o solution.db
+fmsonar build Solution_saxml.xml -o solution_saxml.db
 ```
+
+Without `-o` the index lands next to the source, named after it
+(`Solution_saxml.db`). One index holds one export: build each into its own
+file, as above.
 
 Running `build` again on the same source with the same fmsonar keeps the index
 and prints `Unchanged:` in well under a second; `--rebuild` builds anyway.
@@ -154,7 +158,8 @@ Good to know when building from Save a Copy as XML:
   last-change stamp, including the developer's FileMaker user and account
   name; the HTML `report` leaves them out ([SECURITY.md](SECURITY.md)).
 
-Then query it. Each command is copy-paste safe on its own:
+Then query it, whichever index you built (`solution.db` below stands for
+either). Each command is copy-paste safe on its own:
 
 | Command | Answers |
 |---|---|
