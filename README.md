@@ -7,6 +7,7 @@
 
 **Ping your FileMaker solution — every reference echoes back.**
 One engine, two interfaces: **an explorer for you**, **a queryable index for your AI**.
+Two inputs: the **Database Design Report** and FileMaker 26's **Save a Copy as XML**.
 
 *Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
 
@@ -17,7 +18,8 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
 ## The problems this solves
 
 1. **"Where is this actually used?"** A FileMaker solution's only complete map is
-   its Database Design Report — a huge (often 400+ MB) UTF-16 XML export. Answering
+   a design export: the Database Design Report, or since FileMaker 26 a Save a
+   Copy as XML export. Both are huge XML files (a DDR is often 400+ MB of UTF-16). Answering
    one cross-reference question by hand means text-searching that file and hoping
    you didn't miss a calculated name, a trigger, or a button parameter.
 2. **Your AI assistant *can* work with the raw XML — expensively.** It works;
@@ -29,22 +31,23 @@ One engine, two interfaces: **an explorer for you**, **a queryable index for you
    text-only usage (ExecuteSQL, calculated names) is caught by full-text search,
    and [COVERAGE.md](COVERAGE.md) states exactly what isn't captured — for those
    cases the raw XML is still there, and the AI skill says when to go back to it.
-3. **A DDR is a client's entire schema — table names, business logic, everything.**
+3. **A design export is a client's entire schema — table names, business logic, everything.**
    Sending that to someone else's server is a confidentiality decision most client
    work doesn't allow. fmsonar.com is a web *page*, not a web service: parsing runs
    in your browser, and no DDR bytes are transmitted — verifiably (watch the network
    tab, or go offline and it still works), not as a promise. Self-hosting the
    single-file app removes even that dependency. See [SECURITY.md](SECURITY.md).
 
-One engine answers all three. It parses the DDR **once** into a normalized index
-(entities, reference edges, full-text) — then every question is instant.
+One engine answers all three. It parses the export (DDR or Save a Copy as XML)
+**once** into a normalized index (entities, reference edges, full-text) — then
+every question is instant.
 
 ## Which tool for which problem
 
 | You want to… | Use | You need |
 |---|---|---|
-| Explore a solution visually — search, call chains, health report | **[fmsonar.com](https://fmsonar.com)** (browser) | nothing — no install, no upload |
-| Query from the shell, script it, export reports | **`fmsonar` CLI** | Python 3.10+ and pipx |
+| Explore a solution visually — search, call chains, health report | **[fmsonar.com](https://fmsonar.com)** (browser) | nothing — no install, no upload; reads a DDR |
+| Query from the shell, script it, export reports | **`fmsonar` CLI** | Python 3.10+ and pipx; reads a DDR or a Save a Copy as XML export |
 | Let your AI assistant answer cross-reference questions | **CLI + the Claude Code skill** | the CLI (above) + Claude Code |
 
 The three build on each other in that order — start in the browser, install the
@@ -57,7 +60,29 @@ CLI when you want it scriptable, add the skill when your AI should use it too.
 > guarantee: it never changes what a calculation computes.
 > [Source](https://github.com/oogi-io/fm-code-formatter), MIT.
 
-## Path 1 — Explore in the browser (no install)
+## Two inputs: the DDR or Save a Copy as XML
+
+fmsonar reads both of FileMaker's design exports into the same index, with the
+same entity kinds, reference contexts, views and health markers. Every command,
+every query in [QUERIES.md](QUERIES.md) and the AI skill work the same on
+either. Pick the one you can make:
+
+| | Database Design Report (DDR) | Save a Copy as XML (SaXML) |
+|---|---|---|
+| Made with | FileMaker Pro: **Tools → Database Design Report → XML** | FileMaker 26: the script step **Save a Copy as XML** (Pro or Server), or FileMaker Server's **FMDeveloperTool** on a closed file |
+| Needs someone at FileMaker Pro | yes | no: FMDeveloperTool and a server-side script run unattended, so a scheduled job or an AI agent can make the export and build the index |
+| Read by | the browser (fmsonar.com) and the CLI | the CLI (the browser viewer reads DDRs only) |
+| Formats | the XML DDR: one file, several, or a `Summary.xml` manifest | FileMaker 26 exports, format `2.3.0.0` and `2.3.0.1`, made with "Include details for analysis tools" on |
+| Cross-file references (multi-file solution) | resolved | resolved when exported from Pro with every file open; FMDeveloperTool leaves them empty |
+| Only here | | each object's last-change stamp, a sub-summary part's break field, every custom menu item's step text |
+
+**Rule of thumb:** use the DDR for the browser or a fully resolved multi-file
+index. Use SaXML when no one should have to open FileMaker Pro: a nightly
+build, a CI job, or an agent that exports and indexes on its own. The
+differences between the two routes, as measured, are listed in
+[COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR").
+
+## Path 1 — Explore in the browser (no install, DDR)
 
 1. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
 2. Open **[fmsonar.com](https://fmsonar.com)**.
@@ -95,56 +120,46 @@ Run `fmsonar` on its own for a status splash — version, what is indexed in the
 cache, the newest solution's entity and reference counts, and whether the Claude
 skill is installed. (Piped output stays plain text.)
 
-Build the index once — point it at the `Summary.xml` manifest for a multi-file
-solution, or a single `*_fmp12.xml`:
+Build the index once, from either input:
 
 ```bash
+# From a DDR: the Summary.xml manifest of a multi-file solution, or a single *_fmp12.xml
 fmsonar build /path/to/DDR/Summary.xml -o solution.db
+
+# From a Save a Copy as XML export, made without opening FileMaker Pro
+# (FileMaker Server's FMDeveloperTool, on a copy of the closed file)
+FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
+fmsonar build Solution_saxml.xml -o solution.db
 ```
 
 Running `build` again on the same source with the same fmsonar keeps the index
 and prints `Unchanged:` in well under a second; `--rebuild` builds anyway.
 
-**Or from a Save a Copy as XML export (FileMaker 26, CLI only, v1.15.0).** `build`
-also reads FileMaker's own XML export, made with FileMaker 26 (format
-versions 2.3.0.0 and 2.3.0.1) and with **"Include details for analysis
-tools"** on; any other export is refused with a message that says why (so are
-Pro's multi-file summary, `XMLv2_Summary`: pass the per-file exports; and a
-partial export made with FMDeveloperTool's `-catalog_list` that lacks a section
-every file writes or a catalog it refers to; the two versions build
-together). It can
-be made without opening FileMaker Pro, which makes it the route for an
-unattended or agent-driven build:
+Good to know when building from Save a Copy as XML:
 
-```bash
-# FileMaker Server's FMDeveloperTool, on a copy of the closed file
-FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
-fmsonar build Solution_saxml.xml -o solution.db
-```
-
-FMDeveloperTool takes the account password as an argument, so it is visible in
-the process list while the export runs; use a dedicated export account.
-
-The script step **Save a Copy as XML** (option "Include details for analysis
-tools"), run in FileMaker Pro or on Server, writes the same format. Pass one
-export per file of a multi-file solution. FMDeveloperTool leaves references
-into other files empty (external table occurrences, cross-file calls), so
-those stay unresolved, also when the other files' exports are built into the
-same index (measured); a Save a Copy as XML from FileMaker Pro with every file
-open fills them (measured on one file of a two-file lab; FileMaker Server not
-yet measured). For a fully resolved multi-file index, build from the DDR. A
-whole export holds calculations with no reference list of their own, mostly
-on layout objects (on a large solution several percent of the calculation
-references on layout objects): `build`, `stats` and `list` give the count,
-and `where`, when it finds no reference, prints the name's full-text
-mentions beside the 0. Every export measured so far is
-English; an export with another locale builds with a warning that points at
-the few rules that read English step text (listed in COVERAGE.md). The
-expected differences between the two routes, as measured, are listed in
-[COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR"). The browser viewer
-reads DDRs only. A SaXML-built index also stores each object's last-change
-stamp, including the developer's FileMaker user and account name; the HTML
-`report` leaves them out ([SECURITY.md](SECURITY.md)).
+- **One export per file.** Pass the per-file exports of a multi-file solution
+  together. Pro's multi-file summary (`XMLv2_Summary`) is refused, and so is
+  a partial `-catalog_list` export that lacks a section every file writes or a
+  catalog it refers to. Exports of the two supported versions build together.
+- **Cross-file references.** FMDeveloperTool leaves references into other
+  files empty (external table occurrences, cross-file calls), so those stay
+  unresolved, also when the other files' exports are built into the same index
+  (measured). A Save a Copy as XML from FileMaker Pro with every file open
+  fills them (measured on one file of a two-file lab; FileMaker Server not yet
+  measured). For a fully resolved multi-file index, build from the DDR.
+- **Calculations without a reference list.** A whole export holds some
+  calculations with no reference list of their own, mostly on layout objects
+  (on a large solution several percent of the calculation references on layout
+  objects). `build`, `stats` and `list` give the count, and `where`, when it
+  finds no reference, prints the name's full-text mentions beside the 0.
+- **Locale.** Every export measured so far is English; an export with another
+  locale builds with a warning that points at the few rules that read English
+  step text (listed in COVERAGE.md).
+- **Password and history.** FMDeveloperTool takes the account password as an
+  argument, so it is visible in the process list while the export runs; use a
+  dedicated export account. A SaXML-built index stores each object's
+  last-change stamp, including the developer's FileMaker user and account
+  name; the HTML `report` leaves them out ([SECURITY.md](SECURITY.md)).
 
 Then query it. Each command is copy-paste safe on its own:
 
@@ -183,7 +198,7 @@ deep-reading, climb to callers, sweep the globals a script writes, read layout
 bodies for UI mechanisms, report real FileMaker ids.
 
 Then, wherever you're working: *"analyze the DDR in ~/Desktop/MyDDR — which
-scripts write to CTC::email?"* Claude Code builds the index into a central cache
+scripts write to CTC::email?"* (a Save a Copy as XML export works the same way). Claude Code builds the index into a central cache
 (`~/.fmsonar/dbs/`) and answers with SQL-backed evidence. Other AI tools
 (Cursor, Copilot): they read [AGENTS.md](AGENTS.md) next to a built database.
 
