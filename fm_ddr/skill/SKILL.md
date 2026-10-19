@@ -1,6 +1,6 @@
 ---
 name: fmsonar
-description: Analyze FileMaker solutions via their DDR (Database Design Report) or a FileMaker 26 "Save a Copy as XML" export. Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, a Save a Copy as XML (SaXML) export, or asks structural questions about a FileMaker solution. Works from any directory; databases are cached centrally.
+description: Analyze FileMaker solutions via their DDR (Database Design Report) or a FileMaker 26 "Save a Copy as XML" export. Build a queryable SQLite index and answer cross-reference questions - "where is this field/script/table occurrence/custom function used?", "which scripts WRITE to this field?", "what breaks if I rename X?", unused-field and orphan-script candidates, call chains. Use when the user mentions a FileMaker DDR, a *_fmp12.xml file, a Save a Copy as XML (SaXML) export, or asks structural questions about a FileMaker solution. Works from any directory; the index lands next to the export.
 ---
 
 You analyze FileMaker solutions using the `fm-ddr` CLI (fmsonar's engine).
@@ -8,11 +8,15 @@ Never hand-parse DDR XML - build the SQLite index and query it.
 
 ## 1. Locate or build the database
 
-Databases live in the central cache `~/.fmsonar/dbs/<solution>.db` - create the
-directory if needed. `fm-ddr list` shows what is cached (label, build time,
-parser version, staleness) - run it first when unsure what exists. Run
-`build` on the source; it skips an unchanged one in under a second and says
-`Unchanged:` (`--rebuild` builds anyway).
+The database lives next to the export: `fm-ddr build <source>` writes
+`<source>.db` beside it, in the project (a `Summary.xml` build would be
+`Summary.db`: pass `-o <same folder>/<solution>.db` to name it). Use `-o` for
+another folder only when the user asks. `fm-ddr list` (current folder) or `fm-ddr list <folder>` shows what
+exists (label, build time, parser version, staleness) - run it first when
+unsure. Run `build` on the source; it skips an unchanged one in under a second
+and says `Unchanged:` (`--rebuild` builds anyway). An index built by a skill
+older than 1.16.1 may sit in `~/.fmsonar/dbs/`; `fm-ddr list ~/.fmsonar/dbs`
+shows it, and a build next to the export replaces it.
 
 To build, you need the user's DDR export (FileMaker: Tools > Database Design
 Report > XML) or a Save a Copy as XML export (below). If you don't know where it is, ask - don't scan the whole disk.
@@ -37,9 +41,8 @@ index; COVERAGE.md "SaXML next to the DDR" lists the expected differences
 (SaXML only: `part_break` refs, every custom menu item's step text).
 
 ```bash
-mkdir -p ~/.fmsonar/dbs
 # multi-file solutions: ALWAYS build from Summary.xml so cross-file references resolve
-fm-ddr build "/path/to/DDR/Summary.xml" -o ~/.fmsonar/dbs/<solution>.db --label "<solution> <date>"
+fm-ddr build "/path/to/DDR/Summary.xml" -o "/path/to/DDR/<solution>.db" --label "<solution> <date>"
 # single-file solutions: point at the *_fmp12.xml directly
 ```
 

@@ -10,8 +10,8 @@ Its guarantees and its limits:
   network request carrying your data. A Content-Security-Policy with
   `connect-src 'none'` is enforced (both as a `<meta>` tag and at the CDN edge),
   so even a hypothetical script injection cannot exfiltrate the parsed schema.
-- **The CLI is local.** Databases are written to disk (or the central cache
-  `~/.fmsonar/dbs/`) and never transmitted.
+- **The CLI is local.** Databases are written to disk, next to the export
+  unless `-o` says otherwise, and never transmitted.
 - **Shared reports and entity exports are self-contained HTML** carrying only
   the data you chose to include, with the same restrictive CSP.
 

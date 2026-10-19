@@ -498,10 +498,10 @@ class TestParser(unittest.TestCase):
         self.assertEqual(leftovers, [])
 
     def test_build_creates_a_missing_output_directory(self):
-        """-o into a directory that does not exist yet is the normal first run
-        on a new machine (~/.fmsonar/dbs). mkstemp does not create it, so build
-        has to: without this, the failure surfaces as Errno 2 naming the temp
-        file, which reads as if the temp file were the problem."""
+        """-o into a folder that does not exist yet (`-o new/folder/x.db`) is
+        an ordinary first build. mkstemp does not create it, so build has to:
+        without this, the failure surfaces as Errno 2 naming the temp file,
+        which reads as if the temp file were the problem."""
         target = os.path.join(self.tmp, "fresh", "dbs", "solution.db")
         self.assertFalse(os.path.isdir(os.path.dirname(target)))
         build(FIXTURE, target, label="fresh machine")
@@ -6361,6 +6361,103 @@ class TestUnchangedSkip(unittest.TestCase):
         self.assertIn("source newer than index", self.run_cli("list", self.tmp)[0])
         self.assertTrue(self.skipped(self.build()))
         self.assertNotIn("source newer than index", self.run_cli("list", self.tmp)[0])
+
+
+class TestListAndSplashLocations(unittest.TestCase):
+    """v1.16.1: `list` reads the current folder and points at the legacy cache
+    only when the folder has no fmsonar database; the splash counts fmsonar
+    databases only and says when the installed skill is older than the
+    package. HOME is a temp dir throughout, so the real ~/.fmsonar and
+    ~/.claude are never read."""
+
+    def setUp(self):
+        self.home = tempfile.mkdtemp(prefix="fmddr_home_")
+        self.cwd = tempfile.mkdtemp(prefix="fmddr_cwd_")
+        self.env = mock.patch.dict(os.environ, {"HOME": self.home})
+        self.env.start()
+        self.old_cwd = os.getcwd()
+        os.chdir(self.cwd)
+
+    def tearDown(self):
+        os.chdir(self.old_cwd)
+        self.env.stop()
+        shutil.rmtree(self.home, ignore_errors=True)
+        shutil.rmtree(self.cwd, ignore_errors=True)
+
+    def run_cli(self, *argv):
+        import io, contextlib
+        from fm_ddr.cli import main
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(io.StringIO()):
+            main(list(argv))
+        return out.getvalue()
+
+    def fill_cache(self):
+        cache = os.path.join(self.home, ".fmsonar", "dbs")
+        os.makedirs(cache)
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            build(FIXTURE, os.path.join(cache, "x.db"), label="cached")
+        return cache
+
+    def test_list_without_argument_points_at_a_filled_cache(self):
+        self.fill_cache()
+        out = self.run_cli("list")
+        self.assertIn("No databases in .", out)
+        self.assertIn("1 fmsonar database(s) in ~/.fmsonar/dbs", out)
+        self.assertIn("fmsonar list ~/.fmsonar/dbs", out)
+
+    def test_list_without_argument_is_silent_without_a_cache(self):
+        self.assertFalse(os.path.exists(os.path.join(self.home, ".fmsonar")))
+        out = self.run_cli("list")
+        self.assertIn("No databases in .", out)
+        self.assertNotIn("fmsonar/dbs", out)
+
+    def test_list_with_a_folder_argument_never_hints(self):
+        self.fill_cache()
+        empty = tempfile.mkdtemp(prefix="fmddr_empty_")
+        try:
+            out = self.run_cli("list", empty)
+        finally:
+            shutil.rmtree(empty, ignore_errors=True)
+        self.assertIn(f"No databases in {empty}", out)
+        self.assertNotIn("fmsonar/dbs", out)
+
+    def test_splash_counts_fmsonar_databases_only(self):
+        c = sqlite3.connect(os.path.join(self.cwd, "app.db"))
+        c.execute("CREATE TABLE settings (k TEXT, v TEXT)")
+        c.commit(); c.close()
+        out = self.run_cli()
+        self.assertIn("none in this folder", out)
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()):
+            build(FIXTURE, os.path.join(self.cwd, "solution.db"), label="here")
+        out = self.run_cli()
+        self.assertIn("1 in this folder", out)
+        self.assertIn("here", out)
+
+    def test_splash_skill_row_says_outdated_then_installed(self):
+        src_dir = os.path.join(ROOT, "fm_ddr", "skill")
+        dest_dir = os.path.join(self.home, ".claude", "skills", "fmsonar")
+        os.makedirs(dest_dir)
+        for name in os.listdir(src_dir):
+            if name.endswith(".md"):
+                shutil.copy(os.path.join(src_dir, name), os.path.join(dest_dir, name))
+        data = bytearray(open(os.path.join(dest_dir, "SKILL.md"), "rb").read())
+        data[-1] ^= 0x01    # one byte changed, same size
+        with open(os.path.join(dest_dir, "SKILL.md"), "wb") as f:
+            f.write(data)
+        out = self.run_cli()
+        self.assertIn("installed · outdated — run fmsonar install-skill", out)
+        shutil.copy(os.path.join(src_dir, "SKILL.md"), os.path.join(dest_dir, "SKILL.md"))
+        out = self.run_cli()
+        self.assertIn("installed", out)
+        self.assertNotIn("outdated", out)
+
+    def test_splash_skill_row_without_a_skill(self):
+        out = self.run_cli()
+        self.assertIn("run fmsonar install-skill", out)
+        self.assertNotIn("installed", out)
 
 
 if __name__ == "__main__":

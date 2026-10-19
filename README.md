@@ -110,8 +110,8 @@ Install fmsonar (pure standard library, no dependencies):
 pipx install fmsonar
 ```
 
-Run `fmsonar` on its own for a status splash — version, what is indexed in the
-cache, the newest solution's entity and reference counts, and whether the Claude
+Run `fmsonar` on its own for a status splash — version, the fmsonar databases
+in the current folder, the newest solution's entity and reference counts, and whether the Claude
 skill is installed. (Piped output stays plain text.)
 
 Build the index once, from either input:
@@ -167,7 +167,7 @@ Then query it. Each command is copy-paste safe on its own:
 | `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
 | `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
 | `fmsonar stats solution.db` | entity counts + reference-resolution health |
-| `fmsonar list` | all cached databases: which solution, built when, by which parser, stale or not (multi-client overview; add a folder argument to scan elsewhere) |
+| `fmsonar list` | the fmsonar databases in a folder (the current one by default): which solution, built when, by which parser, stale or not — pass a folder to scan elsewhere, e.g. one you keep every client's index in |
 | `fmsonar mutations solution.db --like adder` | which scripts create/delete records — with context clues and confidence tiers, never a guess (record ops carry no table in the DDR) |
 | `fmsonar trigger-map solution.db --inputs "LI::Amount_c" --set-flag "LI::Picked_flag" --table LI --recompute "Recompute Order"` | caching/"keep X in sync" tickets: every entry point that can change a cached value's inputs, classified from the **transitive** call chain (a trigger that writes nothing relevant itself can still be the biggest stamp-point via a callee) |
 | `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
@@ -194,10 +194,12 @@ hard way, see the eval story — the **investigation protocol**: survey before
 deep-reading, climb to callers, sweep the globals a script writes, read layout
 bodies for UI mechanisms, report real FileMaker ids.
 
-Then, wherever you're working: *"analyze the DDR in ~/Desktop/MyDDR — which
-scripts write to CTC::email?"* (a Save a Copy as XML export works the same way). Claude Code builds the index into a central cache
-(`~/.fmsonar/dbs/`) and answers with SQL-backed evidence. Other AI tools
-(Cursor, Copilot): they read [AGENTS.md](AGENTS.md) next to a built database.
+Then, wherever you're working, point it at either export: *"analyze the DDR in
+~/Desktop/MyDDR — which scripts write to CTC::email?"* or *"index the Save a
+Copy as XML export in ~/exports and do the same"*. Claude Code builds the index
+next to the export (`<export name>.db`, where `fmsonar build` puts it without
+`-o`) and answers with SQL-backed evidence. Other AI tools (Cursor, Copilot):
+they read [AGENTS.md](AGENTS.md) next to a built database.
 
 ## Updating
 

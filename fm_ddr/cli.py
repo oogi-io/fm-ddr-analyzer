@@ -519,17 +519,31 @@ def _human_size(n):
     return f"{n:.0f} GB"
 
 
+LEGACY_CACHE = "~/.fmsonar/dbs"   # where skills before 1.16.1 built every index
+
+
+def _fmsonar_dbs(folder):
+    """The *.db files in `folder` that are fmsonar databases (SQLite with a
+    ddr_run table), sorted by name. An application's own SQLite file in the
+    project is not one. Empty when the folder does not exist."""
+    from fm_ddr.parse import _is_fmsonar_db
+    folder = os.path.expanduser(folder)
+    if not os.path.isdir(folder):
+        return []
+    return [os.path.join(folder, n) for n in sorted(os.listdir(folder))
+            if n.endswith(".db") and _is_fmsonar_db(os.path.join(folder, n))]
+
+
 def cmd_list(args):
     """List fmsonar databases in a folder — solution label, build time, parser
     version, size, and staleness (older parser / source DDR changed since the
-    build). Default folder is the central cache the Claude skill uses."""
+    build). Default folder is the current one; when it holds no fmsonar
+    database and the legacy cache does, say so (no folder argument only)."""
     from fm_ddr import __version__
-    d = os.path.expanduser(args.dir or "~/.fmsonar/dbs")
+    d = os.path.expanduser(args.dir or ".")
     if not os.path.isdir(d):
         print(f"No such folder: {d}")
-        if not args.dir:
-            print("The central cache is created the first time a database is "
-                  "built there. Point at another folder: fm-ddr list <dir>")
+        print("Point at a folder: fm-ddr list <dir>")
         sys.exit(1)
     rows = []
     for name in sorted(os.listdir(d)):
@@ -582,9 +596,16 @@ def cmd_list(args):
                      f"{size} · {nfiles}f", status])
     if not rows:
         print(f"No databases in {d}")
-        return
-    print(f"# {d}\n")
-    _print_table(["db", "label", "built (UTC)", "parser", "format", "size", "status"], rows)
+    else:
+        print(f"# {d}\n")
+        _print_table(["db", "label", "built (UTC)", "parser", "format", "size", "status"], rows)
+    # Bare `list` in a folder without an fmsonar database: point at indexes a
+    # skill older than 1.16.1 built into the central cache, if any are there.
+    if not args.dir and not any(r[1] != "(not an fmsonar database)" for r in rows):
+        n = len(_fmsonar_dbs(LEGACY_CACHE))
+        if n:
+            print(f"{n} fmsonar database(s) in {LEGACY_CACHE} (built by a skill "
+                  f"before 1.16.1): fmsonar list {LEGACY_CACHE}")
 
 
 
@@ -1034,6 +1055,33 @@ def cmd_trigger_map(args):
           "'fm-ddr mutations <db>' for the untriaged inventory.")
 
 
+def _skill_dirs():
+    """(packaged skill folder, install folder under ~/.claude, shipped *.md
+    names). The install folder goes through expanduser so HOME decides it."""
+    src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill")
+    skill_files = sorted(f for f in os.listdir(src_dir) if f.endswith(".md"))
+    dest_dir = os.path.expanduser("~/.claude/skills/fmsonar")
+    return src_dir, dest_dir, skill_files
+
+
+def _skill_tree_bytes(base, names):
+    # Aggregate digest input over every shipped skill file, missing files included
+    out = b""
+    for n in names:
+        p = os.path.join(base, n)
+        out += n.encode() + b"\x00"
+        out += open(p, "rb").read() if os.path.exists(p) else b"<missing>"
+    return out
+
+
+def _skill_outdated():
+    """True when the installed skill tree differs from the packaged one, by the
+    same digest input `install-skill --check` compares."""
+    src_dir, dest_dir, skill_files = _skill_dirs()
+    return (_skill_tree_bytes(dest_dir, skill_files)
+            != _skill_tree_bytes(src_dir, skill_files))
+
+
 def cmd_install_skill(args):
     """Install the fmsonar skill for Claude Code, or check its freshness.
 
@@ -1046,24 +1094,15 @@ def cmd_install_skill(args):
     import hashlib
     import shutil
 
-    src_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "skill")
-    skill_files = sorted(f for f in os.listdir(src_dir) if f.endswith(".md"))
+    src_dir, dest_dir, skill_files = _skill_dirs()
     src = os.path.join(src_dir, "SKILL.md")
-    dest_dir = os.path.expanduser("~/.claude/skills/fmsonar")
     dest = os.path.join(dest_dir, "SKILL.md")
     from fm_ddr import __version__
 
     def digest(b):
         return hashlib.sha256(b).hexdigest()[:12]
 
-    def tree_bytes(base, names):
-        # Aggregate digest input over every shipped skill file, missing files included
-        out = b""
-        for n in names:
-            p = os.path.join(base, n)
-            out += n.encode() + b"\x00"
-            out += open(p, "rb").read() if os.path.exists(p) else b"<missing>"
-        return out
+    tree_bytes = _skill_tree_bytes
 
     if args.check or args.remote:
         if not os.path.exists(dest):
@@ -1099,7 +1138,7 @@ def cmd_install_skill(args):
         shutil.copy(os.path.join(src_dir, name), os.path.join(dest_dir, name))
     print(f"Installed the 'fmsonar' skill (fm_ddr {__version__}, "
           f"{', '.join(skill_files)}) -> {dest_dir}")
-    print("Claude Code can now analyze FileMaker DDRs from ANY directory -")
+    print("Claude Code can now analyze a FileMaker DDR or Save a Copy as XML export from any directory -")
     print("just mention a DDR or ask a where-used question.")
     print("Freshness check anytime: fm-ddr install-skill --check   "
           "(or --remote to compare against GitHub main)")
@@ -1223,11 +1262,9 @@ def _splash(stream=None):
         platform.system(), platform.system())
     kv("Runtime", f"Python {platform.python_version()} · {_os} {platform.machine()}")
 
-    dbs_dir = os.path.expanduser("~/.fmsonar/dbs")
-    dbs = ([os.path.join(dbs_dir, f) for f in os.listdir(dbs_dir) if f.endswith(".db")]
-           if os.path.isdir(dbs_dir) else [])
+    dbs = _fmsonar_dbs(os.getcwd())   # fmsonar databases only, not any *.db
     if dbs:
-        kv("Cache", f"~/.fmsonar/dbs · {len(dbs)} indexed")
+        kv("Indexes", f"{len(dbs)} in this folder")
         newest = max(dbs, key=os.path.getmtime)
         try:
             conn = sqlite3.connect(f"file:{newest}?mode=ro", uri=True)
@@ -1243,10 +1280,14 @@ def _splash(stream=None):
         except (sqlite3.DatabaseError, TypeError):
             pass
     else:
-        kv("Cache", f"~/.fmsonar/dbs · empty — run {GLOW}fmsonar build <DDR.xml>{R}")
+        kv("Indexes", f"none in this folder — run {GLOW}fmsonar build <export.xml>{R}")
 
-    skill = os.path.exists(os.path.expanduser("~/.claude/skills/fmsonar/SKILL.md"))
-    kv("Skill", f"{GLOW}installed{R}" if skill else f"run {GLOW}fmsonar install-skill{R}")
+    if not os.path.exists(os.path.expanduser("~/.claude/skills/fmsonar/SKILL.md")):
+        kv("Skill", f"run {GLOW}fmsonar install-skill{R}")
+    elif _skill_outdated():
+        kv("Skill", f"{GLOW}installed{R} · outdated — run {GLOW}fmsonar install-skill{R}")
+    else:
+        kv("Skill", f"{GLOW}installed{R}")
 
     if on:
         out.append("")
@@ -1325,10 +1366,11 @@ def main(argv=None):
     sn.set_defaults(func=cmd_snippet)
 
     ls = sub.add_parser("list",
-                        help="list databases in a folder (default ~/.fmsonar/dbs) "
-                             "with label, build time, parser version, staleness")
+                        help="list fmsonar databases in a folder (default: the "
+                             "current folder) with label, build time, parser "
+                             "version, staleness")
     ls.add_argument("dir", nargs="?", default=None,
-                    help="folder to scan (default: the central cache)")
+                    help="folder to scan (default: the current folder)")
     ls.set_defaults(func=cmd_list)
 
     mu = sub.add_parser("mutations",
