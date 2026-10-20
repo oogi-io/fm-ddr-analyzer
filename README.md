@@ -5,441 +5,142 @@
   </picture>
 </p>
 
-**Ping your FileMaker solution — every reference echoes back.**
-One engine, two interfaces: **an explorer for you** (drop a Database Design Report, DDR, in the browser)
-and **a queryable index for your AI** (built from a DDR or from a FileMaker 26 Save a Copy as XML export).
+fmsonar reads a FileMaker solution's design export into a SQLite index and answers
+"where is this used?" in milliseconds. Explore it in the browser, query it from the
+shell, or let your AI assistant query it for you.
 
-*Live at **[fmsonar.com](https://fmsonar.com)** · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · repo/engine name: `fm-ddr-analyzer`*
+*[fmsonar.com](https://fmsonar.com) · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · MIT*
 
-## The problems this solves
+## Why
 
-1. **"Where is this actually used?"** A FileMaker solution's only complete map is
-   a design export: the Database Design Report, or a Save a Copy as XML export
-   in FileMaker 26's format. Both are huge XML files (a DDR is often 400+ MB of UTF-16). Answering
-   one cross-reference question by hand means text-searching that file and hoping
-   you didn't miss a calculated name, a trigger, or a button parameter.
-2. **Your AI assistant *can* work with the raw XML — expensively.** It works;
-   we measured it. But every question costs a fresh pass and a hand-written
-   parser, an analysis needs dozens of questions, and the hard-won structure is
-   thrown away afterwards. An index turns that repeated cost into one parse,
-   whichever export fed it, and millisecond queries, at roughly a third of the
-   time and tokens. It's a
-   projection, not the whole export: ~98% of references resolve as typed edges,
-   text-only usage (ExecuteSQL, calculated names) is caught by full-text search,
-   and [COVERAGE.md](COVERAGE.md) states exactly what isn't captured — for those
-   cases the raw XML is still there, and the AI skill says when to go back to it.
-3. **A design export is a client's entire schema — table names, business logic, everything.**
-   Sending that to someone else's server is a confidentiality decision most client
-   work doesn't allow. fmsonar.com is a web *page*, not a web service: parsing runs
-   in your browser, and no DDR bytes are transmitted — verifiably (watch the network
-   tab, or go offline and it still works), not as a promise. Self-hosting the
-   single-file app removes even that dependency. See [SECURITY.md](SECURITY.md).
+- A solution's only complete map is its design export: a Database Design Report, or
+  since FileMaker 26 a Save a Copy as XML file. Both are hundreds of megabytes of XML.
+  Finding every use of one field by hand means searching that file and hoping you did
+  not miss a trigger, a button parameter or a calculated name.
+- An AI assistant can read the raw XML, but every question costs a fresh pass. One
+  parse into an index makes every question after it instant, at roughly a third of the
+  time and tokens.
+- The export is a client's whole schema. fmsonar.com is a page, not a service: parsing
+  runs in your browser and nothing is uploaded. See [SECURITY.md](SECURITY.md).
 
-One engine answers all three. It parses the export (DDR or Save a Copy as XML)
-**once** into a normalized index (entities, reference edges, full-text) — then
-every question is instant.
+## Try it in the browser
 
-## Which tool for which problem
+1. FileMaker Pro, advanced tools on: **Tools → Database Design Report → XML**, all files.
+2. Open [fmsonar.com](https://fmsonar.com) and drop the DDR folder on the page.
 
-| You want to… | Use | You need |
-|---|---|---|
-| Explore a solution visually — search, call chains, health report | **[fmsonar.com](https://fmsonar.com)** (browser) | nothing — no install, no upload; reads a DDR |
-| Query from the shell, script it, export reports | **`fmsonar` CLI** | Python 3.10+ and pipx; reads a DDR or a Save a Copy as XML export |
-| Let your AI assistant answer cross-reference questions | **CLI + the Claude Code skill** | the CLI (above) + Claude Code |
+Every name and line of code is searchable, references run both ways, scripts are
+readable in full, call chains are drawn, and any script copies back to FileMaker as a
+pasteable snippet. Self-host by serving `fm_ddr/web/index.html` as a static file.
 
-The three build on each other in that order — start in the browser, install the
-CLI when you want it scriptable, add the skill when your AI should use it too.
+## Install the CLI
 
-> **Sibling tool — [fmstyle](https://fmstyle.dev):** fmsonar tells you *where*
-> things are used; fmstyle keeps the calculations themselves readable. A
-> deterministic FileMaker calculation formatter with the same shape (browser,
-> CLI via `pipx install fmstyle`, Claude Code skill) and the same kind of hard
-> guarantee: it never changes what a calculation computes.
-> [Source](https://github.com/oogi-io/fm-code-formatter), MIT.
+```bash
+brew install pipx          # macOS; see pipx.pypa.io elsewhere
+pipx install fmsonar
+fmsonar build /path/to/DDR/Summary.xml -o solution.db
+fmsonar where solution.db "CUS__Customer::Name_Last"
+```
 
-## One index, two ways in
+```
+# CUS__Customer::Name_Last (field) — 10 reference(s)
+context        source_kind    source_parent_name  source_name
+-------------  -------------  ------------------  -----------
+calc           field          CUS__Customer       Name_Full_c
+calc           layout_object  Lab Layout          labWeb
+calc           script_step    Lab Mailer          Send Mail
+layout_object  layout_object  Customer Detail
+step_target    layout_object  labBar
+validation     field          CUS__Customer       Name_Last
+```
 
-Use the DDR when you want the browser, or a multi-file index with every
-cross-file reference resolved. Use Save a Copy as XML when no one should have
-to open FileMaker Pro: a nightly or CI job, or an AI agent that exports and
-indexes on its own.
+| Command | Answers |
+|---|---|
+| `where DB "name"` | every use of a field, script, layout, table occurrence or custom function |
+| `search DB "text"` | full-text search across calculations, script steps and names |
+| `investigate DB "Script"` | callers, callees, layout launch points, globals, full body |
+| `report DB -o out.html` | a self-contained interactive viewer |
+| `stats DB`, `list [folder]` | counts and resolution health; the indexes in a folder |
+| `sql DB "SELECT ..."` | anything else; recipes in [QUERIES.md](QUERIES.md) |
+
+Pure standard library, no dependencies. Building the same source again is a no-op
+(`Unchanged:`); `--rebuild` forces it. Update with `pipx upgrade fmsonar`, then
+`fmsonar install-skill` if you use the skill below.
+
+## Two inputs, one index
+
+Use the DDR when you want the browser, or a multi-file index with every cross-file
+reference resolved. Use Save a Copy as XML when nobody should have to open FileMaker
+Pro: a nightly job, CI, or an agent that exports and indexes on its own.
 
 | | Database Design Report | Save a Copy as XML |
 |---|---|---|
-| Made with | FileMaker Pro (advanced tools on): Tools → Database Design Report → XML | an export in FileMaker 26's format (2.3.0.0 or 2.3.0.1, "Include details for analysis tools" on): Tools → Save a Copy as XML or the script step of that name in FileMaker Pro, or FileMaker Server's FMDeveloperTool on a closed file; a full-access account either way |
-| Read by | the browser and the CLI | the CLI only |
-| Cross-file references | resolved | resolved when exported from Pro with every file open (measured on one file of a two-file lab); empty from FMDeveloperTool |
-
-The measured differences between the two routes are in [COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR").
-
-## Path 1 — Explore in the browser (no install)
-
-1. In FileMaker Pro (advanced tools on): **Tools → Database Design Report → XML**, all files.
-2. Open **[fmsonar.com](https://fmsonar.com)**.
-3. Drag the DDR folder onto the page.
-
-Parsing runs entirely client-side in a Web Worker — **nothing is uploaded**.
-Seconds later the whole solution is explorable: every name and line of code
-searchable, references inbound and outbound, complete scripts readable, call
-chains as diagrams, a health report, shareable single-entity HTML exports, and
-copy-any-script-back-to-FileMaker as a pasteable snippet.
-
-Prefer to self-host? The whole app is one file — serve `fm_ddr/web/index.html`
-as a static page; it works identically.
-
-## Path 2 — The CLI
-
-<p align="center">
-  <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/fmsonar-install-use.gif" alt="Installing fmsonar, indexing a FileMaker solution's DDR, and querying it from the CLI" width="820">
-</p>
-
-Prerequisites: Python 3.10+ and [pipx](https://pipx.pypa.io). On macOS, pipx
-comes from Homebrew:
+| Made with | FileMaker Pro: Tools → Database Design Report → XML | FileMaker 26 (format 2.3.0.0 or 2.3.0.1, "Include details for analysis tools" on): Tools → Save a Copy as XML, the script step of that name, or FileMaker Server's FMDeveloperTool on a closed file |
+| Read by | the browser and the CLI | the CLI |
+| Cross-file references | resolved | resolved when exported from Pro with every file open; empty from FMDeveloperTool |
 
 ```bash
-brew install pipx
-```
-
-Install fmsonar (pure standard library, no dependencies):
-
-```bash
-pipx install fmsonar
-```
-
-Run `fmsonar` on its own for a status splash — version, the fmsonar databases
-in the current folder, the newest solution's entity and reference counts, and whether the Claude
-skill is installed. (Piped output stays plain text.)
-
-Build the index once, from either input:
-
-```bash
-# From a DDR: the Summary.xml manifest of a multi-file solution, or a single *_fmp12.xml
-fmsonar build /path/to/DDR/Summary.xml -o solution_ddr.db
-
-# From a Save a Copy as XML export, made without opening FileMaker Pro
-# (FileMaker Server's FMDeveloperTool, on a copy of the closed file)
+# Unattended, on a copy of the closed file; use a dedicated export account,
+# the password is visible in the process list while it runs
 FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
 fmsonar build Solution_saxml.xml -o solution_saxml.db
 ```
 
-Without `-o` the index lands next to the source, named after it
-(`Solution_saxml.db`). One index holds one export: build each into its own
-file, as above.
+Both inputs give the same database: the same tables, views and reference contexts, so
+every query and the skill work unchanged. `ddr_run.source_format` records which export
+fed it. The content differs only where the exports differ; the measured list is in
+[COVERAGE.md](COVERAGE.md) ("SaXML next to the DDR"). A Save a Copy as XML index also
+stores each object's last change, including the developer's account; the HTML report
+leaves that out.
 
-Running `build` again on the same source with the same fmsonar keeps the index
-and prints `Unchanged:` in well under a second; `--rebuild` builds anyway.
-
-Good to know when building from Save a Copy as XML:
-
-- **One export per file.** Pass the per-file exports of a multi-file solution
-  together. Pro's multi-file summary (`XMLv2_Summary`) is refused, and so is
-  a partial `-catalog_list` export that lacks a section every file writes or a
-  catalog it refers to. Exports of the two supported versions build together.
-  Claris lists the Save a Copy as XML step as supported on FileMaker Server
-  and Cloud; fmsonar has measured exports from FileMaker Pro and
-  FMDeveloperTool only.
-- **Cross-file references.** FMDeveloperTool leaves references into other
-  files empty (external table occurrences, cross-file calls), so those stay
-  unresolved, also when the other files' exports are built into the same index
-  (measured). A Save a Copy as XML from FileMaker Pro with every file open
-  fills them (measured on one file of a two-file lab; FileMaker Server not yet
-  measured). For a fully resolved multi-file index, build from the DDR.
-- **Calculations without a reference list.** A whole export holds some
-  calculations with no reference list of their own, mostly on layout objects
-  (on a large solution several percent of the calculation references on layout
-  objects). `build`, `stats` and `list` give the count, and `where`, when it
-  finds no reference, prints the name's full-text mentions beside the 0.
-- **Locale.** Every export measured so far is English; an export with another
-  locale builds with a warning that points at the few rules that read English
-  step text (listed in COVERAGE.md).
-- **Password and history.** FMDeveloperTool takes the account password as an
-  argument, so it is visible in the process list while the export runs; use a
-  dedicated export account. A SaXML-built index stores each object's
-  last-change stamp, including the developer's FileMaker user and account
-  name; the HTML `report` leaves them out ([SECURITY.md](SECURITY.md)).
-
-Then query it, whichever index you built (`solution.db` below stands for
-either). Each command is copy-paste safe on its own:
-
-| Command | Answers |
-|---|---|
-| `fmsonar where solution.db "CONTACT::email"` | where is this field / script / layout / TO / custom function used |
-| `fmsonar search solution.db "GetContainerAttribute"` | full-text across every calc, script step (Insert Text literals included), and name |
-| `fmsonar investigate solution.db "Some Script"` | one-shot script report: callers, layout launch params, callees, $$global hygiene, full body |
-| `fmsonar report solution.db -o solution.html` | self-contained interactive HTML viewer |
-| `fmsonar stats solution.db` | entity counts + reference-resolution health |
-| `fmsonar list` | the fmsonar databases in a folder (the current one by default): which solution, built when, by which parser, stale or not — pass a folder to scan elsewhere, e.g. one you keep every client's index in |
-| `fmsonar mutations solution.db --like adder` | which scripts create/delete records — with context clues and confidence tiers, never a guess (record ops carry no table in the DDR) |
-| `fmsonar trigger-map solution.db --inputs "LI::Amount_c" --set-flag "LI::Picked_flag" --table LI --recompute "Recompute Order"` | caching/"keep X in sync" tickets: every entry point that can change a cached value's inputs, classified from the **transitive** call chain (a trigger that writes nothing relevant itself can still be the biggest stamp-point via a callee) |
-| `fmsonar sql solution.db "SELECT * FROM v_unused_fields LIMIT 20"` | anything — see [QUERIES.md](QUERIES.md) for the recipe book |
-
-Because the output is plain SQLite, anything can query it — `sqlite3`,
-Datasette, DB Browser, or an AI.
-
-From a clone, without installing: replace `fmsonar` with `python3 -m fm_ddr.cli`
-in any command above. For development, `python3 tools/compare_resolution.py OLD.db NEW.db`
-compares the resolved references of two indexes of the same DDR (lost, changed, gained),
-the regression check run before every parser release.
-
-## Path 3 — Your AI assistant
-
-Prerequisite: Path 2 (the CLI on your PATH). Then give Claude Code the skill —
-one command, works from any directory afterwards:
+## Your AI assistant
 
 ```bash
 fmsonar install-skill
 ```
 
-The skill teaches the assistant the schema, the query recipes, and — learned the
-hard way, see the eval story — the **investigation protocol**: survey before
-deep-reading, climb to callers, sweep the globals a script writes, read layout
-bodies for UI mechanisms, report real FileMaker ids.
+Claude Code then knows the schema, the query recipes and the investigation protocol:
+survey before deep-reading, climb to callers, sweep the globals a script writes, report
+real FileMaker ids. Ask it *"which scripts write to CTC::email?"* with a DDR or an
+export at hand; the index lands next to the export. Other assistants read
+[AGENTS.md](AGENTS.md).
 
-Then, wherever you're working, point it at either export: *"analyze the DDR in
-~/Desktop/MyDDR — which scripts write to CTC::email?"* or *"index the Save a
-Copy as XML export in ~/exports and do the same"*. Claude Code builds the index
-next to the export (`<export name>.db`, where `fmsonar build` puts it without
-`-o`) and answers with SQL-backed evidence. Other AI tools (Cursor, Copilot):
-they read [AGENTS.md](AGENTS.md) next to a built database.
+## What is in the index
 
-## Updating
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/schema-dark.svg">
+    <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/schema-light.svg" alt="fmsonar database: ddr_run, files, entities, refs, text_index" width="840">
+  </picture>
+</p>
 
-A pipx install doesn't auto-update. Versions are bumped on every release, so:
+Every named thing is a row in `entities`; every "source uses target" edge is a row in
+`refs`, resolved to an entity after the parse; `text_index` is the full-text catch-all
+for what no edge captures, such as names inside `ExecuteSQL`. The entity kinds, the
+reference contexts and what is not captured are listed in [COVERAGE.md](COVERAGE.md).
 
-```bash
-pipx upgrade fmsonar
-fmsonar install-skill
-```
+## Accuracy and cost
 
-The second command refreshes the Claude Code skill to match. Check for skill
-drift anytime with `fmsonar install-skill --check` (offline, against your
-installed version) or `--remote` (against GitHub main). Installed from the git
-URL instead of PyPI? Use `pipx reinstall fmsonar`. A git clone updates with
-`git pull`. Every index is stamped with the parser version that built it —
-querying through a stale index warns loudly instead of silently missing newer
-reference types.
-
-## Performance and scope
-
-- **Input:** DDR XML (one file, several, or a `Summary.xml` manifest), or
-  FileMaker 26 Save a Copy as XML exports in the CLI. Both
-  parsers (Python CLI and the browser's JS twin, parity-tested edge by edge)
-  stream with SAX, so file size doesn't matter. Measured: a 510 MB 9-file
-  production solution builds in ~26 s; the 416 MB main file parses in-browser
-  in ~7 s using ~80 MB of memory; a 448 MB FileMaker 26 export of one file
-  builds in ~28 s using ~230 MB.
-- **Output:** one `.db` SQLite file — `entities`, a generic `refs` edge table
-  (the heart of "where used"), and an FTS5 full-text index as a catch-all.
-- **General-purpose:** no solution-specific assumptions; validated against
-  multiple unrelated production solutions.
-
-## Data model
-
-One database holds a whole solution: all files of a multi-file solution share
-one entity space. Cross-file references resolve on a DDR build of every file
-(and on a Save a Copy as XML export made from Pro with every file open).
-`ddr_run` holds one row
-per build: the source format (`ddr` or `saxml`), its version, and the fmsonar
-version that built the index (`parser_version`). `build` always writes a fresh
-database for one export of one solution.
-
-| Table | What it holds |
-|-------|---------------|
-| `ddr_run` | One parse run (source path, source format `ddr` or `saxml`, root version, FileMaker version of a SaXML export, timestamp, label) |
-| `files` | Each FileMaker file in the run |
-| `entities` | Every named thing — one row per `kind` (see below) |
-| `refs` | Every "source **uses** target" edge; `target_entity_id` resolved after load |
-| `text_index` | FTS5 mirror of names + calcs + step text (catch-all search) |
-| `v_usage` | Friendly view over `refs` with readable source/target names |
-| `v_unused_fields`, `v_orphan_scripts`, `v_unresolved`, `v_dangling` (DDR-marked defects, v1.13.0) | Health hints |
-| `v_data_sources` | Which file each external data source name points at (v1.13.0) |
-
-**Entity kinds:** `base_table`, `field`, `table_occurrence`, `relationship`,
-`layout`, `layout_group`, `script`, `script_group`, `script_step`,
-`custom_function`, `value_list`, `privilege_set`, `account`, `extended_privilege`,
-`custom_menu`, `custom_menu_set`, `external_data_source`, `theme`.
-
-**Reference contexts** (`refs.context`): `calc`, `step_target` (the field a step
-writes to — e.g. Set Field), `join_predicate`, `perform_script`, `go_to_layout`,
-`trigger`, `layout_object` (a field object, or since v1.16.0 a merge field of a
-text object or button label), `field_reference`, `value_list_source`,
-`value_list_field`, `sort`, `to_reference`, `function_ref`, `layout_context`
-(a layout's own context table occurrence, v1.12.0), `step_table`, `portal`,
-`value_list_context` (the table occurrence a step acts on, a portal shows, a
-related-values list starts from, v1.14.0), `part_break` (a sub-summary part's
-break field, Save a Copy as XML only, v1.15.0), `import_field`, `export_field`,
-`find_request` (an Import Records mapped field, an Export Records field, a
-field in a stored find request, v1.15.1), `summary_source` (the field a summary
-field summarizes and its restart field, v1.16.0).
-
-### How references resolve
-
-Every edge is captured raw during parse (target name + FileMaker id), then
-`resolve.sql` fills `target_entity_id` by matching against `entities`. On real
-solutions ~98% resolve; the rest are genuinely unresolvable and expected:
-
-- `perform_script` to scripts in **other files** (external),
-- `go_to_layout` with a **calculated** destination,
-- `layout_object` fields that are **globals / unbound**,
-- `layout_context` refs of layouts whose table occurrence was **deleted** (the
-  DDR writes an empty TO name; a real defect, reported as unresolved).
-
-Built-in FileMaker functions are intentionally *not* stored as edges (only
-`CustomFunctionRef` chunks become `custom_function` edges); use FTS to find
-built-in usage.
-
-## Accuracy
-
-Validated against a production solution's independently documented DDR summary —
-every catalog count matches (base tables, table occurrences, relationships,
-layouts, value lists, custom functions). A committed micro-fixture plus a full
-test suite (structural counts, resolution semantics, UTF-16 round-trip,
-edge-by-edge Python↔JS parity under torture chunking) runs in CI on every push.
-
-Both inputs give the same database — the same tables, views, entity kinds and
-reference contexts, so every query and the skill work unchanged;
-`ddr_run.source_format` records which export fed it, and the content differs
-only where the exports differ. The Save a Copy as XML parse is measured against
-the DDR parse, not against the file: `tools/compare_resolution.py` compares the
-two indexes of one file (it prints a cross-source banner on such a pair). On
-the lab file the pair differs by two lost keys; on a real solution's main file
-exported both ways a day apart, every lost, changed and gained key falls in one
-of the classes listed in [COVERAGE.md](COVERAGE.md) ("Expected differences
-between a DDR index and a SaXML index").
-
-The tool is also A/B tested against raw text search on real production tickets,
-and the losses shape the roadmap. The full story:
+About 98% of references resolve as typed edges on the production solutions we measure
+against; the rest is reachable through full-text search. Catalog counts match the
+solution's own documentation, and a test suite checks the Python parser against the
+browser's JavaScript twin edge by edge on every push. The Save a Copy as XML parse is
+measured against the DDR parse of the same file; every difference falls in a class
+listed in COVERAGE.md. The tool is A/B tested against raw text search on real tickets:
 [The tests that shaped fmsonar](https://oogi.io/blog/the-tests-that-shaped-fmsonar/).
 
-## Roadmap
+Measured: a 510 MB nine-file DDR builds in about 26 s; its 416 MB main file parses in
+the browser in about 7 s using 80 MB; a 448 MB FileMaker 26 export of one file builds in
+about 28 s using 230 MB.
 
-- [x] **Phase 1 — Cross-reference engine.** SAX parser → SQLite, generic edge
-  table, FTS fallback, CLI (`build` / `where` / `search` / `sql` / `stats`).
-- [x] **Phase 2 — Interactive HTML.** `report` command emits a self-contained
-  page (data embedded, no server): searchable entity list with kind filters,
-  click any field/script/TO to see inbound ("referenced by") and outbound
-  ("references") edges grouped by the OTHER entity's kind (Scripts / Layouts /
-  Fields / Custom functions / Relationships / ...), with the usage context
-  folded into each group header, and click-through navigation.
-- [x] **Correctness hardening.** `where` resolves through the TO before
-  filtering (no more leaf-name over-matching), ambiguous picks are flagged
-  (`refs.ambiguous`, `v_ambiguous`), VL field sources and sort fields are
-  captured, non-DDR input errors clearly, and `build` warns on low resolution.
-  See **COVERAGE.md** for the explicit captured / not-captured matrix.
-- [x] **Multi-file solutions.** `build Summary.xml` (or list the XMLs) ingests
-  all files into one DB; the web app accepts multi-drop. Cross-file references
-  resolve via explicit FileReference markers only — external Perform Script,
-  and field refs through external table occurrences (98.8% resolution measured
-  on a 9-file production solution). External refs whose file is absent stay unresolved
-  instead of silently mis-linking to same-id local objects.
-- [x] **Explorer UX.** FMPerception-style flow in the browser: drop the whole
-  DDR folder (every `*_fmp12.xml` loads, cross-file links resolve), filter by
-  file, and click a script to read it as **full step text** — document order,
-  block indentation (If/Loop/Else), comment steps dimmed, step/comment/call
-  counts, copy per line / selection / whole script. Works in the web app, the
-  exported report, and the CLI report alike.
-- [x] **Call chain diagram.** Toggle any script's detail between Steps and a
-  layered SVG call chain: callers flow in from the left (green), called
-  scripts to the right (orange), the **full chain** in both directions
-  (cycle-safe; each script appears once), externals dashed, per-level
-  fan-out capped with "+N more", every node clickable to re-root.
-- [x] **Navigate like an app.** Browser Back/Forward work while exploring;
-  every entity has a deep link (`#e123`) that also works inside exported
-  reports; `#health` opens the health report directly.
-- [x] **Search in code.** Enter-search scans every calculation and script
-  step; results show highlighted snippets and clicking a step match opens
-  the script scrolled to that exact line.
-- [x] **Sort the entity list.** A compact "Sort" popover on the list orders
-  by Name or Referenced-by (and, when scripts are soloed, Steps / Calls /
-  Complexity); sorting by a metric shows that number inline on each row.
-  Lighter than a full table — the list stays the single browse surface.
-- [x] **Solution health report.** Unused-field and orphan-script candidates,
-  unresolved and ambiguous references, hotspots and biggest scripts — every
-  list clickable, each downloadable as CSV, with the coverage caveats printed
-  on the page. The call chain is downloadable as a standalone SVG.
-- [x] **Call chain, expanded.** Edge semantics (solid Perform / long-dash
-  PSoS / dotted trigger / dash-dot button, with tooltips), call-count weights
-  (×N), entry-point badges, hover-highlight of connected nodes, in-chain
-  search (matches surface out of "+N more"), click → steps preview below the
-  chain with Re-root / Open fully, drag-pan + wheel-zoom (double-click
-  resets), Copy as Mermaid, Download SVG, and a print stylesheet (Cmd+P →
-  clean PDF of chain, script text, or health report).
-- [x] **Share one insight.** Every entity has a Share button that downloads
-  a small self-contained static HTML (no JavaScript inside): the script's
-  steps, its call chain exactly as arranged on screen, and its references.
-  Kilobytes — safe to mail or Slack without sharing the whole schema. For
-  whole-solution sharing, drop an exported report on a shared drive and use
-  deep links (`report.html#e123`).
-- [ ] **Copy-link button.** One-click copy of an entity's deep link for the
-  shared-drive workflow.
-- [ ] **Union impact graph.** Select several scripts and see one merged
-  call graph with shared dependencies emphasized — "the five scripts I'm
-  about to change, and everything they touch". Its own session.
-- [ ] **Annotations.** Mark entities (deprecated / refactor / reviewed) with
-  notes; persisted per solution, exportable, embedded in shared reports.
-  Viewer-wide, not chain-only; pairs with the health report.
-- [ ] **Signed helper installer.** Replace the unsigned zip / curl|bash
-  install paths with a signed + notarized .pkg (Developer ID) so macOS
-  installs the snippet watcher without any Gatekeeper friction. Parked
-  until a dedicated signing session.
-- **Diff of two exports: not in fmsonar.** fmsonar answers questions about
-  one export of one solution; comparing two exports of different states
-  (what changed between deploys) is outside its scope.
-  `tools/compare_resolution.py` compares two indexes of the same export built
-  by two parser versions: it is the parser's regression check, not a change
-  report.
-- [x] **Copy as FM snippet (web + CLI).** In the web app, every script has a
-  "Copy FM snippet" button that re-streams the source file, extracts that
-  script's raw steps, and copies fmxmlsnippet XML as text (byte-identical to
-  FileMaker's own clipboard copy). Browsers cannot write FileMaker's private
-  clipboard flavor, so paste needs a one-time bridge. Pick any: the bundled
-  helpers in `helpers/` (macOS `.command`, Windows `.ps1` — also downloadable
-  from the app after copying), `fm-ddr clip` (converts clipboard text in
-  place), or FmClipTools if you already use it.
-- [x] **Copy as FM snippet (CLI, macOS).** `fm-ddr snippet DDR.xml "Script
-  Name" --clip` transforms a script's DDR steps into FileMaker's clipboard
-  format and places it on the private XMSS pasteboard flavor — paste straight
-  into Script Workspace. The transform reproduces FileMaker's own copied
-  output byte-for-byte (268/268 steps on the reference script) and is
-  paste-verified in Script Workspace; see SNIPPET_FORMAT.md. Browsers cannot set
-  the XMSS flavor, so the web app cannot paste directly: CLI only. DDR input
-  only for now; a Save a Copy as XML file is refused with a message.
-- [ ] **Edit → patch (idea).** Make selected changes in the viewer and emit
-  them as input for the FileMaker upgrade tool to apply. Shares the raw-XML
-  prerequisite with snippet copy; parked until the read-only explorer has
-  proven itself.
-- [ ] Health report: dead fields, orphan scripts, missing references, TO sprawl.
+## Not yet
 
-## Project structure
+- The browser reads DDRs only.
+- Edit in the viewer and emit a patch for FileMaker's upgrade tool: an idea, parked.
 
-```
-fm-ddr-analyzer/
-├── README.md
-├── QUERIES.md          # canonical cross-reference SQL recipes (for humans + AI)
-├── tools/compare_resolution.py  # dev: resolved-reference diff of two indexes of one DDR
-└── fm_ddr/
-    ├── web/index.html  # zero-install client-side web app (JS parser + viewer)
-    ├── __init__.py
-    ├── parse.py        # SAX streaming parser -> SQLite
-    ├── schema.sql      # entities / refs / FTS schema
-    ├── resolve.sql     # reference resolution + convenience views
-    ├── report.py       # self-contained interactive HTML generator
-    └── cli.py          # build / where / search / sql / stats / report
-```
-
-## Tech stack
-
-| Concern | Choice | Why |
-|---------|--------|-----|
-| Parsing | `xml.sax` (expat) | Streams 400 MB UTF-16-LE files; ignores line structure |
-| Storage | SQLite | Portable, queryable by AI/tools, no server |
-| Search | FTS5 | Catch-all text search where structured extraction is incomplete |
-| Language | Python 3.10+, stdlib only | No dependencies to install |
+> Sibling tool: [fmstyle](https://fmstyle.dev) formats FileMaker calculations without
+> changing what they compute. Same shape: browser, `pipx install fmstyle`, Claude Code skill.
 
 ---
 
-[Thomas De Smet](https://oogi.io) · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT
-
-*FileMaker and Claris are trademarks of Claris International Inc. fmsonar is an
-independent tool, not affiliated with or endorsed by Claris. See
-[SECURITY.md](SECURITY.md) for the privacy and threat model.*
+[Thomas De Smet](https://oogi.io) · [tdesmet@oogi.io](mailto:tdesmet@oogi.io) · MIT ·
+FileMaker and Claris are trademarks of Claris International Inc.; fmsonar is independent.

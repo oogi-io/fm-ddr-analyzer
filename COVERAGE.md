@@ -5,6 +5,15 @@ explicit list. **Anything in "NOT captured" means `v_unused_fields` and
 "Referenced by: none" can be wrong for that usage pattern** — treat those
 outputs as review lists, never as delete lists.
 
+## Entity kinds (rows in `entities`)
+
+`base_table`, `field`, `table_occurrence`, `relationship`, `layout`, `layout_group`,
+`script`, `script_group`, `script_step`, `custom_function`, `value_list`,
+`privilege_set`, `account`, `extended_privilege`, `custom_menu`, `custom_menu_set`,
+`external_data_source`, `theme`. A `field` hangs under its `base_table`, a
+`script_step` under its `script` (`parent_entity_id`); `v_data_sources` maps each
+external data source name to its file.
+
 ## Captured (structured edges in `refs`)
 
 | Context | What it means | Source |
