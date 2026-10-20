@@ -1,6 +1,6 @@
 # Working with fmsonar databases (for AI agents)
 
-You are working in the fmsonar / fm-ddr-analyzer repo, or next to a SQLite
+You are working in the fmsonar repo, or next to a SQLite
 database it produced. These databases are cross-reference indexes of FileMaker
 solutions, designed to be queried by AI. This file tells you how to do that
 well.

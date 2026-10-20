@@ -1,4 +1,4 @@
--- FM DDR Analyzer — SQLite schema
+-- fmsonar — SQLite schema
 -- One database can hold multiple files (a multi-file solution) and multiple DDR snapshots.
 
 PRAGMA journal_mode = WAL;

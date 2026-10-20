@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/banner-dark.png">
-    <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/banner-light.png" alt="fmsonar" width="380">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fmsonar/main/docs/banner-dark.png">
+    <img src="https://raw.githubusercontent.com/oogi-io/fmsonar/main/docs/banner-light.png" alt="fmsonar" width="380">
   </picture>
 </p>
 
@@ -20,7 +20,7 @@ your AI assistant.
 2. Open [fmsonar.com](https://fmsonar.com) and drop that folder on the page.
 
 Parsing runs in your browser; nothing is uploaded
-([SECURITY.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/SECURITY.md)).
+([SECURITY.md](https://github.com/oogi-io/fmsonar/blob/main/SECURITY.md)).
 Search names and code, follow references both ways, read scripts, see call chains.
 The browser reads DDRs; a Save a Copy as XML file is refused with a message. Self-host
 by serving `fm_ddr/web/index.html` as a static file.
@@ -68,7 +68,7 @@ does any SQLite tool such as DB Browser for SQLite.
 | `search DB "text"` | full-text search across calculations, script steps and names |
 | `investigate DB "Script"` | callers, callees, layout launch points, globals, full body |
 | `report DB -o out.html` | a self-contained interactive viewer |
-| `sql DB "SELECT * FROM v_unused_fields"` | anything else; recipes in [QUERIES.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/QUERIES.md) |
+| `sql DB "SELECT * FROM v_unused_fields"` | anything else; recipes in [QUERIES.md](https://github.com/oogi-io/fmsonar/blob/main/QUERIES.md) |
 
 `fmsonar --help` lists the rest. Building the same source again is skipped and says
 `Unchanged:`. Update with `pipx upgrade fmsonar`.
@@ -87,7 +87,7 @@ that headless export leaves references into other files empty.
 
 Both give the same tables and the same commands. Where their content differs, and
 the FMDeveloperTool route, are in
-[COVERAGE.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md),
+[COVERAGE.md](https://github.com/oogi-io/fmsonar/blob/main/COVERAGE.md),
 section "SaXML next to the DDR".
 
 ## Your AI assistant
@@ -99,14 +99,14 @@ fmsonar install-skill
 Claude Code then knows the schema, the query recipes and how to investigate. Point it
 at a DDR or an export; the index lands next to it. `fmsonar install-skill --check`
 tells you when the installed skill differs from the tool's. Other assistants read
-[AGENTS.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/AGENTS.md).
+[AGENTS.md](https://github.com/oogi-io/fmsonar/blob/main/AGENTS.md).
 
 ## What is in the index
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/schema-dark.svg">
-    <img src="https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/main/docs/schema-light.svg" alt="entities and refs, with the Set Field row from the example above" width="840">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/oogi-io/fmsonar/main/docs/schema-dark.svg">
+    <img src="https://raw.githubusercontent.com/oogi-io/fmsonar/main/docs/schema-light.svg" alt="entities and refs, with the Set Field row from the example above" width="840">
   </picture>
 </p>
 
@@ -115,7 +115,7 @@ script, a script step, a layout object, a custom function. `refs` has one row pe
 and joins entities to entities: the thing that uses, the thing used, and how. `where`
 reads those rows. What is not a row, such as a field name inside an `ExecuteSQL`
 string, is found by `search` instead. The kinds, the contexts and the gaps are in
-[COVERAGE.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md).
+[COVERAGE.md](https://github.com/oogi-io/fmsonar/blob/main/COVERAGE.md).
 
 ## Cost
 

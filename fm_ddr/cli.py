@@ -1,4 +1,4 @@
-"""Command-line interface for the FM DDR analyzer.
+"""Command-line interface for fmsonar.
 
     python -m fm_ddr.cli build   DDR.xml [-o out.db] [--label NAME]
     python -m fm_ddr.cli where   out.db  "TO::Field" | "ScriptName" | "Layout"
@@ -506,7 +506,7 @@ def cmd_investigate(args):
             print(f"  {txt or stype or ''}")
 
 
-SKILL_RAW_URL = ("https://raw.githubusercontent.com/oogi-io/fm-ddr-analyzer/"
+SKILL_RAW_URL = ("https://raw.githubusercontent.com/oogi-io/fmsonar/"
                  "main/fm_ddr/skill/SKILL.md")
 
 

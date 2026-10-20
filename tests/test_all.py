@@ -1,4 +1,4 @@
-"""Test suite for fm-ddr-analyzer.
+"""Test suite for fmsonar.
 
 Covers:
 - structural parse of the micro fixture (counts, groups, parents)

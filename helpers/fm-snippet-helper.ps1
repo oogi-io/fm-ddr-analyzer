@@ -1,5 +1,5 @@
-# FM Snippet Helper (Windows) - part of FM DDR Analyzer
-# https://github.com/oogi-io/fm-ddr-analyzer
+# FM Snippet Helper (Windows) - part of fmsonar
+# https://github.com/oogi-io/fmsonar
 # Thomas De Smet <tdesmet@oogi.io> - MIT
 #
 # Converts fmxmlsnippet XML *text* on the clipboard (e.g. from the web app's

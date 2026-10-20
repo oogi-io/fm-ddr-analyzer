@@ -79,7 +79,7 @@ pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;pa
   <div class="cta">
     <a class="primary" href="https://fmsonar.com">Open fmsonar</a>
     <a class="ghost" href="#ai">Set up your AI</a>
-    <a class="ghost" href="https://github.com/oogi-io/fm-ddr-analyzer">Source on GitHub</a>
+    <a class="ghost" href="https://github.com/oogi-io/fmsonar">Source on GitHub</a>
   </div>
 
   <div class="tldr">
@@ -111,7 +111,7 @@ pre{background:var(--panel);border:1px solid var(--border);border-radius:10px;pa
 
   <h2 id="ai"><span class="hash">#</span>For your AI, too</h2>
   <p>The same engine builds a SQLite index designed for AI tools — with an
-  instruction file (<a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/AGENTS.md">AGENTS.md</a>)
+  instruction file (<a href="https://github.com/oogi-io/fmsonar/blob/main/AGENTS.md">AGENTS.md</a>)
   and a Claude Code skill that teach any assistant the schema, the query
   patterns, and the honesty rules. Install once (needs Python 3.10+ and
   <a href="https://pipx.pypa.io">pipx</a>), ask from any project:</p>
@@ -149,11 +149,11 @@ fmsonar install-skill   # Claude Code: global skill</pre>
   Those answers are still in your DDR XML; for them, read it directly. And the
   index is a snapshot: change the solution, re-export, rebuild.</p>
   <div class="honest"><b>Blind spots</b>
-    <p>Static analysis can't see everything: field names inside ExecuteSQL strings, calculated script and layout names, and anything that happens outside the DDR (Data API, OData, users running scripts from menus). The full matrix is in <a href="https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md">COVERAGE.md</a>. Ambiguous matches are flagged, and the AI instructions require a full-text check before anything is called "unused" — treat those lists as candidates to review, never as delete lists.</p>
+    <p>Static analysis can't see everything: field names inside ExecuteSQL strings, calculated script and layout names, and anything that happens outside the DDR (Data API, OData, users running scripts from menus). The full matrix is in <a href="https://github.com/oogi-io/fmsonar/blob/main/COVERAGE.md">COVERAGE.md</a>. Ambiguous matches are flagged, and the AI instructions require a full-text check before anything is called "unused" — treat those lists as candidates to review, never as delete lists.</p>
   </div>
 
   <h2><span class="hash">#</span>Get it</h2>
-  <p><a href="https://fmsonar.com"><b>fmsonar.com</b></a> — the app, no install. &nbsp;·&nbsp; <a href="https://github.com/oogi-io/fm-ddr-analyzer">GitHub</a> — engine, CLI, docs, MIT.</p>
+  <p><a href="https://fmsonar.com"><b>fmsonar.com</b></a> — the app, no install. &nbsp;·&nbsp; <a href="https://github.com/oogi-io/fmsonar">GitHub</a> — engine, CLI, docs, MIT.</p>
   <p>fmsonar is A/B tested against raw text search on real production tickets, and the
   losses shape the roadmap: <a href="https://oogi.io/blog/the-tests-that-shaped-fmsonar/">The
   tests that shaped fmsonar</a>.</p>

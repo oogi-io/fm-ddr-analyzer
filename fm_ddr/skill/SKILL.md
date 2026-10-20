@@ -49,7 +49,7 @@ fm-ddr build "/path/to/DDR/Summary.xml" -o "/path/to/DDR/<solution>.db" --label 
 `build` warns below 95% resolution - usually a missing sibling XML of a
 multi-file solution, not a broken solution. If `fm-ddr` is not on PATH:
 `pipx install fmsonar` (PyPI), or fall back to `python3 -m fm_ddr.cli` from a
-checkout of github.com/oogi-io/fm-ddr-analyzer.
+checkout of github.com/oogi-io/fmsonar.
 
 ## 2. Query
 

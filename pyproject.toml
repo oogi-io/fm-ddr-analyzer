@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/oogi-io/fm-ddr-analyzer"
+Repository = "https://github.com/oogi-io/fmsonar"
 
 [project.scripts]
 fm-ddr = "fm_ddr.cli:main"
