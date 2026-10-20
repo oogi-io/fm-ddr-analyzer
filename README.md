@@ -113,10 +113,15 @@ export at hand; the index lands next to the export. Other assistants read
   </picture>
 </p>
 
-Every named thing is a row in `entities`; every "source uses target" edge is a row in
-`refs`, resolved to an entity after the parse; `text_index` is the full-text catch-all
-for what no edge captures, such as names inside `ExecuteSQL`. The entity kinds, the
-reference contexts and what is not captured are listed in [COVERAGE.md](COVERAGE.md).
+`entities` has one row per named thing: a table, a field, a table occurrence, a
+script, a script step, a layout, a layout object, a custom function. `refs` is the
+join table "source uses target", one row per use, both sides foreign keys to
+`entities`, with `context` saying what kind of use it is. The script step
+`Set Field [CUS__Customer::Name_Last; ...]` is one row in `refs`: source the step,
+target the field, context `step_target`. `where` selects on the target;
+`v_unused_fields` lists the fields that are nobody's target. `text_index` is the
+full-text copy of names and calculation text, for what no edge captures. The kinds,
+the contexts and the gaps are listed in [COVERAGE.md](COVERAGE.md).
 
 ## Accuracy and cost
 
