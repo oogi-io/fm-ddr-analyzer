@@ -5,18 +5,18 @@
   </picture>
 </p>
 
-fmsonar answers "where is this used?" for a FileMaker solution. The only complete map
-of a solution is its design export, hundreds of megabytes of XML; fmsonar reads it
-once into a single file, and from then on every question is instant: in the browser,
-in the Terminal, or through your AI assistant.
+fmsonar answers "where is this used?" for a FileMaker solution. It reads the design
+export once into one file you then query in the browser, in the Terminal, or through
+your AI assistant.
 
-*[fmsonar.com](https://fmsonar.com) · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar` · MIT*
+*[fmsonar.com](https://fmsonar.com) · [![PyPI](https://img.shields.io/pypi/v/fmsonar)](https://pypi.org/project/fmsonar/) `pipx install fmsonar`*
 
 ## Try it in the browser
 
-1. In FileMaker Pro, with **Use advanced tools** on (Settings → General, then restart):
-   Tools → Database Design Report, format XML, all files. FileMaker writes a folder with
-   `Summary.xml` and one XML file per database.
+1. In FileMaker Pro, with every file of the solution open and **Use advanced tools**
+   on (Settings → General, then restart): Tools → Database Design Report (DDR), format
+   XML, all files. FileMaker writes a folder with `Summary.xml` and one XML file per
+   database.
 2. Open [fmsonar.com](https://fmsonar.com) and drop that folder on the page.
 
 Parsing runs in your browser; nothing is uploaded
@@ -28,15 +28,17 @@ by serving `fm_ddr/web/index.html` as a static file.
 ## Install the CLI
 
 Needs Python 3.10 or later and [pipx](https://pipx.pypa.io) (`brew install pipx` on
-macOS; pipx installs on Windows too).
+macOS; pipx installs on Windows too). In Terminal (macOS) or PowerShell (Windows):
 
 ```bash
 pipx install fmsonar
+pipx ensurepath          # once; then open a new window
 fmsonar build /path/to/DDR/Summary.xml -o solution.db
 fmsonar where solution.db "CUS__Customer::Name_First"
 ```
 
-Output, here from the lab file in `tests/fixtures`:
+Output, here from the lab file `tests/fixtures/saxml_lab3_2.3.0.0.xml` (both inputs
+print the same shape):
 
 ```
 # CUS__Customer::Name_First (field) — 8 reference(s)
@@ -52,11 +54,13 @@ step_target    script_step    Caller              Set Field    0
 validation     field          CUS__Customer       Name_Last    0
 ```
 
-Source is what uses the field, context is how. A layout object with no name in
-FileMaker has none here either.
+Each row is one use: `source` is what uses the field, `context` is how; the parent is
+the script or layout object it sits in. A layout object with no name in FileMaker has
+none here either; `ambiguous` is 1 when several things share the name.
 
-`solution.db` is one file, no server: fmsonar reads it, and so does any SQLite tool.
-It holds the whole schema, so treat it like the export itself.
+`solution.db` is one file on disk (without `-o` it is written next to the export). It
+holds the whole schema, so treat it like the export itself. fmsonar reads it, and so
+does any SQLite tool such as DB Browser for SQLite.
 
 | Command (`DB` is your `solution.db`) | Answers |
 |---|---|
@@ -66,23 +70,23 @@ It holds the whole schema, so treat it like the export itself.
 | `report DB -o out.html` | a self-contained interactive viewer |
 | `sql DB "SELECT * FROM v_unused_fields"` | anything else; recipes in [QUERIES.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/QUERIES.md) |
 
-`fmsonar --help` lists the rest. Building the same source again is a no-op
-(`Unchanged:`). Update with `pipx upgrade fmsonar`.
+`fmsonar --help` lists the rest. Building the same source again is skipped and says
+`Unchanged:`. Update with `pipx upgrade fmsonar`.
 
 ## Two inputs, one index
 
 Use the DDR for the browser. Use Save a Copy as XML when nobody should have to open
-FileMaker Pro: a nightly job, CI, or an agent that exports and indexes on its own.
+FileMaker Pro, such as a nightly job or an agent that exports and indexes on its own;
+that headless export leaves references into other files empty.
 
 | | Database Design Report | Save a Copy as XML |
 |---|---|---|
-| Made with | FileMaker Pro: Tools → Database Design Report → XML | FileMaker 26, "Include details for analysis tools" on: Tools → Save a Copy as XML, the script step of that name, or FileMaker Server's FMDeveloperTool on a closed file |
+| Made with | FileMaker Pro: Tools → Database Design Report → XML | FileMaker 26: Tools → Save a Copy as XML with "Include details for analysis tools" on; also the script step of that name, or FileMaker Server's FMDeveloperTool |
 | Read by | the browser and the CLI | the CLI |
 | References into other files | resolved, from a DDR of every file | resolved when exported from Pro with every file open; empty from FMDeveloperTool |
 
-Both give the same database layout and the same commands; `ddr_run.source_format`
-records which export fed it. Where their content differs, and the headless
-FMDeveloperTool route, are in
+Both give the same tables and the same commands. Where their content differs, and
+the FMDeveloperTool route, are in
 [COVERAGE.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md),
 section "SaXML next to the DDR".
 
@@ -106,15 +110,11 @@ tells you when the installed skill differs from the tool's. Other assistants rea
   </picture>
 </p>
 
-Two tables carry the answers. `entities` has one row per named thing: a table, a
-field, a layout, a script, a script step, a layout object, a custom function. `refs`
-has one row per use, pointing from the thing that uses to the thing used, with a
-`context` that says how. The `Set Field` step in the example above is one such row:
-from the step to the field, context `step_target`. `where` lists the rows that point
-at a thing; `v_unused_fields` lists the fields nothing enabled points at. The ids in
-the picture are fmsonar's row numbers; FileMaker's own ids are in `fm_id`. A full-text
-table covers what no row captures: names inside `ExecuteSQL` strings, scripts and
-layouts called by name. The kinds, the contexts and the gaps are in
+`entities` has one row per thing in the solution: a table, a field, a layout, a
+script, a script step, a layout object, a custom function. `refs` has one row per use
+and joins entities to entities: the thing that uses, the thing used, and how. `where`
+reads those rows. What is not a row, such as a field name inside an `ExecuteSQL`
+string, is found by `search` instead. The kinds, the contexts and the gaps are in
 [COVERAGE.md](https://github.com/oogi-io/fm-ddr-analyzer/blob/main/COVERAGE.md).
 
 ## Cost
