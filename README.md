@@ -27,28 +27,28 @@ by serving `fm_ddr/web/index.html` as a static file.
 
 ## Install the CLI
 
-Install once. Needs Python 3.10 or later. In Terminal on macOS:
+One line, then a new window. Needs Python 3.10 or later.
+
+macOS, in Terminal (Homebrew installs pipx):
 
 ```bash
-brew install pipx
-pipx install fmsonar
-pipx ensurepath
+brew install pipx && pipx install fmsonar && pipx ensurepath
 ```
 
-In PowerShell on Windows, with Python installed from python.org:
+Windows, in PowerShell (Python from python.org):
 
 ```powershell
-py -m pip install --user pipx
-py -m pipx install fmsonar
-py -m pipx ensurepath
+py -m pip install --user pipx; py -m pipx install fmsonar; py -m pipx ensurepath
 ```
 
-Then open a new window, so `fmsonar` is on your path. Build the index from your
-DDR folder and ask your first question:
+Open a new window so `fmsonar` is on your path, then build the index from your DDR
+folder and ask your first question. If you use Claude Code, the third line installs
+the skill (see "Your AI assistant"); skip it otherwise.
 
 ```bash
 fmsonar build "/path/to/your DDR/Summary.xml" -o solution.db
 fmsonar where solution.db "CUS__Customer::Name_First"
+fmsonar install-skill
 ```
 
 Output, here from the lab file `tests/fixtures/saxml_lab3_2.3.0.0.xml` (both inputs
@@ -106,11 +106,7 @@ section "SaXML next to the DDR".
 
 ## Your AI assistant
 
-```bash
-fmsonar install-skill
-```
-
-Claude Code then knows the schema, the query recipes and how to investigate. Point it
+After `fmsonar install-skill`, Claude Code knows the schema, the query recipes and how to investigate. Point it
 at a DDR or an export; the index lands next to it. `fmsonar install-skill --check`
 tells you when the installed skill differs from the tool's. Other assistants read
 [AGENTS.md](https://github.com/oogi-io/fmsonar/blob/main/AGENTS.md).
