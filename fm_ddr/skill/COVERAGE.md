@@ -392,6 +392,17 @@ the two-file lab:
 
 ### The FMDeveloperTool route and other files
 
+The headless export, on a copy of the closed file (checked against the tool's own
+usage text, FileMaker Server 26):
+
+```
+FMDeveloperTool --saveAsXML Solution.fmp12 <account> <password> -t Solution_saxml.xml -include_details
+```
+
+The password is a process argument, visible in the process list while the export
+runs. The index records, per object, the account of the developer who last changed
+it (below, "Per-object UUID and last change"); the exporting account does not appear.
+
 A SaXML export can carry the full cross-file reference: with the sibling file
 open, FileMaker Pro 26.1 writes an external table occurrence with its data
 source and base table, and a cross-file Perform Script with its data source
