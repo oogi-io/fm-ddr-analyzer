@@ -27,13 +27,27 @@ by serving `fm_ddr/web/index.html` as a static file.
 
 ## Install the CLI
 
-Needs Python 3.10 or later and [pipx](https://pipx.pypa.io) (`brew install pipx` on
-macOS; pipx installs on Windows too). In Terminal (macOS) or PowerShell (Windows):
+Install once. Needs Python 3.10 or later. In Terminal on macOS:
 
 ```bash
+brew install pipx
 pipx install fmsonar
-pipx ensurepath          # once; then open a new window
-fmsonar build /path/to/DDR/Summary.xml -o solution.db
+pipx ensurepath
+```
+
+In PowerShell on Windows, with Python installed from python.org:
+
+```powershell
+py -m pip install --user pipx
+py -m pipx install fmsonar
+py -m pipx ensurepath
+```
+
+Then open a new window, so `fmsonar` is on your path. Build the index from your
+DDR folder and ask your first question:
+
+```bash
+fmsonar build "/path/to/your DDR/Summary.xml" -o solution.db
 fmsonar where solution.db "CUS__Customer::Name_First"
 ```
 
